@@ -1,0 +1,143 @@
+# The Android app's pull-request pipeline (MILESTONE_51_ANDROID_CI_CD.md section 3), on every pull
+# request and every push to main or dev: the vendored contract against its pins and the engine, the
+# build with every quality gate and the dependency checksums, and the JVM tests, folded into one
+# job named gate that branch protection requires (C3). It needs no secret, so a fork's pull request
+# runs all of it. No job retries.
+#
+# The contract, build and unit timeouts are twice their budgets in section 3 (2, 8 and 5 minutes):
+# the budget is the target, the timeout the ceiling past which a job is stuck, not slow.
+#
+# setup-gradle runs with cache-provider basic, the open-source cache on the GitHub Actions cache,
+# not its default proprietary one. Basic saves ~/.gradle/caches (the dependencies, the build cache
+# and the compiled build scripts) and ~/.gradle/wrapper, never the project's configuration cache.
+# So every run configures from scratch and a Gradle deprecation raised at configuration time fails
+# it (--warning-mode fail), while task outputs may come from the build cache. Keep it so: a reused
+# configuration cache entry would hide such a deprecation.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # C4: checksums and provenance, then byte for byte against the engine commit SOURCE.json pins,
+  # fetched from the public engine repository.
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checksums and provenance
+        run: scripts/verify_protocol_contract.sh
+
+      - name: Byte-identical to the pinned engine commit
+        run: scripts/verify_protocol_contract.sh --pinned
+
+  # C11, C12: debug and release compile with no warning; lint, detekt and ktlint are clean; every
+  # dependency matches gradle/verification-metadata.xml; the wrapper jar is Gradle's own.
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-provider: basic
+
+      # C5: the debug build is signed with a key made for this run. No daemon accepts it, and it
+      # is gone with the runner.
+      - name: Make a throwaway debug key
+        run: |
+          store="$RUNNER_TEMP/ci-debug.jks"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          keytool -genkeypair -noprompt -keystore "$store" -alias ci-debug \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Fermix Android CI, O=Tezra, C=US" \
+            -storepass "$password" -keypass "$password"
+          {
+            echo "FERMIX_DEBUG_STORE_FILE=$store"
+            echo "FERMIX_DEBUG_STORE_PASSWORD=$password"
+            echo "FERMIX_DEBUG_KEY_ALIAS=ci-debug"
+            echo "FERMIX_DEBUG_KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
+      # --warning-mode fail fails on Gradle's own deprecations, and allWarningsAsErrors on the Kotlin
+      # compiler's, but the Android Gradle plugin prints its own warnings (a deprecated android.*
+      # option, for one) as WARNING: lines and exits 0. So the log is searched for them, and for a
+      # compiler's w: line in case one ever gets past its flag. A clean build prints neither.
+      - name: Build and check
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/build.log"
+          ./gradlew --warning-mode fail --console=plain build 2>&1 | tee "$log"
+          if grep -E '^(WARNING:|w: )' "$log"; then
+            echo "::error::the build printed the warnings above, and every warning fails it (C11)"
+            exit 1
+          fi
+
+  # The JVM tests: today the build logic's (signing, version), and with stage A1's modules the JVM
+  # half of the device gate (design section 12.6). The root `test` does not reach into the included
+  # build-logic build, so its tests are named. The build job's `build` runs them as well, through
+  # check; A1 moves the JVM tests to this job alone.
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-provider: basic
+
+      - name: JVM tests
+        run: ./gradlew --warning-mode fail test :build-logic:test
+
+  # C3: the one required check. It runs even when a job it needs failed or was cancelled, so a
+  # failure can never show up as a skipped, and therefore passing, required check.
+  gate:
+    if: always()
+    needs: [contract, build, unit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to have passed
+        env:
+          CONTRACT_RESULT: ${{ needs.contract.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          UNIT_RESULT: ${{ needs.unit.result }}
+        run: |
+          echo "contract result: $CONTRACT_RESULT"
+          echo "build result: $BUILD_RESULT"
+          echo "unit result: $UNIT_RESULT"
+          [ "$CONTRACT_RESULT" = "success" ] || exit 1
+          [ "$BUILD_RESULT" = "success" ] || exit 1
+          [ "$UNIT_RESULT" = "success" ] || exit 1

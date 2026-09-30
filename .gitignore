@@ -1,0 +1,35 @@
+# Gradle and Kotlin
+.gradle/
+build/
+.kotlin/
+
+# Android Studio and IntelliJ
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Machine-local: the SDK path, and signing material that never enters the tree (onboarding section 2.5)
+local.properties
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pk8
+*.pem
+
+# Built packages, including the ones Android Studio's "Generate Signed App Bundle or APK" writes
+# outside build/
+/app/release/
+*.apk
+*.aab
+
+# Per Firebase project, kept out of the tree (onboarding section 2.4), and the Play and FCM
+# service-account keys (CI/CD design section 4.5)
+google-services.json
+*service-account*.json
+
+# OS and editors
+.DS_Store
+*.swp

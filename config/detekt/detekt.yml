@@ -1,0 +1,14 @@
+# detekt's default configuration applies (buildUponDefaultConfig), and any finding fails the build
+# (failOnSeverity Info, set by the quality convention). This file holds only what differs; there
+# is no baseline (CI/CD design C11).
+
+complexity:
+  # House rule: at most two levels of nesting. LongMethod's default, 60 lines, is the house rule.
+  NestedBlockDepth:
+    allowedDepth: 2
+
+naming:
+  # Composable functions are named like types.
+  FunctionNaming:
+    ignoreAnnotated:
+      - Composable

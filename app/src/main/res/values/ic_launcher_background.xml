@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fermix blue (design section 13.1). The launcher icon is a placeholder until the visual canon's own. -->
+    <color name="ic_launcher_background">#2B5CFF</color>
+</resources>
