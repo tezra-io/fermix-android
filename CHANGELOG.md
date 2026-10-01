@@ -29,3 +29,7 @@ whose version matches `version.properties`.
 - **The Noise layer.** `core-noise` runs the phone's side of the IK and IKpsk2 handshakes and the
   session after them, with its static key kept in AndroidKeyStore, and its JVM tests replay the
   engine's Noise vectors byte for byte.
+- **The wire codec.** `core-protocol` frames, encodes and decodes every protocol v1 event and the
+  protocol v2 changes, joins continuation runs and reads the pairing link, and refuses anything
+  outside the contract with an error that names it; its JVM tests replay the engine's fixtures
+  byte for byte.

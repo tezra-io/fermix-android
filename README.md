@@ -9,9 +9,9 @@ checkout) through a QR code. After that it talks to each one over a TLS WebSocke
 running on top of it, keyed by a device key that lives in the phone's secure hardware and never
 leaves it. Each daemon is its own trust domain, and the phone pairs with each one separately.
 
-The repository is at its first stage: the build, its gates, the vendored wire contract, CI and the
-Noise layer (`core-noise`) exist, and the app draws its name and nothing else yet. The design
-documents are named below.
+The repository is at its first stage: the build, its gates, the vendored wire contract, CI, the
+Noise layer (`core-noise`) and the wire codec (`core-protocol`) exist, and the app draws its name
+and nothing else yet. The design documents are named below.
 
 ```
 app/                    the application module (io.tezra.fermix)
@@ -19,6 +19,7 @@ build-logic/            the convention plugins every module applies, and their t
 config/detekt/          the detekt configuration; there is no baseline
 contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned by contracts/CHECKSUMS.txt and contracts/SOURCE.json
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
+core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 scripts/                verify_protocol_contract.sh
 version.properties      versionName and versionCode
@@ -41,6 +42,45 @@ would pin it outright. The tests also cover a second rekey in each direction, th
 low-order daemon key, a session ended by a failed tag, a spent nonce or a close, its keys zeroed,
 and a handshake zeroing its secrets however it ends. The Keystore path is proven on a real phone
 with a freshly generated key, never in these tests (design section 12.6).
+
+`core-protocol` (`io.tezra.fermix.protocol`) is the wire codec, plain Kotlin on the JVM with
+kotlinx.serialization. A `Frame` is a header and a raw tail behind a uint32 big-endian length,
+held to the 4,096-byte header, the 61,440-byte tail and the 65,519-byte frame. The envelope's `v`
+(1 or 2) is handed to the caller, and its `seq` counts from 1 as a `ULong`, the schema's unsigned
+64-bit range. Every protocol v1 client and server event has a model, and the protocol v2 changes
+of design section 7 are in the same models: each field that only one version carries or requires
+is listed with its versions, ignored as unknown in the other on decode and refused there on
+encode. A server event the codec does not know comes back as `ServerEvent.Unknown`; an unknown
+field is ignored, whatever it holds, and never written; a field the model has is never null, nor is
+anything in a row's metadata; and a value outside a closed set is refused by field. A header is
+held to RFC 8259 where the parser is looser: a raw control character inside a string, and a bare
+value with a sign or a leading zero, are refused; a key named twice takes its last value. A header,
+or a run's logical event, that nests deeper than 32 levels is refused before it is parsed, since the
+parser recurses once per level; the bound is the codec's own, as the contract sets none. The number
+of values is not bounded, by the contract or here: a 1 MiB logical event of small values takes tens
+of MiB of heap while it is decoded, and a row holds its metadata's tree, which core-session budgets
+for. `EventPartAssembler` joins `event_part` runs, one `count` and one `v` throughout and
+consecutive `seq`s, and `PairingLink` reads the owner's QR code into a secret the caller zeroes. The
+link's `v`, exactly `1` or `2`, is read first and then only that version's parameters; names and
+values are form-decoded, a fragment is no part of the query, `name` and `profile` are neither blank
+nor hold a control character, and the keys are canonical base64. Every refusal is a
+`ProtocolException` that names what it refused and quotes nothing of the header but an event's name
+and a field's path, since the header may carry an approval's token; a free-form metadata key in a
+path is cut to its first 64 characters. Every event's rules and bounds are listed in `Rules.kt`,
+next to the models, and `ShapeCheck.kt` reads each field's presence, type and closed set from the
+models themselves; the frame's bounds are in `Frame.kt`, the JSON text's and the envelope's in
+`Envelope.kt`, a run's in `EventPartAssembler.kt`, and the link's in `PairingLink.kt` and
+`LinkQuery.kt`. The models are written by hand. Their field order is the fixtures', `v`, `t` and
+`seq` first: the daemon writes its keys in an order of its own and reads any, so the byte-for-byte
+gate pins the fixtures' text. Tests hold the models to `protocol.schema.json`: the event catalogue,
+each event's fields, required fields and types, every closed set, and every bound the schema states,
+each planted into a fixture frame and refused under its field's path. The tests read the vendored
+files themselves: every client and server fixture line decodes and encodes back byte for byte, the
+client events built in Kotlin encode to their lines, the binary frames split and rebuild from the
+header text each line carries, the vendored run reassembles, and the pairing link parses. The
+protocol v2 tests, their bounds and required fields among them, are provisional, in one file, until
+the engine's v2 export is vendored (engine stage D1). Like every `fermix.jvm.library` module, it is
+compiled against the Java 17 API, not only to Java 17 bytecode.
 
 ## Build and check
 

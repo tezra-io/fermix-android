@@ -13,12 +13,15 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 ```
 app/                  the application module, io.tezra.fermix
 build-logic/          convention plugins: fermix.android.application, fermix.android.library,
-                      fermix.quality (detekt and ktlint); their tests are in build-logic/src/test
+                      fermix.jvm.library, fermix.quality (detekt and ktlint); their tests are in
+                      build-logic/src/test
 config/detekt/        detekt's configuration; there is no baseline
 contracts/mobile/     the engine's apps/fermix_core/priv/mobile/, byte for byte, pinned by
                       contracts/CHECKSUMS.txt and contracts/SOURCE.json
 core-noise/           the Noise layer, io.tezra.fermix.noise: IK and IKpsk2 initiator, gated on
                       contracts/mobile/noise_vectors.json in JVM tests
+core-protocol/        the wire codec, io.tezra.fermix.protocol (pure JVM): frames, v1 and v2 events,
+                      event_part runs, the pairing link; gated on the vendored fixtures and schema
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 scripts/              verify_protocol_contract.sh
 .github/workflows/    ci.yml: contract, build, unit, and gate, the one required check
@@ -58,6 +61,9 @@ scripts/              verify_protocol_contract.sh
   against the `Project`. Name the receiver: `register<T>` and `named<T>` take a Kotlin receiver
   lambda, and a `(Task) -> Unit` value names its parameter. Revisit when detekt can fail on
   analysis errors.
+- detekt runs no compiler plugin either, so the `serializer()` that kotlinx.serialization generates
+  on a `@Serializable` class is unresolved to it, with the same silent "compiler errors found during
+  analysis". Look a serializer up with the library's `serializer<T>()` instead.
 - The one exception, pending the owner's decision on dependency updates (CI/CD design section 9,
   question 7): `AndroidCommon.kt` disables lint's `AndroidGradlePluginVersion` and
   `GradleDependency`. They report that a newer version has been published, so their verdict

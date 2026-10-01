@@ -14,6 +14,7 @@ dependencies {
     implementation(libs.android.gradle.plugin)
     implementation(libs.kotlin.gradle.plugin)
     implementation(libs.compose.compiler.gradle.plugin)
+    implementation(libs.kotlin.serialization.gradle.plugin)
     implementation(libs.detekt.gradle.plugin)
     implementation(libs.ktlint.gradle.plugin)
 
@@ -56,6 +57,10 @@ gradlePlugin {
         register("androidLibrary") {
             id = "fermix.android.library"
             implementationClass = "io.tezra.fermix.buildlogic.AndroidLibraryConventionPlugin"
+        }
+        register("jvmLibrary") {
+            id = "fermix.jvm.library"
+            implementationClass = "io.tezra.fermix.buildlogic.JvmLibraryConventionPlugin"
         }
         register("quality") {
             id = "fermix.quality"

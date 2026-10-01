@@ -31,3 +31,4 @@ rootProject.name = "fermix-android"
 
 include(":app")
 include(":core-noise")
+include(":core-protocol")

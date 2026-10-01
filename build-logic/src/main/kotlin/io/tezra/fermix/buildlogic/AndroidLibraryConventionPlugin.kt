@@ -36,7 +36,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
 }
 
 /** JUnit 5 from the version catalog; Gradle 9 no longer supplies the platform launcher, so it is declared too. */
-private fun Project.addJUnit5() {
+internal fun Project.addJUnit5() {
     val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
     dependencies.addProvider("testImplementation", dependencies.platform(libs.library("junit-bom")))
     dependencies.addProvider("testImplementation", libs.library("junit-jupiter"))
