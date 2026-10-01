@@ -20,7 +20,7 @@
         "maximum": 1
       },
       "committed_upstream": true,
-      "provenance_note": "Taken on 2026-09-30 from the fermix repository at df8d8a4d on main, the commit the v0.12.1 release was built from, which origin carries, so committed_upstream is true. The export is byte for byte the same on dev at 2de0686a, where it was first read. This is the protocol v1 export, vendored ahead of engine stage D1 so that the repository, its contract check and its CI exist before the v2 export ships: protocol 1 on the 1 to 1 window, read from the schema's x-protocol-version and x-supported-version-range. Stage A1 builds against v2 (MILESTONE_51_ANDROID_COMPANION_APP.md section 16), so this pin is replaced by a re-vendor from the engine release that publishes v2, and nothing in the app is built against v1.",
+      "provenance_note": "Taken on 2026-09-30 from the fermix repository at df8d8a4d on main, the commit the v0.12.1 release was built from, which origin carries, so committed_upstream is true. The export is byte for byte the same on dev at 52b1999d, where it was first read. This is the protocol v1 export, vendored ahead of engine stage D1 so that the repository, its contract check and its CI exist before the v2 export ships: protocol 1 on the 1 to 1 window, read from the schema's x-protocol-version and x-supported-version-range. Stage A1 builds against v2 (MILESTONE_51_ANDROID_COMPANION_APP.md section 16), so this pin is replaced by a re-vendor from the engine release that publishes v2, and nothing in the app is built against v1.",
       "files": [
         {
           "path": "mobile/PROTOCOL.md",

@@ -10,8 +10,8 @@ running on top of it, keyed by a device key that lives in the phone's secure har
 leaves it. Each daemon is its own trust domain, and the phone pairs with each one separately.
 
 The repository is at its first stage: the build, its gates, the vendored wire contract, CI, the
-Noise layer (`core-noise`) and the wire codec (`core-protocol`) exist, and the app draws its name
-and nothing else yet. The design documents are named below.
+Noise layer (`core-noise`), the wire codec (`core-protocol`) and the transport (`core-transport`)
+exist, and the app draws its name and nothing else yet. The design documents are named below.
 
 ```
 app/                    the application module (io.tezra.fermix)
@@ -20,6 +20,7 @@ config/detekt/          the detekt configuration; there is no baseline
 contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned by contracts/CHECKSUMS.txt and contracts/SOURCE.json
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
+core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 scripts/                verify_protocol_contract.sh
 version.properties      versionName and versionCode
@@ -81,6 +82,50 @@ header text each line carries, the vendored run reassembles, and the pairing lin
 protocol v2 tests, their bounds and required fields among them, are provisional, in one file, until
 the engine's v2 export is vendored (engine stage D1). Like every `fermix.jvm.library` module, it is
 compiled against the Java 17 API, not only to Java 17 bytecode.
+
+`core-transport` (`io.tezra.fermix.transport`) is how the phone reaches a daemon. It carries bytes
+and network facts and knows nothing of Noise, events or sessions. It is an Android library, since
+ConnectivityManager lives there, and every rule in it but `NetworkWatcher` is plain Kotlin, tested
+on the JVM. `PinnedTrust` holds one instance's `tls_fp`: its `X509TrustManager` throws unless the
+SHA-256 of the leaf certificate is the pin, consults no certificate authority and accepts no issuer,
+and its `HostnameVerifier` re-checks the same digest; there is no `CertificatePinner` and no Network
+Security Config pin-set (design section 12.3). `WebSocketConnector` opens
+`wss://<candidate>:<port>/ws` with OkHttp over that trust alone: HTTP/1.1, TLS 1.3 or 1.2, no proxy,
+no redirect, no retry, no WebSocket ping and no read timeout, with 10 s to connect and 25 s to the
+upgrade. A `Connection` carries binary messages of at most 65,535 bytes in both directions, closes
+with 1009 on a larger one and with 1003 on a text message, and ends with the close code and reason,
+saying whether the daemon sent them, or with the failure; a daemon that accepts compression is
+refused with 1002. OkHttp bounds no incoming message and buffers every fragment of one before it
+hands the message on, so a larger message is refused once it is whole. OkHttp closes the socket with
+1001 when its outgoing queue would pass 16 MiB, so `queuedBytes` shows a sender what waits to be
+written. Whoever holds a `Connection` closes it, however it ended: closing drops the messages not
+yet read, which lets the socket's reader thread go. The connector keeps no idle connection, since
+the daemon serves one request per connection. An open fails typed: `PinMismatch`, the security event
+that is never retried, found even under another address's failure; `Refused` with the HTTP status
+and OkHttp's reason; `Closed`; or `Unreachable`. A name's addresses are OkHttp's to try one after
+another, so a pin refusal on one of them is a `PinMismatch` only when every address fails: when
+another address presents the pinned certificate, the open succeeds and the refusal goes unreported.
+Until each address is a route of its own, a name candidate falls short of design section 13.3's "no
+retry", and how to close that is the owner's decision. `candidateOrder` puts the last successful
+candidate first, then the tailnet addresses, the MagicDNS names and the LAN addresses.
+`CandidateRacer` starts the caller's attempts 250 ms apart (core-session's WSS open and Noise
+handshake), takes the first to complete and cancels the rest, ends at once on a pin mismatch, and
+closes every winner the caller does not get, however the race ends. It reads its clock from the
+caller's coroutine context, so a test runs it on virtual time. kotlinx-coroutines-android is not a
+dependency yet: nothing here needs `Dispatchers.Main`, and it arrives with the first module that
+does. `Backoff` waits 1 s doubling to 30 s with jitter. `NetworkWatcher` reads `NetworkFacts` from
+the default network's callback and from a second one that sees other apps' VPN networks;
+`reachability` turns the facts into design section 5.2's verdicts, and `UnreachableTracker` says the
+phone cannot reach an instance only when it has a network and every candidate has failed for 30 s.
+The tests run the pinned TLS and the WebSocket against mockwebserver3 with okhttp-tls certificates,
+one of them signed by an authority the JVM's default trust store is made to hold for that test, a
+hand-written server where a message must be fragmented, an upgrade held back or the reading stopped,
+the race on a virtual clock, and section 5.2's whole truth table. On the JVM, OkHttp's Android
+artifact finds no Android: it prints a stack trace saying so ("Possibly running android unit test
+without robolectric") and uses its JDK platform. So these tests prove the pin on the JDK's TLS, and
+run android.* code inside OkHttp. The phone's own TLS stack is the device gate's (design sections
+12.6 and 15.3), and that is still open: a certificate that is not pinned must come out as
+`PinMismatch` there before core-session relies on it.
 
 ## Build and check
 

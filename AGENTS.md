@@ -22,6 +22,8 @@ core-noise/           the Noise layer, io.tezra.fermix.noise: IK and IKpsk2 init
                       contracts/mobile/noise_vectors.json in JVM tests
 core-protocol/        the wire codec, io.tezra.fermix.protocol (pure JVM): frames, v1 and v2 events,
                       event_part runs, the pairing link; gated on the vendored fixtures and schema
+core-transport/       the transport, io.tezra.fermix.transport (Android library): the pinned TLS
+                      WebSocket, the candidate race, the network facts; JVM-tested but NetworkWatcher
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 scripts/              verify_protocol_contract.sh
 .github/workflows/    ci.yml: contract, build, unit, and gate, the one required check
@@ -68,6 +70,10 @@ scripts/              verify_protocol_contract.sh
   question 7): `AndroidCommon.kt` disables lint's `AndroidGradlePluginVersion` and
   `GradleDependency`. They report that a newer version has been published, so their verdict
   changes with upstream releases while the code stands still, and they cannot gate a build.
+  And one by design: `core-transport` disables lint's `CustomX509TrustManager`, which fires on
+  any class implementing `X509TrustManager`, because the pinning trust manager of design sections
+  12.2 and 12.3 is such a class. `TrustAllX509TrustManager`, which catches an accept-all body,
+  stays on, and the module's tests prove the pin refuses every other certificate.
 - Every module applies one convention plugin. What modules share lives in `build-logic`, never
   copied into module scripts. A convention plugin lands with the first module that applies it.
 - A dependency arrives with the module that needs it: pinned in `gradle/libs.versions.toml`, with
@@ -78,9 +84,9 @@ scripts/              verify_protocol_contract.sh
 - JVM tests never touch a real daemon, the network or the phone's Keystore. The deterministic
   vectors carry fixed private keys, and the JVM gate replays them and the vendored fixtures. The
   hardware half runs on a real phone with a freshly generated Keystore key, never an imported
-  vector key: the on-device Keystore vectors, pairing, attestation and locked-phone push, recorded
-  per handset and OS build (design section 12.6). A test-only key import stays out of the
-  acceptance gate.
+  vector key: the on-device Keystore vectors, pairing, attestation, locked-phone push and the pinned
+  TLS on the phone's own stack, recorded per handset and OS build (design sections 12.6 and 15.3). A
+  test-only key import stays out of the acceptance gate.
 - No secret enters the tree: no keystore, `keystore.properties`, `google-services.json` or service
   account. Debug builds sign with the developer's own key from outside the repository, never with
   the SDK's.

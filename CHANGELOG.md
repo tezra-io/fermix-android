@@ -33,3 +33,7 @@ whose version matches `version.properties`.
   protocol v2 changes, joins continuation runs and reads the pairing link, and refuses anything
   outside the contract with an error that names it; its JVM tests replay the engine's fixtures
   byte for byte.
+- **The transport.** `core-transport` opens the WebSocket to a daemon pinned to the certificate its
+  pairing link names, races the daemon's candidates, and reads the network facts behind the
+  reachability copy; its JVM tests run the pinned TLS against a local server and the race on a
+  virtual clock.
