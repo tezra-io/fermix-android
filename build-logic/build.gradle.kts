@@ -53,6 +53,10 @@ gradlePlugin {
             id = "fermix.android.application"
             implementationClass = "io.tezra.fermix.buildlogic.AndroidApplicationConventionPlugin"
         }
+        register("androidLibrary") {
+            id = "fermix.android.library"
+            implementationClass = "io.tezra.fermix.buildlogic.AndroidLibraryConventionPlugin"
+        }
         register("quality") {
             id = "fermix.quality"
             implementationClass = "io.tezra.fermix.buildlogic.QualityConventionPlugin"

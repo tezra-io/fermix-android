@@ -12,11 +12,13 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 ## Layout
 ```
 app/                  the application module, io.tezra.fermix
-build-logic/          convention plugins: fermix.android.application, fermix.quality (detekt and
-                      ktlint); their tests are in build-logic/src/test
+build-logic/          convention plugins: fermix.android.application, fermix.android.library,
+                      fermix.quality (detekt and ktlint); their tests are in build-logic/src/test
 config/detekt/        detekt's configuration; there is no baseline
 contracts/mobile/     the engine's apps/fermix_core/priv/mobile/, byte for byte, pinned by
                       contracts/CHECKSUMS.txt and contracts/SOURCE.json
+core-noise/           the Noise layer, io.tezra.fermix.noise: IK and IKpsk2 initiator, gated on
+                      contracts/mobile/noise_vectors.json in JVM tests
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 scripts/              verify_protocol_contract.sh
 .github/workflows/    ci.yml: contract, build, unit, and gate, the one required check

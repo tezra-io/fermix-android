@@ -9,18 +9,38 @@ checkout) through a QR code. After that it talks to each one over a TLS WebSocke
 running on top of it, keyed by a device key that lives in the phone's secure hardware and never
 leaves it. Each daemon is its own trust domain, and the phone pairs with each one separately.
 
-The repository is at its first stage: the build, its gates, the vendored wire contract and CI exist,
-and the app draws its name and nothing else yet. The design documents are named below.
+The repository is at its first stage: the build, its gates, the vendored wire contract, CI and the
+Noise layer (`core-noise`) exist, and the app draws its name and nothing else yet. The design
+documents are named below.
 
 ```
 app/                    the application module (io.tezra.fermix)
 build-logic/            the convention plugins every module applies, and their tests
 config/detekt/          the detekt configuration; there is no baseline
 contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned by contracts/CHECKSUMS.txt and contracts/SOURCE.json
+core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 scripts/                verify_protocol_contract.sh
 version.properties      versionName and versionCode
 ```
+
+## Modules
+
+`core-noise` (`io.tezra.fermix.noise`) is the Noise layer the phone runs under every session: the
+initiator's side of `Noise_IK_25519_ChaChaPoly_SHA256` for a paired phone and of
+`Noise_IKpsk2_25519_ChaChaPoly_SHA256` for pairing, with the clear `FXM1` prelude on message 1
+only, the six-digit SAS, the 65,535-byte WebSocket message bound (message 1's prelude counted in
+it), and each direction's rekey after exactly 2^20 frames. Its static key is an operation, not key
+material: `KeystoreStaticKey` runs X25519 inside AndroidKeyStore, and the tests put a software key
+in its place. Those JVM tests replay `contracts/mobile/noise_vectors.json`, read from the vendored
+file itself: both handshakes byte for byte, both handshake hashes and SAS values, every transport
+frame at its nonce, and the rekeyed key with the frame after it. The vectors pin only frames from
+the phone, so the receive direction is checked against a test responder that derives its transport
+keys with its own HKDF, apart from the module's Split; a daemon-to-phone frame in the vectors
+would pin it outright. The tests also cover a second rekey in each direction, the size bounds, a
+low-order daemon key, a session ended by a failed tag, a spent nonce or a close, its keys zeroed,
+and a handshake zeroing its secrets however it ends. The Keystore path is proven on a real phone
+with a freshly generated key, never in these tests (design section 12.6).
 
 ## Build and check
 

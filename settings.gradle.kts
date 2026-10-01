@@ -30,3 +30,4 @@ dependencyResolutionManagement {
 rootProject.name = "fermix-android"
 
 include(":app")
+include(":core-noise")

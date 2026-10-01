@@ -26,3 +26,6 @@ whose version matches `version.properties`.
   proves it against those pins, an engine checkout, or the pinned commit on GitHub.
 - **CI.** Every pull request runs the contract, build and unit jobs and the one required check,
   `gate`.
+- **The Noise layer.** `core-noise` runs the phone's side of the IK and IKpsk2 handshakes and the
+  session after them, with its static key kept in AndroidKeyStore, and its JVM tests replay the
+  engine's Noise vectors byte for byte.
