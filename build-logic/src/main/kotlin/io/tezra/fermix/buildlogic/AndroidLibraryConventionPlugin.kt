@@ -43,5 +43,5 @@ internal fun Project.addJUnit5() {
     dependencies.addProvider("testRuntimeOnly", libs.library("junit-platform-launcher"))
 }
 
-private fun VersionCatalog.library(alias: String): Provider<MinimalExternalModuleDependency> =
+internal fun VersionCatalog.library(alias: String): Provider<MinimalExternalModuleDependency> =
     findLibrary(alias).orElseThrow { GradleException("gradle/libs.versions.toml has no $alias library.") }

@@ -42,3 +42,10 @@ whose version matches `version.properties`.
   reconnect reconciliation, the keepalive and the close codes, and the turn machines with the
   working indicator; its JVM tests run it against a fake daemon built from the protocol's own
   models, on a virtual clock.
+- **The design language.** `design` holds design section 13.1 as code: the colours, the six tints,
+  the type scale in the bundled Google Sans Flex and Google Sans Code (google/fonts' files,
+  unmodified, with their OFL), the shapes, spacing, the centred column, motion with reduce-motion,
+  and the haptics, all handed to Material 3, never Dynamic Color. The launcher icon is the two-dot
+  mark, with a themed monochrome layer. Every preview is drawn at twelve windows and compared with
+  its reference image, in `check` and in CI's new `screens` job, which uploads any image that changed
+  and also fails on a reference image that no preview drew.

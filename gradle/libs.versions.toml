@@ -5,6 +5,21 @@ agp = "9.4.1"
 kotlin = "2.4.20"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
+# The window size classes of design section 13.11. Compose UI 1.12.1 already resolves window 1.5.0,
+# whose window-core computes a class from the window's size in dp, with no Activity, so previews have one.
+androidxWindow = "1.5.0"
+# The screenshot tests of the `screens` job (CI/CD design section 3): Roborazzi generates a test for
+# each preview, found by ComposablePreviewScanner, and renders it on Robolectric's native graphics.
+# The official Compose Preview Screenshot Testing plugin needs android.experimental.enableScreenshotTest,
+# which AGP 9.4 answers with a WARNING: line that only a suppression would silence.
+roborazzi = "1.76.0"
+composablePreviewScanner = "0.9.3"
+robolectric = "4.17"
+# Robolectric's Android 16 (API 36, the targetSdk) runtime for 4.17. Gradle resolves and verifies it, and
+# Robolectric reads it offline (fermix.android.library.compose), never fetching anything itself.
+robolectricAndroidAll = "16-robolectric-13921718-i7"
+# Robolectric runs JUnit 4 tests only; the JUnit Platform runs them through the Vintage engine.
+junit4 = "4.13.2"
 # The wire codec (design sections 12.1 and 17); its compiler plugin is the Kotlin version's own.
 kotlinxSerialization = "1.11.0"
 # The transport's WebSocket (design sections 12.1 and 17); the tests' mockwebserver3 and okhttp-tls
@@ -23,6 +38,9 @@ junit = "6.1.3"
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
+androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-window-core = { module = "androidx.window:window-core", version.ref = "androidxWindow" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
@@ -32,6 +50,7 @@ android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 compose-compiler-gradle-plugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 kotlin-serialization-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin" }
+roborazzi-gradle-plugin = { module = "io.github.takahirom.roborazzi:roborazzi-gradle-plugin", version.ref = "roborazzi" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 ktlint-gradle-plugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlintGradle" }
 
@@ -42,6 +61,14 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 okhttp-mockwebserver3 = { module = "com.squareup.okhttp3:mockwebserver3", version.ref = "okhttp" }
 okhttp-tls = { module = "com.squareup.okhttp3:okhttp-tls", version.ref = "okhttp" }
+
+# Screenshot tests (fermix.android.library.compose).
+roborazzi-compose-preview-scanner-support = { module = "io.github.takahirom.roborazzi:roborazzi-compose-preview-scanner-support", version.ref = "roborazzi" }
+composable-preview-scanner = { module = "io.github.sergio-sastre.ComposablePreviewScanner:android", version.ref = "composablePreviewScanner" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+robolectric-android-all = { module = "org.robolectric:android-all-instrumented", version.ref = "robolectricAndroidAll" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
+junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
 
 [plugins]
 # Applied to build-logic itself, so the convention plugins pass the same gates as the app.

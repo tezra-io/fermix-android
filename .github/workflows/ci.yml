@@ -1,11 +1,12 @@
 # The Android app's pull-request pipeline (MILESTONE_51_ANDROID_CI_CD.md section 3), on every pull
 # request and every push to main or dev: the vendored contract against its pins and the engine, the
-# build with every quality gate and the dependency checksums, and the JVM tests, folded into one
-# job named gate that branch protection requires (C3). It needs no secret, so a fork's pull request
-# runs all of it. No job retries.
+# build with every quality gate and the dependency checksums, the JVM tests, and the screenshot
+# tests, folded into one job named gate that branch protection requires (C3). It needs no secret,
+# so a fork's pull request runs all of it. No job retries.
 #
 # The contract, build and unit timeouts are twice their budgets in section 3 (2, 8 and 5 minutes):
-# the budget is the target, the timeout the ceiling past which a job is stuck, not slow.
+# the budget is the target, the timeout the ceiling past which a job is stuck, not slow. The
+# screens timeout is its budget, 8 minutes, as stage A2 set it.
 #
 # setup-gradle runs with cache-provider basic, the open-source cache on the GitHub Actions cache,
 # not its default proprietary one. Basic saves ~/.gradle/caches (the dependencies, the build cache
@@ -121,11 +122,53 @@ jobs:
       - name: JVM tests
         run: ./gradlew --warning-mode fail test :build-logic:test
 
+  # Section 3's screens: every @FermixPreviews preview, drawn by Roborazzi on Robolectric at the
+  # twelve windows and compared with its reference image under the module's src/test/screenshots,
+  # which are drawn on Linux x86-64, as this runner draws them. Named at the root,
+  # verifyRoborazziDebug runs in every module that has screenshots. A changed image fails the job,
+  # within Roborazzi's default comparator: a pixel whose RGBA moves by less than 0.007 (on 0 to 1)
+  # counts as unchanged, and the token values themselves are pinned by the design module's tests.
+  # A reference that no preview drew fails it too. A failure names its preview, which its twelve
+  # windows share, so the upload is the locator: each *_compare.png is named for its preview,
+  # window, mode and font scale, and shows the reference, the difference and the new image side by
+  # side. The references go up too, for the HTML report that links to them.
+  screens:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-provider: basic
+
+      - name: Screenshots against their references
+        run: ./gradlew --warning-mode fail --console=plain verifyRoborazziDebug
+
+      - name: Upload the changed images
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: screens-diff
+          path: |
+            */build/outputs/roborazzi/
+            */build/reports/roborazzi/
+            */build/test-results/roborazzi/
+            */src/test/screenshots/
+
   # C3: the one required check. It runs even when a job it needs failed or was cancelled, so a
   # failure can never show up as a skipped, and therefore passing, required check.
   gate:
     if: always()
-    needs: [contract, build, unit]
+    needs: [contract, build, unit, screens]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -134,10 +177,13 @@ jobs:
           CONTRACT_RESULT: ${{ needs.contract.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           UNIT_RESULT: ${{ needs.unit.result }}
+          SCREENS_RESULT: ${{ needs.screens.result }}
         run: |
           echo "contract result: $CONTRACT_RESULT"
           echo "build result: $BUILD_RESULT"
           echo "unit result: $UNIT_RESULT"
+          echo "screens result: $SCREENS_RESULT"
           [ "$CONTRACT_RESULT" = "success" ] || exit 1
           [ "$BUILD_RESULT" = "success" ] || exit 1
           [ "$UNIT_RESULT" = "success" ] || exit 1
+          [ "$SCREENS_RESULT" = "success" ] || exit 1

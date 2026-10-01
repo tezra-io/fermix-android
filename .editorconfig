@@ -28,3 +28,12 @@ indent_size = unset
 indent_style = unset
 insert_final_newline = unset
 trim_trailing_whitespace = unset
+
+# The fonts' licence files are byte-for-byte google/fonts' (design/src/main/assets/fonts/SOURCE.json).
+[design/src/main/assets/fonts/*/**]
+charset = unset
+end_of_line = unset
+indent_size = unset
+indent_style = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

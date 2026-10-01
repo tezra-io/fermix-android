@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The themed icon (Android 13 and later): the foreground's two dots in one colour, which the launcher
+  replaces with the wallpaper's. It reads only alpha, so the second dot is at 62 %, as the canon draws
+  the mark on a tint (.mark.on).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28.92,54a11,11 0,1 1,22 0a11,11 0,1 1,-22 0z" />
+    <path
+        android:fillAlpha="0.62"
+        android:fillColor="#FFFFFF"
+        android:pathData="M57.08,54a11,11 0,1 1,22 0a11,11 0,1 1,-22 0z" />
+</vector>

@@ -9,10 +9,10 @@ checkout) through a QR code. After that it talks to each one over a TLS WebSocke
 running on top of it, keyed by a device key that lives in the phone's secure hardware and never
 leaves it. Each daemon is its own trust domain, and the phone pairs with each one separately.
 
-The repository is at its first stage: the build, its gates, the vendored wire contract, CI, the
-Noise layer (`core-noise`), the wire codec (`core-protocol`), the transport (`core-transport`) and
-the session (`core-session`) exist, and the app draws its name and nothing else yet. The design
-documents are named below.
+The repository is at its first stages: the build, its gates, the vendored wire contract, CI, the
+Noise layer (`core-noise`), the wire codec (`core-protocol`), the transport (`core-transport`), the
+session (`core-session`) and the design language with its screenshot tests (`design`) exist, and
+the app draws its name and nothing else yet. The design documents are named below.
 
 ```
 app/                    the application module (io.tezra.fermix)
@@ -23,6 +23,7 @@ core-noise/             the Noise layer under every session (io.tezra.fermix.noi
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
 core-session/           one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
+design/                 the design language as code, its fonts, previews and screenshot references (io.tezra.fermix.design)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 scripts/                verify_protocol_contract.sh
 version.properties      versionName and versionCode
@@ -178,6 +179,59 @@ announcer that throws ends the session as `Failed`, and cancelling its scope as 
 other client events, `push_register` and `push_unregister` first (design section 10,
 "Registration"), have no path through the session yet; the push module adds one.
 
+`design` (`io.tezra.fermix.design`) is design section 13.1's language as code, a Compose library
+every screen builds on. `FermixTheme` provides it and hands it to Material 3 too, so that Material's
+components draw in it: `FermixColors`, light and dark with the visual canon's values, and the six
+`Tint`s, with every one of Material's colour roles built from them and never Dynamic Color, and
+`textButtonColors(colors)`, the accent as ink for the text buttons Material would draw in the
+accent's fill; `FermixType`, section 13.1's type scale in Google Sans Flex, with Google Sans Code
+and tabular figures for code and the SAS, and tabular figures in label-small's timestamps;
+`FermixShapes` and `bubbleShape(sender, position)`; `FermixSpacing`;
+`FermixColumn`, section 13.11's centred column of 640 dp or 480 dp on a window 600 dp wide or more
+and the whole window below that, with the window's width class from androidx.window, which needs
+no Activity, so a preview gets the class its device has; `FermixMotion`, the named durations, the
+standard spring scheme everywhere and the expressive one inside `ExpressiveMotion { }` for the SAS
+reveal, Paired and the first chat, and `LocalReducedMotion`, true while the animator duration scale
+is 0; `Modifier.controlPlane(edge, colors)`, the tonal surface with its hairline; and
+`HapticFeedback.perform(view, use)`, which plays each `HapticUse` with its meaning (`Haptic`: Act,
+Refuse, Arrive, Threshold) through its platform constant. The fonts are google/fonts' own files at
+one commit, unmodified, under the SIL Open Font License 1.1: `src/main/res/font/` holds them,
+`src/main/assets/fonts/` their `OFL.txt` and `TRADEMARKS.md`, which ship in the APK with them, and
+`SOURCE.json` the commit and each file's upstream path and sha256, which a test checks. They add
+about 2.6 MB to the APK, 2.4 MB of it Google Sans Flex, a variable font with all its axes.
+
+Every preview in a `fermix.android.library.compose` module is also a screenshot test. Roborazzi
+draws it on Robolectric, in the JVM, and `verifyRoborazziDebug`, which `check` runs, compares each
+image with its reference in the module's `src/test/screenshots/`. Robolectric's Android runtime is a
+pinned dependency with its checksum, so the tests never download one. A screen's previews are
+annotated `@FermixPreviews`, which draws them twelve times: a compact (412×915 dp), a medium
+(673×841 dp) and an expanded (841×673 dp) window, light and dark, at font scale 1.0 and 2.0, each in
+`FermixPreviewTheme { }`. The first are the design module's own, in its tests: `SpecimenColour`
+(the colours with their names, the six tints as avatars, and Material's Button, TextButton and filled
+Card as the theme hands them the design), `SpecimenType` (the type scale with its sizes) and
+`SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces), each
+short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
+twelve images. After a change that moves pixels, redraw the references with
+`./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true`, which runs the tests every
+time, never up to date or from the build cache, and deletes the reference of a preview that is gone;
+look at each image that changed, and commit them with that change: a changed reference image is a
+review item, since it is what the change looks like. A verify also fails on a reference that no
+preview drew (`verifyNoOrphanScreenshots`, which `verifyRoborazziDebug` runs), since a preview that
+was renamed, removed or is no longer found would otherwise leave references that look like coverage
+and are compared with nothing. Roborazzi's own copies from `build/intermediates/roborazzi` into the
+references are off, so a build never writes build state into the source tree. The references are
+drawn on Linux x86-64, as CI's ubuntu-24.04 runner draws them. Robolectric does not render alike on
+macOS or Windows, so there a verify, and `./gradlew build` with it, is not authoritative; record
+references on Linux only. CI's `screens` job fails on an image that differs from its reference beyond
+Roborazzi's default tolerance: a pixel whose RGBA moves by less than 0.007 (on 0 to 1) counts as
+unchanged, so a colour nudged by a step or two passes there and fails its value test in
+`FermixColorsTest` instead. A failure is reported under the name of its preview, which its twelve
+windows share, so the job uploads the locator: each `*_compare.png`, named for its preview, window,
+mode and font scale, with the reference, the difference and the new image side by side, and the HTML
+report with the references it links to. Android's own screenshot plugin is not used: it needs
+`android.experimental.enableScreenshotTest=true`, which the Android Gradle plugin 9.4 answers with a
+`WARNING:` line on every build, and only a suppression would silence it.
+
 ## Build and check
 
 You need JDK 21 to run Gradle and an Android SDK. The app compiles against API 37 (Android 17),
@@ -188,6 +242,8 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 ```bash
 ./gradlew build                                   # debug and release, lint, detekt, ktlint, dependency checksums, tests
 ./gradlew test :build-logic:test                  # the JVM tests, the build logic's included
+./gradlew verifyRoborazziDebug                    # the screenshot tests against their reference images, and no stale one
+./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true   # redraw the references (Linux), dropping stale ones
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub

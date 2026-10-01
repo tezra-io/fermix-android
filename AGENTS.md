@@ -13,6 +13,7 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 ```
 app/                  the application module, io.tezra.fermix
 build-logic/          convention plugins: fermix.android.application, fermix.android.library,
+                      fermix.android.library.compose (Compose and the Roborazzi screenshot tests),
                       fermix.jvm.library, fermix.quality (detekt and ktlint); their tests are in
                       build-logic/src/test
 config/detekt/        detekt's configuration; there is no baseline
@@ -27,9 +28,12 @@ core-transport/       the transport, io.tezra.fermix.transport (Android library)
 core-session/         one paired session, io.tezra.fermix.session (Android library, no android.*,
                       JVM-tested against a fake daemon): hello, the outbox, cursors and acks,
                       reconnect reconciliation, keepalive and close codes, the turn machines
+design/               design section 13.1 as code, io.tezra.fermix.design (Compose library): tokens,
+                      FermixTheme, the bundled OFL fonts with SOURCE.json, @FermixPreviews, and the
+                      screenshot references in design/src/test/screenshots
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 scripts/              verify_protocol_contract.sh
-.github/workflows/    ci.yml: contract, build, unit, and gate, the one required check
+.github/workflows/    ci.yml: contract, build, unit, screens, and gate, the one required check
 ```
 
 ## The contract with the engine
@@ -90,6 +94,15 @@ scripts/              verify_protocol_contract.sh
   vector key: the on-device Keystore vectors, pairing, attestation, locked-phone push and the pinned
   TLS on the phone's own stack, recorded per handset and OS build (design sections 12.6 and 15.3). A
   test-only key import stays out of the acceptance gate.
+- Screenshots: every preview in a `fermix.android.library.compose` module is a screenshot test, and
+  `verifyRoborazziDebug` (in `check`, and CI's `screens` job) compares it with its reference image
+  in the module's `src/test/screenshots/`, and fails on a reference no preview drew. A reference
+  image changes only with the change that moved it, in the same commit: redraw with
+  `./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true`, which always runs the
+  tests and drops the reference of a preview that is gone, on Linux x86-64 only, as CI draws them;
+  look at every image that changed, and never re-record to turn a failing verify green without that
+  change. Never turn Roborazzi's copies from `build/intermediates/roborazzi` back on: they write build
+  state into the references. A screen's previews use `@FermixPreviews` and `FermixPreviewTheme { }`.
 - No secret enters the tree: no keystore, `keystore.properties`, `google-services.json` or service
   account. Debug builds sign with the developer's own key from outside the repository, never with
   the SDK's.

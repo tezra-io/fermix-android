@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A placeholder mark inside the adaptive icon's 66 dp safe zone; it doubles as the themed icon. -->
+<!--
+  The two-dot mark (design section 13.1 and the visual canon's .mark): two 22 dp dots, a gap of 0.28 of
+  a dot between them, the first in ink and the second in Fermix blue, centred well inside the adaptive
+  icon's 66 dp safe zone.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,36a18,18 0,1 1,0 36a18,18 0,1 1,0 -36z" />
+        android:fillColor="#121317"
+        android:pathData="M28.92,54a11,11 0,1 1,22 0a11,11 0,1 1,-22 0z" />
+    <path
+        android:fillColor="#2B5CFF"
+        android:pathData="M57.08,54a11,11 0,1 1,22 0a11,11 0,1 1,-22 0z" />
 </vector>
