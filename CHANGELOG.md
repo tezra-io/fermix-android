@@ -37,3 +37,8 @@ whose version matches `version.properties`.
   pairing link names, races the daemon's candidates, and reads the network facts behind the
   reachability copy; its JVM tests run the pinned TLS against a local server and the race on a
   virtual clock.
+- **The session.** `core-session` keeps one paired session with a daemon: hello first, the outbox,
+  the cursors, an ack only for a row the owner was told of or has read, across restarts too,
+  reconnect reconciliation, the keepalive and the close codes, and the turn machines with the
+  working indicator; its JVM tests run it against a fake daemon built from the protocol's own
+  models, on a virtual clock.

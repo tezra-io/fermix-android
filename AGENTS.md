@@ -24,6 +24,9 @@ core-protocol/        the wire codec, io.tezra.fermix.protocol (pure JVM): frame
                       event_part runs, the pairing link; gated on the vendored fixtures and schema
 core-transport/       the transport, io.tezra.fermix.transport (Android library): the pinned TLS
                       WebSocket, the candidate race, the network facts; JVM-tested but NetworkWatcher
+core-session/         one paired session, io.tezra.fermix.session (Android library, no android.*,
+                      JVM-tested against a fake daemon): hello, the outbox, cursors and acks,
+                      reconnect reconciliation, keepalive and close codes, the turn machines
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 scripts/              verify_protocol_contract.sh
 .github/workflows/    ci.yml: contract, build, unit, and gate, the one required check

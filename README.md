@@ -10,8 +10,9 @@ running on top of it, keyed by a device key that lives in the phone's secure har
 leaves it. Each daemon is its own trust domain, and the phone pairs with each one separately.
 
 The repository is at its first stage: the build, its gates, the vendored wire contract, CI, the
-Noise layer (`core-noise`), the wire codec (`core-protocol`) and the transport (`core-transport`)
-exist, and the app draws its name and nothing else yet. The design documents are named below.
+Noise layer (`core-noise`), the wire codec (`core-protocol`), the transport (`core-transport`) and
+the session (`core-session`) exist, and the app draws its name and nothing else yet. The design
+documents are named below.
 
 ```
 app/                    the application module (io.tezra.fermix)
@@ -21,6 +22,7 @@ contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
+core-session/           one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 scripts/                verify_protocol_contract.sh
 version.properties      versionName and versionCode
@@ -126,6 +128,55 @@ without robolectric") and uses its JDK platform. So these tests prove the pin on
 run android.* code inside OkHttp. The phone's own TLS stack is the device gate's (design sections
 12.6 and 15.3), and that is still open: a certificate that is not pinned must come out as
 `PinMismatch` there before core-session relies on it.
+
+`core-session` (`io.tezra.fermix.session`) is one paired session with one daemon, for one profile,
+from its first race until it ends. It is an Android library with no android.* in it, tested on the
+JVM against a fake daemon that answers Noise IK and builds every event from core-protocol's models,
+on a virtual clock. `Session.open` races the candidates, runs the IK handshake and sends `hello` at
+seq 1 on the winner alone, with the stored cursors and `protocol_v: 2`; a `hello_ack` whose window
+leaves out 2, or a protocol v1 daemon's `unsupported_protocol_version`, ends the session as
+`OlderDaemon` or `NewerDaemon`. Every frame's seq is the last one's plus one, from 1 on each
+connection, and a gap or a replay closes 1002; `event_part` runs are joined, and the reader decodes
+one event ahead of the actor, so a connection holds at most two decoded events. A ping goes after 25
+s with nothing sent, and two missed pongs reconnect: each pong answers the oldest ping, one that
+comes late forgives nothing, and the time a slow announcer keeps the reader from reading pongs is
+not held against the link. The hourly `1000 "Noise session lifetime reached"` close reconnects
+without a word to the UI unless no link is up again within 2 s; any `1000` within 5 s of `hello_ack`
+waits the backoff. 4001 is `Replaced`, 4003 and 4004 are `Revoked`, a certificate that is not pinned
+or a Noise key that does not authenticate is `IdentityChanged`, and every other close reconnects
+after core-transport's backoff; after 2,880 races in one run the session is `Suspended` until
+`resume()`. The outbox lives in the app's `SessionStore`, which one session at a time owns: a
+request is persisted, then sent; `accepted` clears it and `error{client_msg_id}` keeps it, failed,
+until `remove()` takes it out; one persisted while the drain reads the store is sent after what the
+drain read, and none goes twice on one connection, accepted or not. "Run again" is a new request
+whose `retry_of` names the failed one, which the app passes, since a run that failed after
+`accepted` left the outbox then; `RequestFailed.inOutbox` says which of the two failed. New rows
+leave the session only through the app's `Announcer`, one at a time in timeline order; older pages
+come as `OlderLoaded` events and are never announced. The session acks a row only once the announcer
+has said what it did with it: a row the owner was not told of holds the ack until the owner reads it
+(`tla/specs/mobile_push`, PUSH-2), and since the daemon pushes no row that is read, a read that
+reaches it releases the ack, which then follows every announcement after it. The ack frontier and
+the row that holds it are stored with the cursor, so a restart never acks past such a row; each new
+socket hears it again, as the daemon's acked cursor is per socket; and on a page each row's ack goes
+before the next row is announced. A row that lands on screen sends `read_state` at once, and the
+read frontier only moves forward, never past the head. After each `hello_ack` the session reconciles
+before the outbox drains: the ack and the read frontier, `active_turns`, the approval cards against
+`pending_approvals` (a list `hello_ack` leaves out skips its step), `request_status` in batches of
+32, whose states move the turns (queued or running shows the card, completed or failed ends it),
+`mutations_pull` to its end or the rebuild on `mutations_gone`, and the first history pull, forward
+from the cursor or, for an empty cache, the newest page backward. A page holding a row its pull did
+not ask for, or a `mutations_page` whose `next` does not move on, closes 1002, so the pulls always
+move on; a daemon that refuses `request_status` or `mutations_pull` has that step skipped; and only
+the daemon's own time counts toward the 30 s it has to answer. `Connected.caughtUp` then ends the
+subtitle's `Updating…`, and a silent reconnect keeps it. Each turn is design section 8.2's machine
+as a pure reducer, whose table, every state against every event, is a test that fails on a missing
+cell; a reconnect that finds a turn over leaves its machine idle, so a request that was only queued
+opens again. `indicatorLine` is the working indicator's phrase (onboarding gotcha 19). `state` is a
+`StateFlow<SessionState>`, `events` everything else the app is told, in order, `diagnostics` the
+last 200 notable things, and `acks` the last 200 acks sent, with how long each waited. A store or
+announcer that throws ends the session as `Failed`, and cancelling its scope as `Closed`. The app's
+other client events, `push_register` and `push_unregister` first (design section 10,
+"Registration"), have no path through the session yet; the push module adds one.
 
 ## Build and check
 
