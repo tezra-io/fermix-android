@@ -67,7 +67,7 @@ class AndroidComposeLibraryConventionPlugin : Plugin<Project> {
 }
 
 /** Robolectric's Android runtime as Gradle resolves it: checked against verification-metadata.xml. */
-private fun Project.robolectricSdk(libs: VersionCatalog): FileCollection {
+internal fun Project.robolectricSdk(libs: VersionCatalog): FileCollection {
     val sdk = configurations.detachedConfiguration(dependencies.create(libs.library("robolectric-android-all").get()))
     sdk.isTransitive = false
     return sdk
@@ -94,7 +94,7 @@ private val ROBOLECTRIC_JVM_ARGS =
  * Robolectric runs offline on the runtime Gradle verified, so a test never downloads code at run time,
  * and draws with the hardware pixel copy, which Roborazzi asks for so the images are faithful.
  */
-private fun configureRobolectric(
+internal fun configureRobolectric(
     test: Test,
     sdk: FileCollection,
 ) {
@@ -148,8 +148,13 @@ private fun Project.addComposeDependencies(libs: VersionCatalog) {
     dependencies.addProvider("testImplementation", bom)
     dependencies.addProvider("testImplementation", libs.library("roborazzi-compose-preview-scanner-support"))
     dependencies.addProvider("testImplementation", libs.library("composable-preview-scanner"))
-    dependencies.addProvider("testImplementation", libs.library("robolectric"))
     dependencies.addProvider("testImplementation", libs.library("androidx-compose-ui-test-junit4"))
+    addRobolectric(libs)
+}
+
+/** Robolectric, and the JUnit 4 it runs tests on, through the JUnit Platform's Vintage engine. */
+internal fun Project.addRobolectric(libs: VersionCatalog) {
+    dependencies.addProvider("testImplementation", libs.library("robolectric"))
     dependencies.addProvider("testImplementation", libs.library("junit4"))
     dependencies.addProvider("testRuntimeOnly", libs.library("junit-vintage-engine"))
 }

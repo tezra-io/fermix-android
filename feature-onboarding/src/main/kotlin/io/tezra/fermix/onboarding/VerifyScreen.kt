@@ -1,0 +1,68 @@
+package io.tezra.fermix.onboarding
+
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import io.tezra.fermix.design.ExpressiveMotion
+import io.tezra.fermix.design.FermixType
+import io.tezra.fermix.design.LocalFermixColors
+
+// The visual canon's Verify: the title 56 dp down, the code 36 dp under it, the sentence 20 dp under
+// the code, and the countdown 28 dp under that.
+private val TITLE_TOP = 56.dp
+private val SAS_TOP = 36.dp
+private val BODY_TOP = 20.dp
+private val COUNTDOWN_TOP = 28.dp
+
+/** What Verify shows: the code, the seconds left of the pairing window, and the name the phone went as. */
+@Immutable
+data class VerifyUi(
+    val sas: String,
+    val secondsLeft: Int,
+    val deviceName: String,
+) {
+    /** Leaves the SAS out, so no log line that prints the screen's state carries the code. */
+    override fun toString(): String = "VerifyUi(secondsLeft=$secondsLeft, deviceName=$deviceName)"
+}
+
+/**
+ * Step 5 (design section 13.3): "Do the codes match?", the code landing on the expressive scheme (section
+ * 13.1 allows it here), "Approve on your computer if they match.", the countdown, the name `pair_request`
+ * carried, and "Cancel". The name is read-only here: it went out as the handshake completed.
+ */
+@Composable
+fun VerifyScreen(
+    state: VerifyUi,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalFermixColors.current
+    OnboardingPage(
+        modifier = modifier,
+        actions = {
+            ShownAs(deviceName = state.deviceName, onRename = null)
+            SecondaryAction(text = stringResource(R.string.onboarding_verify_cancel), onClick = onCancel)
+        },
+    ) {
+        Text(
+            text = stringResource(R.string.onboarding_verify_title),
+            style = FermixType.headline,
+            color = colors.ink,
+            modifier = Modifier.padding(top = TITLE_TOP),
+        )
+        ExpressiveMotion {
+            SasCode(sas = state.sas, modifier = Modifier.padding(top = SAS_TOP))
+        }
+        Text(
+            text = stringResource(R.string.onboarding_verify_body),
+            style = FermixType.body,
+            color = colors.ink,
+            modifier = Modifier.padding(top = BODY_TOP),
+        )
+        CountdownRing(secondsLeft = state.secondsLeft, modifier = Modifier.padding(top = COUNTDOWN_TOP))
+    }
+}

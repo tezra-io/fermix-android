@@ -412,6 +412,89 @@ outbox's flow, a restart that finds everything as it was, the media cache's dige
 streams, and the launch check with its notices. The app's backup posture, `allowBackup="false"` with data extraction rules and
 full-backup rules that exclude every domain, is checked in the release APK itself by the `policy` job.
 
+`feature-onboarding` (`io.tezra.fermix.onboarding`) is design section 13.3, Welcome to Notifications, as
+Compose screens over one ViewModel. Each screen is a composable of its state and its callbacks, with no
+ViewModel inside: `WelcomeScreen`, `PairScreen` with `RenameSheet`, `ScanScreen` (the frame around a
+`preview` slot, which the camera fills in a later change, with the torch a toggle that shows once a
+camera brings one; TalkBack reaches "Paste a pairing link" first), `ConnectingScreen`, `VerifyScreen`
+(the SAS in two groups landing digit by digit with `SEGMENT_TICK` on the expressive scheme, read by
+TalkBack digit by digit, the countdown ring), `PairedScreen`, `NameScreen` (section 9.2's question when
+a second Fermix would carry the first one's name) and `NotificationsScreen`; and `FailureScreen(case)`,
+which draws every failure from `FailureCase`, the one table that pairs each row of section 13.3's
+failure table with its icon, strings, primary and secondary actions, and says which failures are
+refusals, which play `REJECT`: the `pair_denied` rows, another pairing in progress, the wrong machine
+and the two version refusals, as does a link the scan refuses. Every page keeps clear of the system
+bars, as the app draws edge to edge. Their words are strings.xml's, the design's verbatim, with the host
+as a format argument. `OnboardingViewModel` holds onboarding's part of the back stack (`stack`, above
+the app's root) and what the screens show (`ui`): "Get started" runs attest's hardware gate, a scanned
+or pasted link starts core-session's pairing through `PairingControl` (the handle, or a test's fake),
+and `CeremonyDriver` shows each `PairingState`'s screen as the pure `screenFor` maps it: Connecting's
+three lines, with "Trying Tailscale…" after 4 s of reaching a tailnet candidate and "Securing the line…"
+paced for 600 ms, as no state holds it; Verify with its code, its end and the name `pair_request`
+carried; `pair_approved` stored through data's `InstanceStore` with an auto-picked tint before Paired
+shows, the replaced record's key handed to the commit to delete, and the paired session the approval
+hands over closed once the record is stored, until the Chats list takes sessions on; and every ending
+one failure screen, "Can't reach" read through section 5.2's reachability, "Try again" retrying only the
+link "Can't reach" holds, a wrong machine never retried. Leaving the ceremony's screens cancels an
+attempt not yet approved. The pure rules are `stackOf`, `topOf`, `screenFor`, `keyAfter`, `stepAfter`,
+`connectingPhase`, `appBackStack`, `securesWindow` and `darkUnderBars`.
+`onboardingEntries(builder, viewModel)` registers the screens as Navigation 3 entries, with what lies
+outside the app: the pages, the Tailscale app (seen through the manifest's `<queries>`), the VPN
+settings, the notification prompt, and the clipboard, which a paste clears once read. An entry hands an
+action to the ViewModel only while its screen is the one on top (`topOf`): a screen popped off the stack
+is still drawn, and hit, as it leaves, and the ViewModel holds each call to the screen it belongs to.
+The JVM tests cover the route rules, `screenFor` over the ceremony's twenty-one states among them, the
+failure table verbatim with suj-mbp as the host, the record's tint and name rules, the ViewModel over a
+fake ceremony and real records (the pairing-wait facts cleared on every outcome and on the ViewModel's
+end, the replaced key handed to the commit, the session closed), and on Robolectric every action's label
+in the semantics, the order TalkBack reads the scan in, the code read digit by digit, the torch's state,
+the refusals' `REJECT`, Welcome's actions above a navigation bar, a rotation that draws Verify again
+from the kept ViewModel with its countdown running on, and Welcome's and Paired's mark drawn where it
+arrived when the screen is drawn again; every screen and every failure is a preview at the twelve
+windows, each failure a preview of its own named for its case, with references under
+`feature-onboarding/src/test/screenshots`, the SAS in them the vendored IKpsk2 vector's.
+
+Where the code departs from section 13.3, or reads it where it is silent or says two things, for the
+owner to settle:
+
+- The phone's name is set on Pair, not on Verify as step 5 draws it: core-session takes the name as the
+  handshake completes, before Verify shows.
+- "Paste a pairing link" is left out of Older Fermix, Newer Fermix and No secure hardware, where a new
+  link cannot help, as the visual canon leaves it out of Wrong machine and Attestation refused; the
+  table gives every failure both secondaries.
+- `PairingState.ProtocolError`, a daemon that answers what the ceremony does not take, has no row in the
+  table. Its screen borrows section 13.9's generic "Something went wrong on {host}" as its title, with no
+  body, until the owner gives it words.
+- Step 3's own lines for an older and a newer code ("Update Fermix on suj-mbp — this code is from an
+  older Fermix." and "This code is from a newer Fermix. Update this app.") are not used: the table's
+  Older Fermix and Newer Fermix screens stand in their place. The design gives both.
+- "Trying Tailscale…" shows after 4 s of reaching only when a tailnet candidate is among those tried;
+  step 4 says "after 4 s" with no condition.
+- The SAS digits rise 12 dp and fade in, one after another. Section 13.10's "land like a combination
+  lock" could also mean each digit rolling through figures to its value.
+- Can't reach's primary cell in the table is "Try again · Open Tailscale", two actions where the rule
+  of section 13.3 gives a screen one. "Try again" is drawn as the one primary, and "Open Tailscale" as
+  the first secondary, before "Paste a pairing link" and "Troubleshooting".
+- At the expanded window (841×673 dp) at font scale 2.0, two pages outgrow the window: Pair's "Paste a
+  pairing link" and Attestation refused's "Troubleshooting" sit below the fold, cut by the window's
+  edge, reached by scrolling, with nothing on screen to say the page scrolls (the expanded 2.0
+  references of `PairPreview` and `FailureAttestationRefusedPreview`). The primary action is in view on
+  both. Dropping the top margins on a short window, or a fade above the actions, would bring them in;
+  the canon draws no window that short.
+
+The app wires it: `FermixApplication` makes `AppServices` once (the records, the network watcher, the
+device keys, the connector), `MainActivity` shows `appBackStack` in `NavDisplay` under `FermixTheme`,
+Welcome until a Fermix is paired and a placeholder for the Chats list after, fits the window to the top
+screen (`fitWindow`): `FLAG_SECURE` while an onboarding screen shows (`secureWindow`), and white system
+bars with no contrast scrim over the scan's camera, which is dark in both modes as the canon's
+`.phone.bleed` draws it, the theme's bars everywhere else; and on leaving Verify for another app it
+starts `PairingWaitService`, the short foreground service of section 12.5, "Waiting for approval on
+suj-mbp · 1:42", which ends itself when the wait ends or the app comes back (`pairingWaitShown` decides
+both). The app's tests run on Robolectric through the application convention, over the app's own
+services: the window's flag on Welcome and its clearing on the Chats list, the bars over the scan in
+light mode and back after it, a second tap on a failure screen as it leaves dropped, the service started
+as the app leaves Verify and not otherwise, and the service ending itself.
+
 ## Build and check
 
 You need JDK 21 to run Gradle and an Android SDK. The app compiles against API 37 (Android 17),

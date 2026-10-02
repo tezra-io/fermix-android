@@ -63,6 +63,15 @@ whose version matches `version.properties`.
   "Re-pair this Fermix" notice for it survives the app being closed before it is shown. Its JVM tests
   run the same bundled SQLite the app ships, and CI fails a database change that would not open on a
   phone already holding the old one.
+- **Onboarding.** The app opens on Welcome, in the design's theme, and pairs with a Fermix: the
+  hardware check, the two ways to open pairing on the computer, the scan's frame and the pasted link,
+  the connecting steps, the code to compare with its countdown, Paired, a name for a second Fermix on
+  the same computer, and the notifications question, with every failure its own screen in the design's
+  words. Back follows the screens with the predictive gesture, onboarding is kept out of screenshots, a
+  rotation keeps the pairing and its countdown, and leaving the code for another app shows "Waiting for
+  approval" until the computer answers. TalkBack reads the code digit by digit and reaches "Paste a
+  pairing link" first on the scan, and a refusal is felt as well as read. The app now requests the
+  network, a foreground service and notifications, each listed in `policy/permissions.txt`.
 - **The release policy.** CI's new `policy` job checks the release APK: its SDK levels, not
   debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer, now
   also for the platforms before Android 12 and in every platform-specific override of the rules, each

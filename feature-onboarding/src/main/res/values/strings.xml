@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Onboarding's words, design section 13.3 verbatim unless a comment names another source; the host is
+  always a format argument. FailureCase.kt is the one table that pairs each failure with its strings.
+-->
+<resources>
+    <!-- Step 1, Welcome. -->
+    <string name="onboarding_welcome_title" translatable="false">Fermix</string>
+    <string name="onboarding_welcome_tagline">Your agent. Your machine.</string>
+    <string name="onboarding_welcome_get_started">Get started</string>
+    <string name="onboarding_welcome_no_fermix">Don\'t have Fermix yet?</string>
+
+    <!-- Step 2, Pair. The body's italics are the design's. -->
+    <string name="onboarding_pair_title">Pair with your computer</string>
+    <string name="onboarding_pair_body">In Fermix on your computer, open &lt;i>Phone&lt;/i> and choose &lt;i>Pair a phone&lt;/i>.</string>
+    <string name="onboarding_pair_terminal">No app window? Run this in a terminal:</string>
+    <string name="onboarding_pair_command" translatable="false">fermix pair</string>
+    <string name="onboarding_pair_scan">Scan the code</string>
+    <string name="onboarding_paste_link">Paste a pairing link</string>
+    <!-- Step 5's quiet line; the device name is set in bold. -->
+    <string name="onboarding_shown_as">Shown as %1$s</string>
+    <!-- Section 13.5's code card action, as the copy button's label. -->
+    <string name="onboarding_copy">Copy</string>
+    <!-- Section 13.4's word, as the pencil's label and the rename sheet's action. -->
+    <string name="onboarding_rename">Rename</string>
+    <!-- Labels the design does not give: the back and torch icon buttons (section 13.8). -->
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_torch">Torch</string>
+
+    <!-- Step 3, Scan. -->
+    <string name="onboarding_scan_hint">Point at the code on your computer</string>
+    <string name="onboarding_scan_not_fermix">That\'s not a Fermix pairing code.</string>
+
+    <!-- Step 4, Connecting. -->
+    <string name="onboarding_connecting_reaching">Reaching %1$s…</string>
+    <string name="onboarding_connecting_tailscale">Trying Tailscale…</string>
+    <string name="onboarding_connecting_checking">Checking it\'s really your machine…</string>
+    <string name="onboarding_connecting_securing">Securing the line…</string>
+
+    <!-- Step 5, Verify. -->
+    <string name="onboarding_verify_title">Do the codes match?</string>
+    <string name="onboarding_verify_body">Approve on your computer if they match.</string>
+    <string name="onboarding_verify_cancel">Cancel</string>
+
+    <!-- Step 6, Paired, and section 9.2's same-host name; the row's subtitle is section 13.7's. -->
+    <string name="onboarding_paired_title">Paired with %1$s</string>
+    <string name="onboarding_continue">Continue</string>
+    <string name="onboarding_name_title">Name this Fermix</string>
+    <string name="onboarding_name_dev">Dev</string>
+    <string name="onboarding_name_production">Production</string>
+    <string name="onboarding_name_test">Test</string>
+    <string name="onboarding_name_dev_tag">DEV</string>
+    <string name="onboarding_name_subtitle">Fermix on %1$s</string>
+
+    <!-- Step 7, Notifications. -->
+    <string name="onboarding_notifications_title">Know when Fermix finishes.</string>
+    <string name="onboarding_notifications_body">Encrypted, and sent through Google\'s push service.</string>
+    <string name="onboarding_notifications_allow">Allow notifications</string>
+    <string name="onboarding_notifications_not_now">Not now</string>
+
+    <!-- The failure table, title then body, in its order. -->
+    <string name="onboarding_failure_expired_title">This code has expired</string>
+    <string name="onboarding_failure_expired_body">Pairing codes last 2 minutes. Start pairing again on your computer.</string>
+    <string name="onboarding_failure_denied_title">Pairing was declined</string>
+    <string name="onboarding_failure_denied_body">Someone declined this phone on %1$s. If that wasn\'t you, check who has access to that computer.</string>
+    <string name="onboarding_failure_rate_limited_title">Too many attempts</string>
+    <string name="onboarding_failure_rate_limited_body">%1$s paused pairing after several failed tries. Start a new pairing on your computer.</string>
+    <string name="onboarding_failure_another_pairing_title">%1$s is already pairing a device</string>
+    <string name="onboarding_failure_another_pairing_body">Finish or cancel that one first.</string>
+    <string name="onboarding_failure_cant_reach_title">Can\'t reach %1$s</string>
+    <string name="onboarding_failure_cant_reach_body">Join the same Wi-Fi as your computer, or turn on Tailscale on this phone.</string>
+    <string name="onboarding_failure_excluded_title">Fermix is excluded from Tailscale</string>
+    <string name="onboarding_failure_excluded_body">Turn off split tunneling for Fermix in the Tailscale app.</string>
+    <string name="onboarding_failure_vpn_title">A VPN is on</string>
+    <string name="onboarding_failure_vpn_body">Android runs one VPN at a time, so Tailscale can\'t connect while it\'s active.</string>
+    <string name="onboarding_failure_wrong_machine_title">This isn\'t the machine the code came from</string>
+    <string name="onboarding_failure_wrong_machine_body">Something between this phone and %1$s presented a different identity. Nothing was sent.</string>
+    <string name="onboarding_failure_older_title">Update Fermix on %1$s</string>
+    <string name="onboarding_failure_older_body">This app needs a newer Fermix on your computer.</string>
+    <string name="onboarding_failure_newer_title">Update Fermix on this phone</string>
+    <string name="onboarding_failure_attestation_refused_title">This phone couldn\'t prove it\'s secure</string>
+    <string name="onboarding_failure_attestation_refused_body">%1$s only pairs phones whose keys live in secure hardware, with a locked bootloader, running the official Fermix app. Rooted or unlocked phones, emulators and rebuilt apps can\'t pair.</string>
+    <string name="onboarding_failure_attestation_unavailable_title">%1$s couldn\'t verify this phone right now</string>
+    <string name="onboarding_failure_attestation_unavailable_body">It couldn\'t reach Google\'s attestation service. Try again in a minute.</string>
+    <string name="onboarding_failure_no_secure_hardware_title">This phone can\'t hold a Fermix key</string>
+    <string name="onboarding_failure_no_secure_hardware_body">Fermix needs Android 15 or newer with hardware Curve25519 support.</string>
+    <string name="onboarding_failure_lost_title">Lost the connection while waiting</string>
+    <string name="onboarding_failure_lost_body">Your approval didn\'t reach this phone. Start pairing again.</string>
+    <!-- Not in the table: a daemon that answers what the ceremony does not take. Section 13.9's generic title. -->
+    <string name="onboarding_failure_protocol_title">Something went wrong on %1$s</string>
+
+    <!-- The failure screens' actions. -->
+    <string name="onboarding_action_scan_again">Scan again</string>
+    <string name="onboarding_action_start_over">Start over</string>
+    <string name="onboarding_action_try_again">Try again</string>
+    <string name="onboarding_action_open_tailscale">Open Tailscale</string>
+    <string name="onboarding_action_open_vpn_settings">Open VPN settings</string>
+    <string name="onboarding_action_ok">OK</string>
+    <string name="onboarding_action_open_release_page">Open release page</string>
+    <string name="onboarding_action_learn_more">Learn more</string>
+    <string name="onboarding_action_troubleshooting">Troubleshooting</string>
+
+    <!--
+      The pages the design names without an address: the install page (step 1), the release page (Newer
+      Fermix), and what "Learn more" and "Troubleshooting" open. fermix.ai is the site the publishing
+      checklist names, and the releases are on GitHub (D16); each address is the owner's to settle.
+    -->
+    <string name="onboarding_url_install" translatable="false">https://fermix.ai</string>
+    <string name="onboarding_url_release" translatable="false">https://github.com/tezra-io/fermix-android/releases</string>
+    <string name="onboarding_url_learn_more" translatable="false">https://fermix.ai</string>
+    <string name="onboarding_url_troubleshooting" translatable="false">https://fermix.ai</string>
+</resources>

@@ -3,9 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      The app holds no permission yet. androidx.core declares this one so that registerReceiver
-      can emulate RECEIVER_NOT_EXPORTED below API 33; on minSdk 35 the platform flag does that and
-      the permission is never used.
+      androidx.core declares this one so that registerReceiver can emulate RECEIVER_NOT_EXPORTED below
+      API 33; on minSdk 35 the platform flag does that and the permission is never used.
     -->
     <permission
         android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -14,7 +13,13 @@
         android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         tools:node="remove" />
 
+    <!-- The pairing-wait notification's short foreground service (design section 12.5). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Onboarding's step 7 asks for it (design section 13.3), and the pairing wait posts with it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
+        android:name=".FermixApplication"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -33,6 +38,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".PairingWaitService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
     </application>
 
 </manifest>

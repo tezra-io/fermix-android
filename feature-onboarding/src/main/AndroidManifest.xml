@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- "Open Tailscale" (design section 13.3's failure table) opens the app when it is installed, which
+         Android 11 and later let this app see only when it is named here. -->
+    <queries>
+        <package android:name="com.tailscale.ipn" />
+    </queries>
+</manifest>

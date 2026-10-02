@@ -1,3 +1,12 @@
 # The permissions the release APK requests, one per line, exactly (MILESTONE_51_ANDROID_CI_CD.md
 # section 3, the policy job; scripts/check_release_policy.sh). A permission is added here in the same
-# change that needs it, with the design section that asks for it. Today the app requests none.
+# change that needs it, with the design section that asks for it.
+
+# core-transport's network callbacks, behind the reachability facts of design section 5.2.
+android.permission.ACCESS_NETWORK_STATE
+# The pairing-wait notification's short foreground service (design section 12.5).
+android.permission.FOREGROUND_SERVICE
+# The WebSocket to a daemon (design section 5.1), core-transport's.
+android.permission.INTERNET
+# Onboarding's step 7 asks for it (design section 13.3), and the pairing wait posts with it.
+android.permission.POST_NOTIFICATIONS

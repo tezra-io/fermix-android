@@ -12,7 +12,8 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 ## Layout
 ```
 app/                  the application module, io.tezra.fermix
-build-logic/          convention plugins: fermix.android.application, fermix.android.library,
+build-logic/          convention plugins: fermix.android.application (the app, with its JVM and
+                      Robolectric tests), fermix.android.library,
                       fermix.android.library.compose (Compose and the Roborazzi screenshot tests),
                       fermix.android.library.room (Room under KSP, the bundled SQLite, and its
                       desktop build for the JVM tests), fermix.jvm.library, fermix.quality (detekt
@@ -40,6 +41,10 @@ data/                 the phone's durable state, io.tezra.fermix.data (Android l
                       on the bundled SQLite): the instance records' DataStore, one Room database
                       per (instance, profile) with its schema in data/schemas, the media cache, the
                       launch check
+feature-onboarding/   design section 13.3 as screens, io.tezra.fermix.onboarding (Compose library):
+                      Welcome to Notifications and every failure, OnboardingViewModel over
+                      core-session's pairing, the Navigation 3 entries, and the screenshot
+                      references in feature-onboarding/src/test/screenshots
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 policy/               permissions.txt: the permissions the release APK requests, exactly
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job)

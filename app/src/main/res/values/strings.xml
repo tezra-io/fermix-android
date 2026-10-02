@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Fermix</string>
+    <!-- Design section 13.9's pairing-wait notification: the host and the time left, m:ss. -->
+    <string name="pairing_wait_title">Waiting for approval on %1$s · %2$s</string>
+    <!-- The notification channel the pairing wait posts on, as Settings lists it; the design names none. -->
+    <string name="pairing_wait_channel">Pairing</string>
 </resources>
