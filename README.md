@@ -11,8 +11,9 @@ leaves it. Each daemon is its own trust domain, and the phone pairs with each on
 
 The repository is at its first stages: the build, its gates, the vendored wire contract, CI, the
 Noise layer (`core-noise`), the wire codec (`core-protocol`), the transport (`core-transport`), the
-session (`core-session`) and the design language with its screenshot tests (`design`) exist, and
-the app draws its name and nothing else yet. The design documents are named below.
+session (`core-session`), the design language with its screenshot tests (`design`) and the phone's
+durable state (`data`) exist, and the app draws its name and nothing else yet. The design documents
+are named below.
 
 ```
 app/                    the application module (io.tezra.fermix)
@@ -24,8 +25,10 @@ core-protocol/          the wire codec: frames, events and the pairing link (io.
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
 core-session/           one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
 design/                 the design language as code, its fonts, previews and screenshot references (io.tezra.fermix.design)
+data/                   the instance records, each profile's database and media cache, the launch check (io.tezra.fermix.data)
 gradle/                 the version catalog, the dependency checksums and the wrapper
-scripts/                verify_protocol_contract.sh
+policy/                 permissions.txt, the permissions the release APK requests, exactly
+scripts/                verify_protocol_contract.sh, check_release_policy.sh
 version.properties      versionName and versionCode
 ```
 
@@ -114,9 +117,9 @@ candidate first, then the tailnet addresses, the MagicDNS names and the LAN addr
 `CandidateRacer` starts the caller's attempts 250 ms apart (core-session's WSS open and Noise
 handshake), takes the first to complete and cancels the rest, ends at once on a pin mismatch, and
 closes every winner the caller does not get, however the race ends. It reads its clock from the
-caller's coroutine context, so a test runs it on virtual time. kotlinx-coroutines-android is not a
-dependency yet: nothing here needs `Dispatchers.Main`, and it arrives with the first module that
-does. `Backoff` waits 1 s doubling to 30 s with jitter. `NetworkWatcher` reads `NetworkFacts` from
+caller's coroutine context, so a test runs it on virtual time. Nothing here needs `Dispatchers.Main`,
+so `core-transport` does not depend on kotlinx-coroutines-android; `data` brings that library in,
+through Room's Android runtime. `Backoff` waits 1 s doubling to 30 s with jitter. `NetworkWatcher` reads `NetworkFacts` from
 the default network's callback and from a second one that sees other apps' VPN networks;
 `reachability` turns the facts into design section 5.2's verdicts, and `UnreachableTracker` says the
 phone cannot reach an instance only when it has a network and every candidate has failed for 30 s.
@@ -232,6 +235,94 @@ report with the references it links to. Android's own screenshot plugin is not u
 `android.experimental.enableScreenshotTest=true`, which the Android Gradle plugin 9.4 answers with a
 `WARNING:` line on every build, and only a suppression would silence it.
 
+`data` (`io.tezra.fermix.data`) is the phone's durable state, an Android library with no socket,
+notification or screen in it, tested on the JVM. An `Instance` is design section 9.1's record, field
+for field, and public data alone: the device key lives in the Keystore under its `key_alias`, and a
+test holds the written records to having no secret's field or value. Its `id`, `sha256(gateway_pk)`,
+is computed, never stored, and every file is keyed by it, never by a host name (onboarding gotcha 8);
+the keys are kept as the wire's text and checked when a record is made, with the host, profile, port
+and tint, which is one of `TINT_NAMES`, the design module's `Tint` by name, since `data` does not depend
+on `design`; a test in `design` holds the enum and the list equal. Protocol v2 supplies fields the record
+requires (`pair_approved.push_salt`, the QR's `profile`), so a version-1 pairing cannot make one. The
+records are a typed DataStore, `DataStore<Instances>`, written as JSON by a kotlinx.serialization
+`Serializer` of the module's own: design section 12.1 says Proto DataStore, and the typed store is
+what it needs, while protobuf would be a second codec and toolchain for one file. A file that does not
+decode, or holds a record that breaks a rule, is DataStore's `CorruptionException`, never replaced, and
+a test holds it to that. `InstanceStore` shows the records as a flow, in the Chats list's order.
+`upsert` records a pairing on `pair_approved`: the same daemon paired again replaces its record in
+place, with the owner's nickname and tint, and the record it replaced is handed back so the caller
+deletes the old key alias (design section 6.1); a pairing always brings a new alias, so one under the
+alias the record holds is refused and the live key is never handed back, and no two records may share
+an alias. A nickname a pairing brings, from the Paired screen, is held to the rename rule below in the
+same write, and a refused one writes nothing. `update` is every later change
+in one write, what `hello_ack` reports (host, label, profile, candidates, caps, push platforms) and this
+phone's settings (notifications, the last `push_register`), and it refuses a change to what a pairing
+set (gateway key, TLS pin, device id, key alias, push salt) or to the owner's nickname and tint.
+`merge` is "Pair again" on the row of a daemon that was reinstalled: the new gateway key, of the row's
+profile, takes that row's place, nickname and tint, and the old row's databases and media are deleted
+(section 9.2); a pairing under that row's alias is refused there too, since the caller deletes it. The
+owner names the row; the store never merges by host and profile, which two daemons
+on one computer can share, and it does not compare hosts, since a pairing knows only the link's name
+until the first `hello_ack`. `rename` takes 1 to 40 characters (code points), trimmed, refused when
+another row is titled the same in any case, and null resets the name to the daemon's; `remove` deletes
+a record with its files; `reorder` is "Move to top" and the list's manual order. `launchCheck` runs at
+launch: an instance whose key alias the injected `aliasExists` does not find, as on an app restored
+without its Keystore keys, is dropped with its files (design sections 6.4 and 6.6), and its title is
+kept among `repairNotices` in the same write, so the app shows "Re-pair this Fermix" with its name even
+after a process death, until `dismissRepairNotices`. The Keystore is asked before that write, never
+inside it. Files no record names, left by a removal cut short, are deleted. `ProfileDatabases` opens one Room
+database per (instance, profile), keyed by both from day one, at
+`<root>/<instance id>/<sha256 of the profile id>/profile.db` beside its `media/` directory; the root
+belongs under `noBackupFilesDir`. A `ProfileDatabase` holds the timeline cache, its full-text index, the
+notified set, the outbox and the cursors, and its schema is exported to `data/schemas`. A whole row is
+stored as its `HistoryMessage` JSON through core-protocol's model, which is what is read back, so a wider
+row needs no migration, and its fields again as columns for queries; a `text_done` reply stands in for
+its row until the history page brings the row whole, which replaces it, and never replaces a whole row.
+`TimelineDao.persist` is the announcer's persist before it shows or notifies, and `persistAll` keeps an
+older page in one transaction, whose rows never reach the notified set. `search` is section 13.7's
+offline search over an FTS4 index with the unicode61 tokenizer, which folds case and diacritics. The
+index's own tokenizer splits each word the owner types into its terms, through an `fts3tokenize` table
+the database makes when it opens, so the query reads every character as the index does, by Unicode
+6.1's tables and not the JVM's: punctuation on a word is a separator, and a word of no term is left
+out. Each word is a quoted phrase, its last term a prefix, so FTS's own syntax is searched for and never
+obeyed; newest first. Rows are
+inserted or updated, never replaced, since SQLite fires no delete trigger for a REPLACE and the index
+would keep the old text. A stored row or request is, byte for byte, what core-protocol's codec puts on
+the wire without the envelope, which a test holds against the vendored fixtures. `NotifiedDao` is design
+section 10's notified set, read on every path that can alert: rows by `server_seq`, approvals by
+`approval_id` and failed turns by `turn_id`; a put is idempotent and says whether it added the entry, in
+one transaction with its test of the read frontier, so of two paths racing to announce one id only the
+first alerts, and a row already read is never added; `removeReadUpTo` drops the rows a read frontier
+covers, compared as numbers, and `removeExpired` the approvals and failed turns, each stamped when it was
+put, once no duplicate push of them can arrive: `NOTIFIED_ID_RETENTION_MS`, two push `ttl`s of a day.
+`ProfileDatabase.pending` is the outbox as a flow,
+in enqueue order, for the queued and failed bubbles of section 13.6. `RoomSessionStore` is
+core-session's `SessionStore` exactly, each call one statement or one transaction: the cursors are one
+row written when the database is created, so a cursor write that changes no row fails; mutations update
+the cached rows they name and skip the rest; a rebuild drops the cache, its index and the server cursor
+and keeps the ack and read frontiers and the outbox; the outbox is keyed by `client_msg_id` in the order
+it was enqueued, each request as its model's JSON. `MediaCache` keeps one profile's blobs by the
+lowercase hex of their SHA-256, checks the digest while it writes and keeps nothing that does not match,
+nor any part of a stream that fails, whatever it throws, and making one deletes the partial files of
+puts a process death cut short, so a process makes one per directory; it evicts the least recently used
+first, a read counting as a use, never the blob a put is keeping, and holds at most
+`MAX_MEDIA_CACHE_BYTES` (512 MiB); `size` and `clear` are
+section 13.7's "cache size" and "Clear media cache". The schema of each database version is exported
+to `data/schemas` and committed, and CI's build job fails when the build changes it, an entity changed
+without a new version. The databases run on the bundled SQLite, on the phone and in the tests alike, so
+the tests prove the engine and tokenizer the app ships. Room's Android runtime runs on the plain JVM through
+`Room.inMemoryDatabaseBuilder` or a file under a test's directory, with no Robolectric: the
+`fermix.android.library.room` convention extracts this machine's library from `sqlite-bundled-jvm`,
+the same SQLite built for desktops, and points the driver at it, and the tests hand Room a `Context`
+that answers database paths and nothing else. The JVM tests hold `RoomSessionStore` to
+`SessionStoreContract`, a test of each rule `SessionStore`'s KDoc states, a write made whole or not at
+all among them, proven by a trigger that fails the cursor write; and they cover the record's rules and
+codec against the vendored pairing link, a corrupt records file, every vendored fixture row read back
+equal with its query columns, an older page that fails partway, the search, the notified set, the
+outbox's flow, a restart that finds everything as it was, the media cache's digest, eviction and failed
+streams, and the launch check with its notices. The app's backup posture, `allowBackup="false"` with data extraction rules and
+full-backup rules that exclude every domain, is checked in the release APK itself by the `policy` job.
+
 ## Build and check
 
 You need JDK 21 to run Gradle and an Android SDK. The app compiles against API 37 (Android 17),
@@ -247,7 +338,32 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
+scripts/check_release_policy.sh app/build/outputs/apk/release/app-release-unsigned.apk   # the release APK against the policy
 ```
+
+A local build with no release key writes the release unsigned, as `app-release-unsigned.apk`; with
+`release.*` in `keystore.properties` or the `FERMIX_RELEASE_*` variables it is signed, as
+`app-release.apk`, which is what CI checks. The script reads either alike.
+
+`scripts/check_release_policy.sh` reads a release APK with the build tools' `aapt2` and checks what
+CI/CD design section 3 asks of it: minSdk 35 and targetSdk 36, not debuggable, `usesCleartextTraffic`
+false with no network security config to override it, no `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY`,
+`allowBackup` false with backup rules that exclude every domain under cloud backup, device transfer and
+the older platforms' full backup (design section 6.4) in every configuration of the rules, an override
+such as `res/xml-v36/` included, the requested permissions exactly those in `policy/permissions.txt`,
+and no test material: no entry named as a file of `contracts/mobile/`, under a `fixtures/` directory, or
+with a key store's, a key's or a fixture's extension, no entry holding the bytes of a vendored file
+under any name, and no entry holding a key of the vendored vectors (every private and public key, psk,
+salt, secret and key field of `noise_vectors.json` and `push_vectors.json`) as hex of either case or as
+base64. A backup rule counts only where a phone reads it, as AOSP's `FullBackup.java` does: as a child
+of its section, read off `aapt2`'s tree by depth, so a section left empty beside rules outside it
+excludes nothing, and anything but a rule inside a section fails the check. It reads the APK with
+`aapt2`, `unzip` and `jq`, and prints every check that fails with what it expected and what it found,
+and what it searched for, then exits 1; a missing or failing tool, grep included, and a missing or empty
+reference stop it at once with status 2. Its `aapt2` is build tools
+36.0.0's, the Android Gradle plugin's default, which `gradle/libs.versions.toml` notes beside `agp`.
+CI's `policy` job builds the release with a key made for the run and runs it. A permission the app
+starts to request lands in `policy/permissions.txt` in the same change; today the app requests none.
 
 Warnings are errors everywhere: Kotlin (`allWarningsAsErrors`, and for the build scripts
 `org.gradle.kotlin.dsl.allWarningsAsErrors` in `gradle.properties` and `build-logic/gradle.properties`),

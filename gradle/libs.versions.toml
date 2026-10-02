@@ -1,5 +1,7 @@
 [versions]
-# Android Gradle plugin 9.4 documents Gradle 9.6 and JDK 17 as its floor.
+# Android Gradle plugin 9.4 documents Gradle 9.6 and JDK 17 as its floor. Its default build-tools
+# revision, 36.0.0 for 9.4.1, is the one scripts/check_release_policy.sh (BUILD_TOOLS_VERSION) reads the
+# release APK with: a bump of agp checks that default and moves the script's with it.
 agp = "9.4.1"
 # AGP 9 compiles Kotlin itself (built-in Kotlin); build-logic puts this Kotlin Gradle plugin on its classpath.
 kotlin = "2.4.20"
@@ -27,6 +29,17 @@ kotlinxSerialization = "1.11.0"
 okhttp = "5.5.0"
 # Kotlin's standard concurrency, which the design assumes without naming it.
 kotlinxCoroutines = "1.11.0"
+# The data layer's per-(instance, profile) database (design sections 9.1 and 12.1: Room 2.8, no SQLCipher),
+# its Gradle plugin, which exports the schema to data/schemas for the migrations to come, and the bundled
+# SQLite it runs on, at the version this Room is built against. Room's compiler runs under KSP, which since
+# 2.3.0 is versioned on its own, no longer per Kotlin release; 2.3.12 (2026-09-09), the newest, runs with
+# Kotlin 2.4.20 and AGP 9's built-in Kotlin.
+room = "2.8.5"
+sqlite = "2.6.2"
+ksp = "2.3.12"
+# The typed DataStore of the instance records (design section 12.1's DataStore 1.2.1); its core alone, with
+# a kotlinx.serialization serializer, not protobuf.
+datastore = "1.2.1"
 # detekt 1.23.8, the last stable, uses Gradle APIs that Gradle 9.6 deprecates, so it fails
 # --warning-mode fail; the 2.0 line is built against Kotlin 2.4, Gradle 9.6 and AGP 9 built-in Kotlin.
 detekt = "2.0.0-alpha.6"
@@ -44,6 +57,14 @@ androidx-window-core = { module = "androidx.window:window-core", version.ref = "
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastore" }
+# The Room module convention (fermix.android.library.room) adds these three.
+androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
+# The same SQLite built for desktop JVMs: its native library for this machine is what a Room module's JVM
+# tests load in place of the Android one (fermix.android.library.room).
+androidx-sqlite-bundled-jvm = { module = "androidx.sqlite:sqlite-bundled-jvm", version.ref = "sqlite" }
 
 # Build logic: the plugins the convention plugins apply.
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
@@ -51,6 +72,8 @@ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", v
 compose-compiler-gradle-plugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 kotlin-serialization-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin" }
 roborazzi-gradle-plugin = { module = "io.github.takahirom.roborazzi:roborazzi-gradle-plugin", version.ref = "roborazzi" }
+ksp-gradle-plugin = { module = "com.google.devtools.ksp:symbol-processing-gradle-plugin", version.ref = "ksp" }
+room-gradle-plugin = { module = "androidx.room:room-gradle-plugin", version.ref = "room" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 ktlint-gradle-plugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlintGradle" }
 

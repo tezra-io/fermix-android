@@ -1,0 +1,3 @@
+# The permissions the release APK requests, one per line, exactly (MILESTONE_51_ANDROID_CI_CD.md
+# section 3, the policy job; scripts/check_release_policy.sh). A permission is added here in the same
+# change that needs it, with the design section that asks for it. Today the app requests none.

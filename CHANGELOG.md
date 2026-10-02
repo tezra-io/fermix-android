@@ -49,3 +49,16 @@ whose version matches `version.properties`.
   mark, with a themed monochrome layer. Every preview is drawn at twelve windows and compared with
   its reference image, in `check` and in CI's new `screens` job, which uploads any image that changed
   and also fails on a reference image that no preview drew.
+- **The phone's durable state.** `data` keeps the paired daemons' records, public data only, in a
+  typed DataStore, with the re-pairing and renaming rules of the design; one database per paired
+  daemon and profile, holding the timeline cache with its offline full-text search, the outbox, the
+  cursors and the set of what the phone has already notified; and a media cache checked by digest and
+  bounded at 512 MiB. A daemon whose key the phone no longer holds is dropped at launch, and the
+  "Re-pair this Fermix" notice for it survives the app being closed before it is shown. Its JVM tests
+  run the same bundled SQLite the app ships, and CI fails a database change that would not open on a
+  phone already holding the old one.
+- **The release policy.** CI's new `policy` job checks the release APK: its SDK levels, not
+  debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer, now
+  also for the platforms before Android 12 and in every platform-specific override of the rules, each
+  rule counted only where a phone reads it, exactly the permissions `policy/permissions.txt` lists, and
+  no test key, vector, vector key or fixture inside, under its own name or any other.

@@ -1,12 +1,13 @@
 # The Android app's pull-request pipeline (MILESTONE_51_ANDROID_CI_CD.md section 3), on every pull
 # request and every push to main or dev: the vendored contract against its pins and the engine, the
-# build with every quality gate and the dependency checksums, the JVM tests, and the screenshot
-# tests, folded into one job named gate that branch protection requires (C3). It needs no secret,
-# so a fork's pull request runs all of it. No job retries.
+# build with every quality gate and the dependency checksums, the JVM tests, the screenshot tests,
+# and the release APK's policy, folded into one job named gate that branch protection requires (C3).
+# It needs no secret, so a fork's pull request runs all of it. No job retries.
 #
 # The contract, build and unit timeouts are twice their budgets in section 3 (2, 8 and 5 minutes):
 # the budget is the target, the timeout the ceiling past which a job is stuck, not slow. The
-# screens timeout is its budget, 8 minutes, as stage A2 set it.
+# screens timeout is its budget, 8 minutes, as stage A2 set it. The policy check's is its budget,
+# 2 minutes, after a release build that shares the build job's 16.
 #
 # setup-gradle runs with cache-provider basic, the open-source cache on the GitHub Actions cache,
 # not its default proprietary one. Basic saves ~/.gradle/caches (the dependencies, the build cache
@@ -97,6 +98,20 @@ jobs:
             exit 1
           fi
 
+      # Room writes each database version's schema into data/schemas as the build compiles it. A file
+      # there that the build changed is an entity changed under the same version, which Room on a phone
+      # refuses to open; one the build added is a new version whose schema was not committed.
+      - name: The exported Room schemas are the committed ones
+        shell: bash
+        run: |
+          changed="$(git status --porcelain --untracked-files=all -- data/schemas)"
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            git diff -- data/schemas
+            echo "::error::the build changed data/schemas: bump the database version and commit its schema"
+            exit 1
+          fi
+
   # The JVM tests: today the build logic's (signing, version), and with stage A1's modules the JVM
   # half of the device gate (design section 12.6). The root `test` does not reach into the included
   # build-logic build, so its tests are named. The build job's `build` runs them as well, through
@@ -164,11 +179,58 @@ jobs:
             */build/test-results/roborazzi/
             */src/test/screenshots/
 
+  # Section 3's policy: the release APK's manifest says what the design says, minSdk 35, targetSdk 36,
+  # not debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer,
+  # and exactly the permissions policy/permissions.txt lists; and no test key, vector or fixture is
+  # inside it, by name or by content (scripts/check_release_policy.sh). The release is signed with a
+  # key made for this run, as the build job's debug key is (C5), so the APK checked is signed as a
+  # release is.
+  policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-provider: basic
+
+      - name: Make a throwaway release key
+        run: |
+          store="$RUNNER_TEMP/ci-release.jks"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          keytool -genkeypair -noprompt -keystore "$store" -alias ci-release \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Fermix Android CI, O=Tezra, C=US" \
+            -storepass "$password" -keypass "$password"
+          {
+            echo "FERMIX_RELEASE_STORE_FILE=$store"
+            echo "FERMIX_RELEASE_STORE_PASSWORD=$password"
+            echo "FERMIX_RELEASE_KEY_ALIAS=ci-release"
+            echo "FERMIX_RELEASE_KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the release APK
+        run: ./gradlew --warning-mode fail --console=plain :app:assembleRelease
+
+      - name: The release APK against the policy
+        timeout-minutes: 2
+        run: scripts/check_release_policy.sh app/build/outputs/apk/release/app-release.apk
+
   # C3: the one required check. It runs even when a job it needs failed or was cancelled, so a
   # failure can never show up as a skipped, and therefore passing, required check.
   gate:
     if: always()
-    needs: [contract, build, unit, screens]
+    needs: [contract, build, unit, screens, policy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -178,12 +240,15 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           UNIT_RESULT: ${{ needs.unit.result }}
           SCREENS_RESULT: ${{ needs.screens.result }}
+          POLICY_RESULT: ${{ needs.policy.result }}
         run: |
           echo "contract result: $CONTRACT_RESULT"
           echo "build result: $BUILD_RESULT"
           echo "unit result: $UNIT_RESULT"
           echo "screens result: $SCREENS_RESULT"
+          echo "policy result: $POLICY_RESULT"
           [ "$CONTRACT_RESULT" = "success" ] || exit 1
           [ "$BUILD_RESULT" = "success" ] || exit 1
           [ "$UNIT_RESULT" = "success" ] || exit 1
           [ "$SCREENS_RESULT" = "success" ] || exit 1
+          [ "$POLICY_RESULT" = "success" ] || exit 1
