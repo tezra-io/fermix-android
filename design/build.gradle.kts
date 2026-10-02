@@ -19,4 +19,7 @@ dependencies {
 
     // FontSourceTest reads the fonts' SOURCE.json.
     testImplementation(libs.kotlinx.serialization.json)
+    // TintNamesTest holds data's TINT_NAMES to Tint: an instance record keeps its tint by name, and data
+    // does not depend on this module.
+    testImplementation(project(":data"))
 }
