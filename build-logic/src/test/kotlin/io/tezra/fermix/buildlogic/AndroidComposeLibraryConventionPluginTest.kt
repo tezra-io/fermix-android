@@ -63,6 +63,8 @@ class AndroidComposeLibraryConventionPluginTest {
         for (copy in ROBORAZZI_COPIES) {
             assertTrue("$copy enabled: false" in printed, result.output)
         }
+        assertTrue("instrumented tests run on: androidx.test.runner.AndroidJUnitRunner" in printed, result.output)
+        assertTrue("check builds $INSTRUMENTED_TEST_APK: true" in printed, result.output)
     }
 }
 
@@ -93,5 +95,7 @@ private val PROBE_BUILD =
         for (copy in listOf(${ROBORAZZI_COPIES.joinToString { copy -> "\"$copy\"" }})) {
             println(copy + " enabled: " + tasks.getByName(copy).enabled)
         }
+        println("instrumented tests run on: " + android.defaultConfig.testInstrumentationRunner)
+        println("check builds $INSTRUMENTED_TEST_APK: " + ("$INSTRUMENTED_TEST_APK" in check.dependsOn))
     }
     """.trimIndent()

@@ -1,13 +1,16 @@
 # The Android app's pull-request pipeline (MILESTONE_51_ANDROID_CI_CD.md section 3), on every pull
 # request and every push to main or dev: the vendored contract against its pins and the engine, the
 # build with every quality gate and the dependency checksums, the JVM tests, the screenshot tests,
-# and the release APK's policy, folded into one job named gate that branch protection requires (C3).
-# It needs no secret, so a fork's pull request runs all of it. No job retries.
+# the instrumented tests on the emulator, and the release APK's policy, folded into one job named gate
+# that branch protection requires (C3). It needs no secret, so a fork's pull request runs all of it.
+# No job retries, except that ui runs its tests once more when the emulator did not boot, and says so
+# in its summary (section 3's one exception).
 #
 # The contract, build and unit timeouts are twice their budgets in section 3 (2, 8 and 5 minutes):
 # the budget is the target, the timeout the ceiling past which a job is stuck, not slow. The
-# screens timeout is its budget, 8 minutes, as stage A2 set it. The policy check's is its budget,
-# 2 minutes, after a release build that shares the build job's 16.
+# screens timeout is its budget, 8 minutes, as stage A2 set it, and so is ui's, 25 minutes, room for
+# the build, a boot that fails and the second one. The policy check's is its budget, 2 minutes, after a
+# release build that shares the build job's 16.
 #
 # setup-gradle runs with cache-provider basic, the open-source cache on the GitHub Actions cache,
 # not its default proprietary one. Basic saves ~/.gradle/caches (the dependencies, the build cache
@@ -179,12 +182,186 @@ jobs:
             */build/test-results/roborazzi/
             */src/test/screenshots/
 
+  # Section 3's ui: the instrumented tests of every module that has them, today :feature-onboarding's,
+  # on an emulator at API 35 and 36, as a phone and as a folding phone. They need no daemon and no
+  # camera: a fake pairing control and a stub preview stand in (AGENTS.md). Onboarding up to Scan
+  # and on to Paired, every failure screen, a rotation and a fold that lose nothing (section 13.11,
+  # rule 3; the fold runs on the folding profile alone, where a device that cannot fold fails it),
+  # TalkBack's labels and order, reduce-motion, and the QR reader on real codes. The emulator needs
+  # KVM, which GitHub's Linux runners have once the udev rule below opens it. Animations stay on: the
+  # reduce-motion test turns them off itself. The tests run once more only when the emulator never
+  # booted or never settled: two markers tell that apart from a setup that failed before the emulator
+  # started (the SDK, the system image or the AVD), which is not retried, and from a test that failed;
+  # the summary says which happened.
+  ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [35, 36]
+        profile: [medium_phone, pixel_fold]
+        include:
+          # The fold test needs a phone that folds: the phone profile leaves it out, rather than report
+          # its skip, which AGP's report counts among the failures while the task passes; the folding
+          # profile requires the fold, so that a device that cannot fold fails the test, never skips it.
+          - profile: medium_phone
+            runner-args: -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone
+          - profile: pixel_fold
+            runner-args: -Pandroid.testInstrumentationRunnerArguments.requireFold=true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-provider: basic
+
+      - name: Open KVM to the runner's user
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # The runner's cmdline-tools are 12.0, whose avdmanager knows no pixel_fold device, and the action
+      # makes the AVD with whatever $ANDROID_HOME/cmdline-tools holds, fetching its own only when there
+      # are none. So 20.0, the version it would fetch, replaces them, checked against its sha256 (its sha1
+      # agrees with Google's repository2-3.xml), and the profile is looked up here, so that a profile the
+      # tools lack fails setup, before any emulator step could take it for a boot that failed.
+      - name: Command-line tools 20.0
+        shell: bash
+        env:
+          TOOLS_ZIP: commandlinetools-linux-14742923_latest.zip
+          TOOLS_SHA256: 04453066b540409d975c676d781da1477479dde3761310f1a7eb92a1dfb15af7
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          zip="$RUNNER_TEMP/$TOOLS_ZIP"
+          curl -fsSL --retry 2 -o "$zip" "https://dl.google.com/android/repository/$TOOLS_ZIP"
+          echo "$TOOLS_SHA256  $zip" | sha256sum -c -
+          rm -rf "$ANDROID_HOME/cmdline-tools/latest" "$RUNNER_TEMP/cmdline-tools"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          unzip -q "$zip" -d "$RUNNER_TEMP/cmdline-tools"
+          mv "$RUNNER_TEMP/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          devices="$("$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list device -c)"
+          if ! grep -qx "$PROFILE" <<<"$devices"; then
+            echo "::error::the avdmanager of $TOOLS_ZIP knows no $PROFILE device"
+            exit 1
+          fi
+
+      # Built before the emulator starts, so a compile error is never taken for a boot that failed.
+      - name: Build the app under test and its tests
+        run: ./gradlew --warning-mode fail --console=plain :feature-onboarding:assembleDebugAndroidTest
+
+      # The action runs the pre-launch script once the AVD is made, before the emulator starts, and the
+      # script line by line, each after the emulator booted; each marks how far it got. A cold boot can
+      # leave a system dialog holding the focus a test's key event and clipboard read need, System UI's
+      # "isn't responding" among them, so the script first waits for the home screen to have it
+      # (scripts/settle_emulator.sh), and marks the emulator booted only once it settled: one that
+      # never settles is taken for one that never booted.
+      - name: Instrumented tests
+        id: first
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          disable-animations: false
+          emulator-boot-timeout: 300
+          pre-emulator-launch-script: touch "$RUNNER_TEMP/avd-made"
+          script: |
+            scripts/settle_emulator.sh
+            touch "$RUNNER_TEMP/emulator-booted"
+            adb shell svc power stayon true
+            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.runner-args }}
+
+      # How far the first run got: booted and settled, made its AVD but never booted or never settled
+      # (no-boot), or failed before the AVD was made (no-avd). Only no-boot runs the tests once more.
+      - name: How far the emulator got
+        id: boot
+        if: steps.first.outcome == 'failure'
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/emulator-booted" ]; then
+            stage=booted
+          elif [ -f "$RUNNER_TEMP/avd-made" ]; then
+            stage=no-boot
+          else
+            stage=no-avd
+          fi
+          echo "stage=$stage" >> "$GITHUB_OUTPUT"
+
+      - name: Instrumented tests, once more after the emulator did not boot
+        id: second
+        if: steps.first.outcome == 'failure' && steps.boot.outputs.stage == 'no-boot'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: ${{ matrix.profile }}
+          disable-animations: false
+          emulator-boot-timeout: 300
+          pre-emulator-launch-script: touch "$RUNNER_TEMP/avd-made"
+          script: |
+            scripts/settle_emulator.sh
+            touch "$RUNNER_TEMP/emulator-booted"
+            adb shell svc power stayon true
+            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.runner-args }}
+
+      - name: Upload the test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-api${{ matrix.api-level }}-${{ matrix.profile }}
+          if-no-files-found: ignore
+          path: |
+            */build/reports/androidTests/connected/
+            */build/outputs/androidTest-results/connected/
+
+      # The job's result: the first run's, or after a boot that failed, the second's.
+      - name: Summary and result
+        if: always()
+        shell: bash
+        env:
+          API_LEVEL: ${{ matrix.api-level }}
+          PROFILE: ${{ matrix.profile }}
+          FIRST: ${{ steps.first.outcome }}
+          STAGE: ${{ steps.boot.outputs.stage }}
+          SECOND: ${{ steps.second.outcome }}
+        run: |
+          if [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then kvm="KVM open"; else kvm="no usable /dev/kvm"; fi
+          if [ "$FIRST" = "success" ]; then
+            verdict="passed on the first run"
+          elif [ "$FIRST" != "failure" ]; then
+            verdict="the tests never ran: a step before them failed, or the job was cancelled ($FIRST)"
+          elif [ "$STAGE" = "no-avd" ]; then
+            verdict="the emulator's SDK, system image or AVD could not be set up, so the tests did not run again"
+          elif [ "$STAGE" = "no-boot" ]; then
+            verdict="the emulator did not boot, or never settled, so the tests ran once more: $SECOND"
+          else
+            verdict="the tests failed, on an emulator that booted, so they did not run again"
+          fi
+          echo "### ui, API $API_LEVEL, $PROFILE: $verdict ($kvm)" >> "$GITHUB_STEP_SUMMARY"
+          echo "$verdict ($kvm)"
+          [ "$FIRST" = "success" ] || { [ "$STAGE" = "no-boot" ] && [ "$SECOND" = "success" ]; }
+
   # Section 3's policy: the release APK's manifest says what the design says, minSdk 35, targetSdk 36,
   # not debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer,
-  # and exactly the permissions policy/permissions.txt lists; and no test key, vector or fixture is
-  # inside it, by name or by content (scripts/check_release_policy.sh). The release is signed with a
-  # key made for this run, as the build job's debug key is (C5), so the APK checked is signed as a
-  # release is.
+  # exactly the permissions policy/permissions.txt lists, and no camera required; and no test key,
+  # vector or fixture is inside it, by name or by content (scripts/check_release_policy.sh). The release
+  # is signed with a key made for this run, as the build job's debug key is (C5), so the APK checked is
+  # signed as a release is.
   policy:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
@@ -230,7 +407,7 @@ jobs:
   # failure can never show up as a skipped, and therefore passing, required check.
   gate:
     if: always()
-    needs: [contract, build, unit, screens, policy]
+    needs: [contract, build, unit, screens, ui, policy]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -240,15 +417,18 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           UNIT_RESULT: ${{ needs.unit.result }}
           SCREENS_RESULT: ${{ needs.screens.result }}
+          UI_RESULT: ${{ needs.ui.result }}
           POLICY_RESULT: ${{ needs.policy.result }}
         run: |
           echo "contract result: $CONTRACT_RESULT"
           echo "build result: $BUILD_RESULT"
           echo "unit result: $UNIT_RESULT"
           echo "screens result: $SCREENS_RESULT"
+          echo "ui result: $UI_RESULT"
           echo "policy result: $POLICY_RESULT"
           [ "$CONTRACT_RESULT" = "success" ] || exit 1
           [ "$BUILD_RESULT" = "success" ] || exit 1
           [ "$UNIT_RESULT" = "success" ] || exit 1
           [ "$SCREENS_RESULT" = "success" ] || exit 1
+          [ "$UI_RESULT" = "success" ] || exit 1
           [ "$POLICY_RESULT" = "success" ] || exit 1

@@ -3,6 +3,7 @@ package io.tezra.fermix.onboarding
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import androidx.annotation.StringRes
@@ -29,6 +30,15 @@ fun openOutside(
         FailureAction.TROUBLESHOOTING -> openPage(context, R.string.onboarding_url_troubleshooting)
         else -> throw IllegalArgumentException("$action stays in the app")
     }
+}
+
+/**
+ * "Open settings" on the scan's "Camera is off for Fermix" (design section 13.3, step 3): the app's own page
+ * in the system's settings, where the owner allows the camera after saying no to its prompt.
+ */
+fun openAppSettings(context: Context) {
+    val page = Uri.fromParts("package", context.packageName, null)
+    start(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, page))
 }
 
 /** Opens the page strings.xml holds at [url] in the browser. */

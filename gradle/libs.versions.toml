@@ -14,6 +14,19 @@ navigation3 = "1.2.0"
 # rule 3), made in the activity's store by its Compose initializer. Navigation 3 1.2.0 asks for 2.10 or
 # newer; 2.11.0 (2026-06-17) is the newest release.
 lifecycle = "2.11.0"
+# The scan's camera and its QR reader (design section 12.1: CameraX 1.6 and zxing-cpp 3.1, the code read in
+# process, never by Play services): CameraX's core, its Camera2 implementation, its lifecycle binding and its
+# Compose viewfinder, and zxing-cpp's Android binding, which reads a frame's luminance in its native library.
+# 1.6.2 (2026-08-26) and 3.1.1 (2026-07-29) are the newest; zxing-cpp asks for camera-core 1.5.2, 1.6.2 meets it.
+camerax = "1.6.2"
+zxingCpp = "3.1.1"
+# The instrumented tests (CI/CD design section 3, `ui`): AndroidX Test's runner and its JUnit 4 runner class,
+# beside Compose's test rule from the BOM. That rule brings Espresso 3.5.0, which fails on API 36 before a
+# test runs (it calls InputManager.getInstance, gone from Android 16); 3.7.0, of the same release as the
+# runner, does not.
+androidxTestRunner = "1.7.0"
+androidxTestExtJunit = "1.3.0"
+androidxTestEspresso = "3.7.0"
 # The window size classes of design section 13.11. Compose UI 1.12.1 already resolves window 1.5.0,
 # whose window-core computes a class from the window's size in dp, with no Activity, so previews have one.
 androidxWindow = "1.5.0"
@@ -59,6 +72,13 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+# The scan's camera binds to the screen's lifecycle and reads the permission again as the screen resumes.
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-compose = { module = "androidx.camera:camera-compose", version.ref = "camerax" }
+zxing-cpp-android = { module = "io.github.zxing-cpp:android", version.ref = "zxingCpp" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
@@ -102,6 +122,11 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 robolectric-android-all = { module = "org.robolectric:android-all-instrumented", version.ref = "robolectricAndroidAll" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
 junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine" }
+
+# Instrumented tests (fermix.android.library.compose).
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
+androidx-test-ext-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestExtJunit" }
+androidx-test-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidxTestEspresso" }
 
 [plugins]
 # Applied to build-logic itself, so the convention plugins pass the same gates as the app.

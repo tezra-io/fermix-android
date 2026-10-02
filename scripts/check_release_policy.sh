@@ -19,6 +19,9 @@
 #      contracts/mobile, lies in a fixtures/ directory, or is a key store, key or fixture by its
 #      extension; no entry holds the bytes of a vendored file, whatever its name; and no entry holds a
 #      key of the vendored vectors, in hex of either case or in base64, as a constant compiled in would
+#   8. no camera is required, as the pasted link is the other way in (section 13.3, step 2): no feature
+#      the manifest declares or CAMERA implies names a camera as required, and camera.any is declared
+#      not required, so that Play offers the app to a phone without one
 #
 # It reads the APK with aapt2, unzip and jq, and prints every check that fails, with what it expected
 # and what it found, then exits 1 with the number of checks that failed. Each check prints what it finds
@@ -330,6 +333,21 @@ check_contents() {
   fi
 }
 
+# 8. No camera required: badging lists a required feature as uses-feature, and one a permission implies
+# as uses-implied-feature, both of which a store filters phones by; a feature declared not required is
+# uses-feature-not-required.
+check_features() {
+  local badging=$1 required
+  required="$(sed -n "s/^ *uses-\(implied-\)\{0,1\}feature: name='\(android\.hardware\.camera[^']*\)'.*/\2/p" <<<"$badging" |
+    LC_ALL=C sort -u)"
+  if [ -n "$required" ]; then
+    violation "camera: expected none required, found $(paste -sd ' ' - <<<"$required") required"
+  fi
+  if ! matches "^ *uses-feature-not-required: name='android\.hardware\.camera\.any'$" <<<"$badging"; then
+    violation "camera: expected android.hardware.camera.any declared not required, found no such declaration"
+  fi
+}
+
 # Every check, each printing what it finds wrong. The resource dump is read whole into a variable: a
 # reader that stopped early would end aapt2 with SIGPIPE, which pipefail turns into a silent exit.
 run_checks() {
@@ -338,6 +356,7 @@ run_checks() {
   manifest="$(aapt2_dump xmltree --file AndroidManifest.xml "$apk")"
   resources="$(aapt2_dump resources "$apk")"
   check_manifest "$badging" "$manifest"
+  check_features "$badging"
   check_permissions "$apk"
   check_backup "$apk" "$manifest" "$resources"
   check_contents "$apk" "$work"

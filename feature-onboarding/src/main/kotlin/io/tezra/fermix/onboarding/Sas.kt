@@ -99,8 +99,9 @@ fun clock(seconds: Int): String {
 /**
  * The code at 44 sp in mono, its digits landing one after another [FermixMotion.SAS_DIGIT_STAGGER_MILLIS]
  * apart, each with its `SEGMENT_TICK` (section 13.1, "Haptics"), on the expressive scheme the Verify screen
- * provides. They land once: a rotation or a fold shows them landed. TalkBack reads the code digit by
- * digit, [sasSpoken].
+ * provides. They land once: a rotation or a fold shows them landed. Under reduce-motion they stand landed
+ * from the first frame, with no ticks, since a stagger of snapping digits still moves (section 13.8).
+ * TalkBack reads the code digit by digit, [sasSpoken].
  */
 @Composable
 fun SasCode(
@@ -112,7 +113,7 @@ fun SasCode(
     val view = LocalView.current
     val spring = LocalFermixMotion.current.fastSpatial
     val reduced = LocalReducedMotion.current
-    var landed by rememberSaveable(sas) { mutableStateOf(false) }
+    var landed by rememberSaveable(sas) { mutableStateOf(reduced) }
     val digits = remember(sas) { List(SAS_DIGITS) { Animatable(if (landed) 1f else 0f) } }
     LaunchedEffect(sas) {
         if (landed) return@LaunchedEffect

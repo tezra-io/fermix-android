@@ -415,10 +415,12 @@ full-backup rules that exclude every domain, is checked in the release APK itsel
 `feature-onboarding` (`io.tezra.fermix.onboarding`) is design section 13.3, Welcome to Notifications, as
 Compose screens over one ViewModel. Each screen is a composable of its state and its callbacks, with no
 ViewModel inside: `WelcomeScreen`, `PairScreen` with `RenameSheet`, `ScanScreen` (the frame around a
-`preview` slot, which the camera fills in a later change, with the torch a toggle that shows once a
-camera brings one; TalkBack reaches "Paste a pairing link" first), `ConnectingScreen`, `VerifyScreen`
-(the SAS in two groups landing digit by digit with `SEGMENT_TICK` on the expressive scheme, read by
-TalkBack digit by digit, the countdown ring), `PairedScreen`, `NameScreen` (section 9.2's question when
+`preview` slot, which `QrPreview` fills, with the torch a toggle that shows once the camera reports one,
+the camera's rationale before the system's prompt and "Camera is off for Fermix" with "Open settings"
+after a no; TalkBack reaches "Paste a pairing link" first), `PasteLinkSheet` (one field, Paste and
+Continue), `ConnectingScreen`, `VerifyScreen`
+(the SAS in two groups landing digit by digit with `SEGMENT_TICK` on the expressive scheme, standing
+still under reduce-motion, read by TalkBack digit by digit, the countdown ring), `PairedScreen`, `NameScreen` (section 9.2's question when
 a second Fermix would carry the first one's name) and `NotificationsScreen`; and `FailureScreen(case)`,
 which draws every failure from `FailureCase`, the one table that pairs each row of section 13.3's
 failure table with its icon, strings, primary and secondary actions, and says which failures are
@@ -427,7 +429,9 @@ and the two version refusals, as does a link the scan refuses. Every page keeps 
 bars, as the app draws edge to edge. Their words are strings.xml's, the design's verbatim, with the host
 as a format argument. `OnboardingViewModel` holds onboarding's part of the back stack (`stack`, above
 the app's root) and what the screens show (`ui`): "Get started" runs attest's hardware gate, a scanned
-or pasted link starts core-session's pairing through `PairingControl` (the handle, or a test's fake),
+or pasted text is read by `readLink` into a `LinkOutcome` (a link, not a Fermix code, an older or a
+newer Fermix, or one field missing or out of range, its candidates' ranges among them), and a link
+starts core-session's pairing through `PairingControl` (the handle, or a test's fake),
 and `CeremonyDriver` shows each `PairingState`'s screen as the pure `screenFor` maps it: Connecting's
 three lines, with "Trying Tailscale…" after 4 s of reaching a tailnet candidate and "Securing the line…"
 paced for 600 ms, as no state holds it; Verify with its code, its end and the name `pair_request`
@@ -438,19 +442,46 @@ one failure screen, "Can't reach" read through section 5.2's reachability, "Try 
 link "Can't reach" holds, a wrong machine never retried. Leaving the ceremony's screens cancels an
 attempt not yet approved. The pure rules are `stackOf`, `topOf`, `screenFor`, `keyAfter`, `stepAfter`,
 `connectingPhase`, `appBackStack`, `securesWindow` and `darkUnderBars`.
-`onboardingEntries(builder, viewModel)` registers the screens as Navigation 3 entries, with what lies
-outside the app: the pages, the Tailscale app (seen through the manifest's `<queries>`), the VPN
-settings, the notification prompt, and the clipboard, which a paste clears once read. An entry hands an
+`QrPreview` binds CameraX's preview and a 1280×720 analysis (16:9, the latest frame only, at the
+camera's own rate) to the screen's lifecycle, on the back camera or the front one, and reads each frame
+with zxing-cpp's Android binding in process, through `qrReader()`: QR codes of Model 2 alone, the model
+`fermix pair` draws (zxing-cpp's `QR_CODE` is the whole family, Micro QR and rMQR with it), inverted ones
+too, as a dark terminal draws `fermix pair`'s, the native library loaded on the analysis executor, which
+the screen owns and shuts down as it leaves (`qrAnalyzer` reads a frame, and `deliver` hands each code
+on once until another is read). A torch switch the camera does not carry out is logged. Its rules that
+need a camera, the torch shown only for a bound camera with a flash unit, and the use cases unbound, the
+executor shut down and no torch reported as the screen leaves, run in no test, as the tests have no
+camera (AGENTS.md): they are the device gate's, on a phone.
+`PasteSheetModel` holds the paste sheet's field in the ViewModel, so a rotation keeps a half-typed link
+while the saved state, which outlives the process, never holds the secret. Paste and "Continue" take the
+text's first word that starts `fermix://pair?`, so `fermix pair`'s "Manual pairing URI: …" line copied
+whole from a terminal, its end with it, gives its link. A clip with a pairing link in it, whatever the
+phone makes of the link, is cleared once Paste reads it, or once "Continue" takes or refuses a link;
+a clip with none is the owner's own and stays.
+`onboardingEntries(builder, viewModel, camera, clip)` registers the screens as Navigation 3 entries,
+with what lies outside the app: the pages, the Tailscale app (seen through the
+manifest's `<queries>`), the VPN settings, the app's settings page, the camera and notification prompts,
+the camera (`phoneCamera()`, or a test's stub) and the primary clip (`clipboardClip`, or a test's fake).
+The manifest asks for `CAMERA` and requires no camera: `camera.any`, `camera` and `camera.autofocus`,
+which `CAMERA` would otherwise imply, are all declared not required, as the pasted link is the other way
+in. An entry hands an
 action to the ViewModel only while its screen is the one on top (`topOf`): a screen popped off the stack
 is still drawn, and hit, as it leaves, and the ViewModel holds each call to the screen it belongs to.
 The JVM tests cover the route rules, `screenFor` over the ceremony's twenty-one states among them, the
 failure table verbatim with suj-mbp as the host, the record's tint and name rules, the ViewModel over a
 fake ceremony and real records (the pairing-wait facts cleared on every outcome and on the ViewModel's
-end, the replaced key handed to the commit, the session closed), and on Robolectric every action's label
-in the semantics, the order TalkBack reads the scan in, the code read digit by digit, the torch's state,
-the refusals' `REJECT`, Welcome's actions above a navigation bar, a rotation that draws Verify again
-from the kept ViewModel with its countdown running on, and Welcome's and Paired's mark drawn where it
-arrived when the screen is drawn again; every screen and every failure is a preview at the twelve
+end, the replaced key handed to the commit, the session closed), every `LinkOutcome`, the paste sheet
+clearing a clip with a pairing link in it whatever the link's outcome, `fermix pair`'s labelled line
+among them, and no other clip, a link with blank or that label around it taken, the reader's options
+(QR codes of Model 2 alone, inverted too), a code read frame after frame handed on once, and on
+Robolectric every action's label in the semantics, the order TalkBack reads the scan in with the camera,
+its rationale and its denial, the code read digit by digit and still under reduce-motion, the torch's
+state, a scanned link's `CONFIRM`, the refusals' `REJECT`, the paste sheet's read out too, "Open
+settings" opening the app's own page in the system's settings, Welcome's actions above a navigation
+bar, a rotation that draws Verify again from the kept ViewModel with its countdown running on, and
+keeps the paste sheet's half-typed link,
+and Welcome's and Paired's mark drawn where it arrived when the screen is drawn again. Its instrumented
+tests run the same screens on an emulator (below). Every screen and every failure is a preview at the twelve
 windows, each failure a preview of its own named for its case, with references under
 `feature-onboarding/src/test/screenshots`, the SAS in them the vendored IKpsk2 vector's.
 
@@ -475,6 +506,28 @@ owner to settle:
 - Can't reach's primary cell in the table is "Try again · Open Tailscale", two actions where the rule
   of section 13.3 gives a screen one. "Try again" is drawn as the one primary, and "Open Tailscale" as
   the first secondary, before "Paste a pairing link" and "Troubleshooting".
+- Step 3 asks for a rationale before the camera's prompt without giving its words. "Allow the camera to
+  scan the code" and "The code is read on this phone and never leaves it." are placeholders for the
+  owner to settle; its action is step 6's "Continue".
+- Under reduce-motion the code stands landed from its first frame, with no ticks: section 13.1 says only
+  that springs snap, and digits snapping one after another would still move.
+- A version-1 link shows Older Fermix at once, from the link alone, and a link whose candidates fall
+  outside the LAN and tailnet ranges is refused at the scan, as "That's not a Fermix pairing code.",
+  before any ceremony starts.
+- Section 12.4 clears the primary clip "after reading a pasted link", which could also be read as a link
+  that parses. A text with `fermix://pair?` in it carries a secret whatever the phone makes of it, so a
+  clip holding one is cleared, a link refused for its fields or its candidates and a newer Fermix's among
+  them, and `fermix pair`'s whole "Manual pairing URI: …" line when "Continue" takes the link trimmed
+  out of it by hand; any other text is the owner's and stays. "Continue" reads the clip only when the
+  field holds a pairing link, and that read shows Android's "pasted from your clipboard" note, as Paste's
+  own read does.
+- Paste and "Continue" take the first word of the text that starts `fermix://pair?`, so `fermix pair`'s
+  labelled line copied whole pairs as its link does. Step 2 names the link alone; the label could instead
+  be refused as "That's not a Fermix pairing code.".
+- A phone with no camera may install the app (the manifest requires none) and is offered the scan all
+  the same: the rationale, the prompt, then the reticle and the hint over the camera's stand-in, with
+  only "Paste a pairing link" that works, and a log line. The design does not say what such a phone
+  sees: Pair could leave "Scan the code" out, or the scan say there is no camera.
 - At the expanded window (841×673 dp) at font scale 2.0, two pages outgrow the window: Pair's "Paste a
   pairing link" and Attestation refused's "Troubleshooting" sit below the fold, cut by the window's
   edge, reached by scrolling, with nothing on screen to say the page scrolls (the expanded 2.0
@@ -507,6 +560,7 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 ./gradlew test :build-logic:test                  # the JVM tests, the build logic's included
 ./gradlew verifyRoborazziDebug                    # the screenshot tests against their reference images, and no stale one
 ./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true   # redraw the references (Linux), dropping stale ones
+./gradlew :feature-onboarding:connectedDebugAndroidTest   # the instrumented tests, on the device adb sees (below)
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
@@ -523,7 +577,9 @@ false with no network security config to override it, no `PROPERTY_COMPAT_ALLOW_
 `allowBackup` false with backup rules that exclude every domain under cloud backup, device transfer and
 the older platforms' full backup (design section 6.4) in every configuration of the rules, an override
 such as `res/xml-v36/` included, the requested permissions exactly those in `policy/permissions.txt`,
-and no test material: no entry named as a file of `contracts/mobile/`, under a `fixtures/` directory, or
+no camera required (no feature the manifest declares or `CAMERA` implies names a camera as required, and
+`android.hardware.camera.any` is declared not required, as the pasted link is the other way in), and no
+test material: no entry named as a file of `contracts/mobile/`, under a `fixtures/` directory, or
 with a key store's, a key's or a fixture's extension, no entry holding the bytes of a vendored file
 under any name, and no entry holding a key of the vendored vectors (every private and public key, psk,
 salt, secret and key field of `noise_vectors.json` and `push_vectors.json`) as hex of either case or as
@@ -535,7 +591,7 @@ and what it searched for, then exits 1; a missing or failing tool, grep included
 reference stop it at once with status 2. Its `aapt2` is build tools
 36.0.0's, the Android Gradle plugin's default, which `gradle/libs.versions.toml` notes beside `agp`.
 CI's `policy` job builds the release with a key made for the run and runs it. A permission the app
-starts to request lands in `policy/permissions.txt` in the same change; today the app requests none.
+starts to request lands in `policy/permissions.txt` in the same change.
 
 Warnings are errors everywhere: Kotlin (`allWarningsAsErrors`, and for the build scripts
 `org.gradle.kotlin.dsl.allWarningsAsErrors` in `gradle.properties` and `build-logic/gradle.properties`),
@@ -565,6 +621,89 @@ also records only what this machine resolved. `aapt2` is resolved per operating 
 that the linux, osx and windows `aapt2` jars are all still listed; add any that went missing, with
 the sha256 of the jar from Google's Maven repository. The file trusts without a checksum only the
 `-sources` and `-javadoc` jars an IDE fetches for reading, which the build never runs.
+
+## Instrumented tests
+
+A `fermix.android.library.compose` module's `src/androidTest` runs on an emulator or a phone, with
+AndroidX Test's runner, Compose's test rule and Espresso 3.7 (Compose's own 3.5 cannot start on API 36).
+`check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the tests to every
+gate; running them needs a device. Today `feature-onboarding` has them, and they need no daemon and no
+camera: `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
+activity's ViewModel store, which holds the fake pairing control (`FakeStarter`, from `src/sharedTest`,
+which the JVM tests compile too), the gate's answer, the network facts, a stub preview that reads what a
+test hands it and reports a torch, an `ActivityResultRegistry` that answers the camera prompt, and a fake
+clip. They cover onboarding from Welcome through Scan to Paired, every failure screen with its title and
+labelled actions, the scan's refusal, the camera denied with "Open settings" and the paste clearing only
+a clip with a link in it, a rotation and a fold that keep Verify's code and countdown and the paste
+sheet's text, TalkBack reaching "Paste a pairing link" first, reduce-motion's still code with the setting
+the owner sets, the scan's own reader (`qrReader()`) on real QR, inverted QR, Data Matrix and Micro QR
+images (`src/androidTest/assets/codes`), and its analysis (`qrAnalyzer`) on camera frames made of them,
+and `clipboardClip` on the phone's own clipboard. The test APK is signed with the SDK's debug key; it is
+not the app, and pairs with nothing. A test that needs the window's focus, Espresso's back and the
+clipboard's read, waits for it (`awaitWindowFocus`) and fails naming the window that holds it.
+
+CI's four legs run Google APIs images of API 35 and 36, as `medium_phone` and as `pixel_fold`. Make the
+same AVDs with cmdline-tools 20.0 or later (12.0 knows no `pixel_fold`); a green run on another image,
+Android Studio's 36.1 Play Store one among them, says nothing of CI's: the fold once failed on CI's API
+36 image alone.
+
+```bash
+sdkmanager "system-images;android-35;google_apis;x86_64" "system-images;android-36;google_apis;x86_64"
+for api in 35 36; do
+  for profile in medium_phone pixel_fold; do
+    echo no | avdmanager create avd -n "ui_${api}_$profile" -d "$profile" -k "system-images;android-$api;google_apis;x86_64"
+  done
+done
+```
+
+Locally, run the tests as a script, with `emulator` and `adb` on the PATH; its trap and its exits end
+the shell that runs it, so it is not for pasting into a terminal:
+
+```bash
+serial=emulator-5554
+emulator -avd ui_35_medium_phone -port 5554 -no-window -no-audio -gpu swiftshader_indirect -no-snapshot -no-boot-anim &
+pid=$!
+stop() {                                     # stops the emulator however the run ends, and waits for it
+  adb -s "$serial" emu kill
+  for _ in $(seq 60); do kill -0 "$pid" 2>/dev/null || return 0; sleep 1; done
+  echo "the emulator is still running after 60 s: stop it by its pid, $pid"
+}
+trap stop EXIT
+timeout 120 adb -s "$serial" wait-for-device || { echo "$serial did not come up in 120 s"; exit 3; }
+for try in $(seq 150); do                    # 150 tries 2 s apart, then give up
+  [ "$(adb -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" = 1 ] && break
+  [ "$try" -lt 150 ] || { echo "$serial did not boot in 300 s"; exit 3; }
+  sleep 2
+done
+ANDROID_SERIAL="$serial" scripts/settle_emulator.sh || exit 3
+adb -s "$serial" shell svc power stayon true
+ANDROID_SERIAL="$serial" ./gradlew :feature-onboarding:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone
+```
+
+`ANDROID_SERIAL` names the device to use. `scripts/settle_emulator.sh` waits, 30 polls 2 s apart, for
+the home screen to have the focus, as a cold boot can leave a system dialog holding it, System UI's
+"isn't responding" among them; each poll wakes the phone, dismisses the keyguard and closes system
+dialogs, and it fails naming the window that has the focus. The fold test (`@FoldingPhone`) folds the
+phone and waits for Verify drawn again; a Pixel Fold locks as it folds, and the test activity shows over
+the lock screen (`showWhenLocked` in `src/androidTest/AndroidManifest.xml`), as the lock can come after
+the activity is made again. On a device whose `cmd device_state` cannot close it, its assumption skips
+it, and AGP's report counts that skip among the failures while the task passes, so on a phone leave it
+out with the `notAnnotation` above; on a folding AVD run it with
+`-Pandroid.testInstrumentationRunnerArguments.requireFold=true`, which turns that skip into a failure.
+Animations stay on: the reduce-motion test sets the animator scale itself and puts it back.
+
+CI's `ui` job runs them on API 35 and 36, as `medium_phone` (the fold test left out) and as
+`pixel_fold` (the fold required), four runs side by side on `ubuntu-24.04` with KVM opened by a udev
+rule, through `reactivecircus/android-emulator-runner` (pinned by commit). The runner's cmdline-tools
+are 12.0, which know no `pixel_fold`, so the job replaces them with 20.0, checked by its sha256, and
+looks the profile up before any emulator starts. It builds the test APK before the emulator starts, so a
+compile error is never taken for a boot that failed. The action's pre-launch script marks the AVD made,
+and the script settles the emulator (`scripts/settle_emulator.sh`) and marks the boot before the tests:
+only when the AVD was made and the emulator never booted or never settled do the tests run once more,
+and a setup that failed before the AVD existed is not retried. The job's summary
+says which happened, or that the tests never ran, and whether KVM was open, and the reports are
+uploaded. `gate` requires it.
 
 ## Developer keystore
 

@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The scan's camera (design section 13.3, step 3), asked for after its rationale. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!--
+      No camera is required: the pasted link is the other way in (step 2). The CAMERA permission alone would
+      have the Play Store require a back camera with autofocus, so those two are declared not required too.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+
     <!-- "Open Tailscale" (design section 13.3's failure table) opens the app when it is installed, which
          Android 11 and later let this app see only when it is named here. -->
     <queries>

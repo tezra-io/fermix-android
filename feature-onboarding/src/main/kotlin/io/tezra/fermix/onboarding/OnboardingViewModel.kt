@@ -30,6 +30,9 @@ class OnboardingViewModel(
     /** The link and the failure screens' actions: one ceremony at a time. */
     val ceremony = CeremonyDriver(parts, viewModelScope, uiState, stack, ::show)
 
+    /** "Paste a pairing link"'s sheet, over the screen that opened it. */
+    val paste = PasteSheetModel(stack, ceremony)
+
     /**
      * "Get started" on Welcome (section 13.3, step 1): the hardware gate of section 6.1, then Pair, or the
      * one screen that says why this phone cannot pair.
@@ -103,12 +106,14 @@ class OnboardingViewModel(
 
     /**
      * Shows [stack]. A pairing lives on Connecting, Verify and its failure screens: anywhere else it ends.
-     * The pairing-wait notification has something to say on Verify alone.
+     * The pairing-wait notification has something to say on Verify alone, and the paste sheet belongs to
+     * the screen that opened it.
      */
     private fun set(stack: List<OnboardingKey>) {
         val top = stack.lastOrNull()
         if (!showsCeremony(top)) ceremony.leave()
         if (top != OnboardingKey.Verify) parts.pairingWait.value = null
+        if (top != stackState.value.lastOrNull()) paste.close()
         stackState.value = stack
     }
 

@@ -1,7 +1,6 @@
 package io.tezra.fermix.onboarding
 
 import io.tezra.fermix.protocol.PairingLink
-import io.tezra.fermix.protocol.ProtocolException
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.session.PairingState
 import io.tezra.fermix.session.Retry
@@ -43,17 +42,17 @@ class CeremonyDriver internal constructor(
     private var attempt: Attempt? = null
 
     /**
-     * A link the owner scanned or pasted, on Pair, Scan or a failure screen: a new ceremony over it, after
-     * ending any the owner left. A newer link is the "Newer Fermix" screen, which the parse alone knows;
-     * any other link the parse refuses is the scan's "That's not a Fermix pairing code."
+     * A link the owner scanned or pasted, on Pair, Scan or a failure screen, as [readLink] read it, after
+     * ending any ceremony the owner left: a new ceremony over a link it takes, the "Older Fermix" or
+     * "Newer Fermix" screen, which the link alone tells, or the scan's "That's not a Fermix pairing code."
      */
-    fun onLink(text: String) {
+    fun onLink(outcome: LinkOutcome) {
         val top = stack.value.lastOrNull()
         require(top == OnboardingKey.Pair || top == OnboardingKey.Scan || top is OnboardingKey.Failure) {
             "a link arrives on Pair, Scan or a failure screen, not on $top"
         }
         leave()
-        parse(text)?.let(::begin)
+        if (outcome is LinkOutcome.Link) begin(outcome.link) else refuse(outcome)
     }
 
     /** A failure screen's in-app action (design section 13.3's table): where [stepAfter] leads, or a retry. */
@@ -85,19 +84,41 @@ class CeremonyDriver internal constructor(
         }
     }
 
-    private fun parse(text: String): PairingLink? =
-        try {
-            PairingLink.parse(text)
-        } catch (expected: ProtocolException.NewerLinkVersion) {
-            // A refusal that is the screen itself: the link is a newer Fermix's, and names no host this app reads.
-            ui.update { it.copy(host = "") }
-            show(OnboardingKey.Failure(FailureCase.NEWER_FERMIX))
-            null
-        } catch (refused: ProtocolException) {
-            ui.update { it.copy(scanRefusal = refused.message) }
-            show(OnboardingKey.Scan)
-            null
-        }
+    /**
+     * A link the phone refused itself: a version's failure screen, about the host the link names, or the
+     * scan's "That's not a Fermix pairing code.", with a reason the screen does not show.
+     */
+    private fun refuse(outcome: LinkOutcome) {
+        val shown =
+            when (outcome) {
+                is LinkOutcome.OlderFermix -> {
+                    ui.update { it.copy(host = outcome.host) }
+                    OnboardingKey.Failure(FailureCase.OLDER_FERMIX)
+                }
+
+                LinkOutcome.NewerFermix -> {
+                    // The link is a newer Fermix's, and names no host this app reads.
+                    ui.update { it.copy(host = "") }
+                    OnboardingKey.Failure(FailureCase.NEWER_FERMIX)
+                }
+
+                LinkOutcome.NotAFermixCode -> {
+                    ui.update { it.copy(scanRefusal = "not a pairing link") }
+                    OnboardingKey.Scan
+                }
+
+                is LinkOutcome.Invalid -> {
+                    val reason = "the link's ${outcome.field} is missing, malformed or out of range"
+                    ui.update { it.copy(scanRefusal = reason) }
+                    OnboardingKey.Scan
+                }
+
+                is LinkOutcome.Link -> {
+                    error("a link the ceremony takes is not refused")
+                }
+            }
+        show(shown)
+    }
 
     private fun begin(link: PairingLink) {
         val context = scope.coroutineContext

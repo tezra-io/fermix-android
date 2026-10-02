@@ -31,21 +31,64 @@ fun PairPreview() {
     }
 }
 
-/** The torch's actions, which no preview takes. */
-private val SCAN_ACTIONS = ScanActions(onBack = NOTHING, onTorchChange = {}, onPaste = NOTHING)
+/** The scan's actions, which no preview takes. */
+private val SCAN_ACTIONS = ScanActions(NOTHING, {}, NOTHING, onAllowCamera = NOTHING, onOpenSettings = NOTHING)
 
 /** The frame with the torch a camera brings, off, over the camera's stand-in. */
 @FermixPreviews
 @Composable
 fun ScanPreview() {
-    FermixPreviewTheme { ScanScreen(refused = false, torchOn = false, actions = SCAN_ACTIONS) }
+    FermixPreviewTheme { ScanScreen(state = ScanUi(refused = false, torchOn = false), actions = SCAN_ACTIONS) }
 }
 
 /** A link the phone refused: the hint becomes "That's not a Fermix pairing code." */
 @FermixPreviews
 @Composable
 fun ScanRefusedPreview() {
-    FermixPreviewTheme { ScanScreen(refused = true, torchOn = false, actions = SCAN_ACTIONS) }
+    FermixPreviewTheme { ScanScreen(state = ScanUi(refused = true, torchOn = false), actions = SCAN_ACTIONS) }
+}
+
+/** Before the system's prompt: why the scan asks for the camera, which the canon does not draw. */
+@FermixPreviews
+@Composable
+fun ScanCameraRationalePreview() {
+    FermixPreviewTheme {
+        ScanScreen(
+            state = ScanUi(refused = false, torchOn = null, access = CameraAccess.RATIONALE),
+            actions = SCAN_ACTIONS,
+        )
+    }
+}
+
+/** After a no: "Camera is off for Fermix", with "Open settings" and the paste. */
+@FermixPreviews
+@Composable
+fun ScanCameraOffPreview() {
+    FermixPreviewTheme {
+        ScanScreen(
+            state = ScanUi(refused = false, torchOn = null, access = CameraAccess.DENIED),
+            actions = SCAN_ACTIONS,
+        )
+    }
+}
+
+/** The paste sheet's actions, which no preview takes. */
+private val PASTE_ACTIONS = PasteActions(onEdit = {}, onPaste = NOTHING, onContinue = NOTHING, onDismiss = NOTHING)
+
+/** "Paste a pairing link" opens the sheet, its field waiting for the link. */
+@FermixPreviews
+@Composable
+fun PasteLinkSheetPreview() {
+    FermixPreviewTheme { PasteLinkSheet(field = PasteField("", refused = false), actions = PASTE_ACTIONS) }
+}
+
+/** A pasted text the scan refuses, which stays in the field with the refusal under it. */
+@FermixPreviews
+@Composable
+fun PasteLinkRefusedPreview() {
+    FermixPreviewTheme {
+        PasteLinkSheet(field = PasteField("https://example.com/pair", refused = true), actions = PASTE_ACTIONS)
+    }
 }
 
 /** The canon draws Connecting on its second line. */

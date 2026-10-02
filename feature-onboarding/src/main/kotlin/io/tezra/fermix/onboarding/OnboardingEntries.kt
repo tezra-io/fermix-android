@@ -28,18 +28,21 @@ import kotlin.time.TimeMark
 /**
  * Onboarding's screens as entries of the app's back stack (design section 12.1, Navigation 3): each
  * [OnboardingKey] draws its screen from [viewModel]'s state, and hands the screen's actions to it, or
- * outside the app (a page, the Tailscale app, the VPN settings, the system's notification prompt), or to
- * the clipboard. An action reaches [viewModel] only from the screen on top ([topOf]): one popped off the
- * stack is still drawn, and hit, as it leaves, and a second quick tap lands there. The app keeps
- * [viewModel] for its activity, so a rotation or a fold keeps the pairing.
+ * outside the app (a page, the app's settings, the Tailscale app, the VPN settings, the system's prompts).
+ * The scan's [camera] and the paste sheet's [clip] are the phone's, or the instrumented tests' stand-ins.
+ * An action reaches [viewModel] only from the screen on top ([topOf]): one popped off the stack is still
+ * drawn, and hit, as it leaves, and a second quick tap lands there. The app keeps [viewModel] for its
+ * activity, so a rotation or a fold keeps the pairing.
  */
 fun onboardingEntries(
     builder: EntryProviderScope<NavKey>,
     viewModel: OnboardingViewModel,
+    camera: ScanCamera,
+    clip: PrimaryClip,
 ) {
     builder.entry<OnboardingKey.Welcome> { WelcomeEntry(viewModel) }
-    builder.entry<OnboardingKey.Pair> { PairEntry(viewModel) }
-    builder.entry<OnboardingKey.Scan> { ScanEntry(viewModel) }
+    builder.entry<OnboardingKey.Pair> { PairEntry(viewModel, clip) }
+    builder.entry<OnboardingKey.Scan> { ScanEntry(viewModel, camera, clip) }
     builder.entry<OnboardingKey.Connecting> {
         val ui by viewModel.ui.collectAsState()
         ConnectingScreen(phase = ui.connecting, host = ui.host)
@@ -57,7 +60,7 @@ fun onboardingEntries(
         )
     }
     builder.entry<OnboardingKey.Notifications> { NotificationsEntry(viewModel) }
-    builder.entry<OnboardingKey.Failure> { key -> FailureEntry(key.case, viewModel) }
+    builder.entry<OnboardingKey.Failure> { key -> FailureEntry(key.case, viewModel, clip) }
 }
 
 @Composable
@@ -70,14 +73,16 @@ private fun WelcomeEntry(viewModel: OnboardingViewModel) {
 }
 
 @Composable
-private fun PairEntry(viewModel: OnboardingViewModel) {
+private fun PairEntry(
+    viewModel: OnboardingViewModel,
+    clip: PrimaryClip,
+) {
     val ui by viewModel.ui.collectAsState()
     val clipboard = LocalClipboard.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val command = stringResource(R.string.onboarding_pair_command)
     val key = OnboardingKey.Pair
-    val paste = rememberPaste(viewModel, key)
     val actions =
         PairActions(
             onBack = viewModel.whileShowing(key, viewModel::back),
@@ -87,27 +92,31 @@ private fun PairEntry(viewModel: OnboardingViewModel) {
             },
             onRename = { name -> if (topOf(viewModel.stack.value) == key) viewModel.rename(name) },
             onScan = viewModel.whileShowing(key, viewModel::scan),
-            onPaste = paste,
+            onPaste = viewModel.whileShowing(key, viewModel.paste::open),
         )
     PairScreen(deviceName = ui.deviceName, actions = actions)
+    PasteSheet(viewModel, key, clip)
 }
 
-/**
- * The scan's frame. The CameraX preview and its torch come with the camera (a later change), so the torch
- * is not offered yet, and no toggle is drawn that could call [ScanActions.onTorchChange].
- */
+/** The paste sheet over [key]'s screen, while it is open and the screen is on top. */
 @Composable
-private fun ScanEntry(viewModel: OnboardingViewModel) {
-    val ui by viewModel.ui.collectAsState()
-    val paste = rememberPaste(viewModel, OnboardingKey.Scan)
-    ScanScreen(
-        refused = ui.scanRefusal != null,
-        torchOn = null,
+internal fun PasteSheet(
+    viewModel: OnboardingViewModel,
+    key: OnboardingKey,
+    clip: PrimaryClip,
+) {
+    val field by viewModel.paste.field.collectAsState()
+    val stack by viewModel.stack.collectAsState()
+    val open = field
+    if (open == null || topOf(stack) != key) return
+    PasteLinkSheet(
+        field = open,
         actions =
-            ScanActions(
-                onBack = viewModel.whileShowing(OnboardingKey.Scan, viewModel::back),
-                onTorchChange = { on -> error("no torch is drawn before the camera brings one, so none turns $on") },
-                onPaste = paste,
+            PasteActions(
+                onEdit = viewModel.paste::edit,
+                onPaste = { viewModel.paste.pasteFrom(clip) },
+                onContinue = { viewModel.paste.submit(clip) },
+                onDismiss = viewModel.paste::close,
             ),
     )
 }
@@ -138,55 +147,30 @@ private fun NotificationsEntry(viewModel: OnboardingViewModel) {
 private fun FailureEntry(
     case: FailureCase,
     viewModel: OnboardingViewModel,
+    clip: PrimaryClip,
 ) {
     val ui by viewModel.ui.collectAsState()
     val context = LocalContext.current
     val key = OnboardingKey.Failure(case)
-    val paste = rememberPaste(viewModel, key)
     FailureScreen(
         case = case,
         host = ui.host,
         onAction = { action ->
             when {
-                action == FailureAction.PASTE_LINK -> paste()
+                action == FailureAction.PASTE_LINK -> viewModel.whileShowing(key, viewModel.paste::open)()
                 stepAfter(case, action) == FailureStep.Outside -> openOutside(context, action)
                 topOf(viewModel.stack.value) == key -> viewModel.ceremony.act(case, action)
             }
         },
     )
+    PasteSheet(viewModel, key, clip)
 }
 
 /** [action] while [key]'s screen is on top, and nothing once it is leaving. */
-private fun OnboardingViewModel.whileShowing(
+internal fun OnboardingViewModel.whileShowing(
     key: OnboardingKey,
     action: () -> Unit,
 ): () -> Unit = { if (topOf(stack.value) == key) action() }
-
-/**
- * "Paste a pairing link" on [key]'s screen: the clipboard's text, as a link the ceremony takes or the scan
- * refuses, if the screen is still on top once the clipboard has answered. The clip is cleared once read, as
- * the link carries the pairing's secret (design section 12.4); that is all an app can do about a clip
- * (section 6.5).
- */
-@Composable
-private fun rememberPaste(
-    viewModel: OnboardingViewModel,
-    key: OnboardingKey,
-): () -> Unit {
-    val clipboard = LocalClipboard.current
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    return remember(viewModel, key, clipboard) {
-        {
-            scope.launch {
-                val clip = clipboard.getClipEntry()?.clipData
-                val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)
-                if (clip != null) clipboard.setClipEntry(null)
-                if (topOf(viewModel.stack.value) == key) viewModel.ceremony.onLink(text?.toString().orEmpty())
-            }
-        }
-    }
-}
 
 /**
  * The seconds left until [expiresAt], ticking on the second: the end lives in the ViewModel, so a screen

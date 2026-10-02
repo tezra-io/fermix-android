@@ -1,6 +1,8 @@
 package io.tezra.fermix.onboarding
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -25,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -77,50 +81,192 @@ private val HINT_TOP = 28.dp
 private val FOOT_SIDES = 24.dp
 private val FOOT_BOTTOM = 16.dp
 
+// The rationale and the denied screen, which the canon does not draw, as its failure page (`.fail`) on the
+// frame: the camera on a 72 dp disc of the paste's white at 16 %, 72 dp down and 28 dp above the title,
+// the sentence 12 dp under it; their action 6 dp above the paste, the canon's gap between actions (`.ft`).
+private val NOTE_TOP = 72.dp
+private val NOTE_DISC = 72.dp
+private val NOTE_ICON = 32.dp
+private val NOTE_TITLE_TOP = 28.dp
+private val NOTE_BODY_TOP = 12.dp
+private val FOOT_GAP = 6.dp
+
 /** TalkBack's place for "Paste a pairing link": before everything else on the screen (design section 13.8). */
 private const val PASTE_FIRST = -1f
 
-/** Scan's actions: back, the torch switched on or off, and the paste. */
+/**
+ * Scan's actions: back, the torch switched on or off, the paste, and for a camera this app may not use
+ * yet, the rationale's "Continue" to the system's prompt and the denied screen's "Open settings".
+ */
 @Immutable
 data class ScanActions(
     val onBack: () -> Unit,
     val onTorchChange: (Boolean) -> Unit,
     val onPaste: () -> Unit,
+    val onAllowCamera: () -> Unit,
+    val onOpenSettings: () -> Unit,
+)
+
+/** What the scan's frame holds (design section 13.3, step 3). */
+enum class CameraAccess {
+    /** The camera, under the reticle and the hint. */
+    ALLOWED,
+
+    /** Why the scan asks for the camera, before the system's prompt does. */
+    RATIONALE,
+
+    /** "Camera is off for Fermix", once the owner said no to the prompt. */
+    DENIED,
+}
+
+/**
+ * The frame's state: the camera when the system says this app may use it ([granted]), "Camera is off for
+ * Fermix" once the owner said no to the prompt on this visit ([refusedPrompt]), and the rationale before
+ * the prompt otherwise. A prompt Android no longer shows, once the owner said no twice, answers no at
+ * once, so the rationale leads to the denied screen.
+ */
+fun cameraAccess(
+    granted: Boolean,
+    refusedPrompt: Boolean,
+): CameraAccess =
+    when {
+        granted -> CameraAccess.ALLOWED
+        refusedPrompt -> CameraAccess.DENIED
+        else -> CameraAccess.RATIONALE
+    }
+
+/**
+ * What the scan shows: whether the phone [refused] a link, the torch, on or off as [torchOn] says and not
+ * drawn when it is null (a camera without one), and what the frame holds, as [access] allows.
+ */
+@Immutable
+data class ScanUi(
+    val refused: Boolean,
+    val torchOn: Boolean?,
+    val access: CameraAccess = CameraAccess.ALLOWED,
 )
 
 /**
- * Step 3 (design section 13.3), the frame around the camera: [preview] fills the window, the CameraX
- * preview on the phone, which a later change brings; on its stand-in the reticle, the torch, on or off as
- * [torchOn] says and not drawn when it is null (a camera without one), the hint, and "Paste a pairing
- * link", which TalkBack reaches first (section 13.8). A link the phone refused ([refused]) turns the hint
- * into "That's not a Fermix pairing code.", which TalkBack reads out, and plays `REJECT` (section 13.1).
+ * Step 3 (design section 13.3), the frame around the camera, dark in both modes: with the camera allowed,
+ * [preview] fills the window, the CameraX preview on the phone, and on it the reticle, the torch and the
+ * hint; before the camera is allowed, the rationale in their place with "Continue" to the system's prompt,
+ * or "Camera is off for Fermix" with "Open settings". "Paste a pairing link" is at the foot of all three,
+ * which TalkBack reaches first (section 13.8). A link the phone refused turns the hint into "That's not a
+ * Fermix pairing code.", which TalkBack reads out, and plays `REJECT` (section 13.1).
  */
 @Composable
 fun ScanScreen(
-    refused: Boolean,
-    torchOn: Boolean?,
+    state: ScanUi,
     actions: ScanActions,
     modifier: Modifier = Modifier,
     preview: @Composable () -> Unit = {},
 ) {
-    if (refused) HapticOnce(HapticUse.Refusal)
+    val access = state.access
+    val refused = state.refused
+    val allowed = access == CameraAccess.ALLOWED
+    if (refused && allowed) HapticOnce(HapticUse.Refusal)
     // One traversal group, so that the paste's traversal index puts it before the bar and the hint.
     val frame = modifier.fillMaxSize().drawBehind { drawCameraStandIn() }.semantics { isTraversalGroup = true }
     Box(modifier = frame) {
-        preview()
+        if (allowed) preview()
         Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            ScanBar(torchOn = torchOn, actions = actions)
+            ScanBar(torchOn = state.torchOn.takeIf { allowed }, actions = actions)
             Column(
                 modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Reticle(modifier = Modifier.padding(top = RETICLE_TOP))
-                Hint(refused = refused)
+                when (access) {
+                    CameraAccess.ALLOWED -> {
+                        Reticle(modifier = Modifier.padding(top = RETICLE_TOP))
+                        Hint(refused = refused)
+                    }
+
+                    CameraAccess.RATIONALE -> {
+                        CameraNote(
+                            title = R.string.onboarding_camera_rationale_title,
+                            body = R.string.onboarding_camera_rationale_body,
+                        )
+                    }
+
+                    CameraAccess.DENIED -> {
+                        CameraNote(R.string.onboarding_camera_off_title, body = null)
+                    }
+                }
             }
             FermixColumn(ColumnWidth.Narrow) {
-                PasteOnCamera(onPaste = actions.onPaste)
+                ScanFoot(access = access, actions = actions)
             }
         }
+    }
+}
+
+/**
+ * The foot: "Paste a pairing link", under the one action a camera not yet allowed has, "Continue" to the
+ * system's prompt or "Open settings".
+ */
+@Composable
+private fun ScanFoot(
+    access: CameraAccess,
+    actions: ScanActions,
+) {
+    val sides = Modifier.padding(start = FOOT_SIDES, end = FOOT_SIDES, bottom = FOOT_GAP)
+    Column {
+        when (access) {
+            CameraAccess.ALLOWED -> {}
+
+            CameraAccess.RATIONALE -> {
+                PrimaryAction(stringResource(R.string.onboarding_continue), actions.onAllowCamera, modifier = sides)
+            }
+
+            CameraAccess.DENIED -> {
+                val label = stringResource(R.string.onboarding_open_settings)
+                PrimaryAction(label, actions.onOpenSettings, modifier = sides)
+            }
+        }
+        PasteOnCamera(onPaste = actions.onPaste)
+    }
+}
+
+/**
+ * The rationale or the denied screen in the reticle's place: the camera on its disc, the title, and the
+ * rationale's one sentence under it, in white on the frame.
+ */
+@Composable
+private fun CameraNote(
+    @StringRes title: Int,
+    @StringRes body: Int?,
+) {
+    Box(
+        modifier =
+            Modifier
+                .padding(top = NOTE_TOP)
+                .size(NOTE_DISC)
+                .clip(CircleShape)
+                .background(ON_CAMERA_FILL),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_onboarding_camera),
+            contentDescription = null,
+            modifier = Modifier.size(NOTE_ICON),
+            tint = ON_CAMERA,
+        )
+    }
+    Text(
+        text = stringResource(title),
+        style = FermixType.headline,
+        color = ON_CAMERA,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(top = NOTE_TITLE_TOP, start = FOOT_SIDES, end = FOOT_SIDES),
+    )
+    if (body != null) {
+        Text(
+            text = stringResource(body),
+            style = FermixType.body,
+            color = ON_CAMERA,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = NOTE_BODY_TOP, start = FOOT_SIDES, end = FOOT_SIDES),
+        )
     }
 }
 

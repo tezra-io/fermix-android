@@ -72,6 +72,15 @@ whose version matches `version.properties`.
   approval" until the computer answers. TalkBack reads the code digit by digit and reaches "Paste a
   pairing link" first on the scan, and a refusal is felt as well as read. The app now requests the
   network, a foreground service and notifications, each listed in `policy/permissions.txt`.
+- **Scanning and pasting the code.** The scan reads the computer's QR code with the camera, on the
+  phone, a dark terminal's inverted code too, with the torch once the camera has one. It says why it
+  wants the camera before asking, and after a no offers the app's settings and the paste. "Paste a
+  pairing link" opens a sheet that takes the link from the clipboard, out of `fermix pair`'s whole
+  "Manual pairing URI:" line too, and clears a clipboard with a pairing link in it once it is read,
+  whatever the link turns out to be; a half-typed link survives a rotation. A code from an older or a newer Fermix gets its screen at once. The app now also requests
+  the camera, and runs on phones without one, which the release policy now checks. Under "Remove
+  animations" the code to compare stands still. CI's new `ui` job runs onboarding's tests on
+  emulators, Android 15 and 16, as a phone and as a folding phone.
 - **The release policy.** CI's new `policy` job checks the release APK: its SDK levels, not
   debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer, now
   also for the platforms before Android 12 and in every platform-specific override of the rules, each

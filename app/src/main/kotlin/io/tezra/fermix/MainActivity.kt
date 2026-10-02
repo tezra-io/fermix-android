@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
@@ -30,8 +31,10 @@ import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.onboarding.OnboardingViewModel
 import io.tezra.fermix.onboarding.appBackStack
+import io.tezra.fermix.onboarding.clipboardClip
 import io.tezra.fermix.onboarding.darkUnderBars
 import io.tezra.fermix.onboarding.onboardingEntries
+import io.tezra.fermix.onboarding.phoneCamera
 import io.tezra.fermix.onboarding.securesWindow
 import kotlinx.coroutines.flow.map
 
@@ -143,13 +146,16 @@ private fun Screens(
     fit: (NavKey) -> Unit,
 ) {
     val top = stack.last()
+    val context = LocalContext.current
+    val camera = remember { phoneCamera() }
+    val clip = remember(context) { clipboardClip(context) }
     LaunchedEffect(top) { fit(top) }
     NavDisplay(
         backStack = stack,
         onBack = model::back,
         entryProvider =
             entryProvider {
-                onboardingEntries(this, model)
+                onboardingEntries(this, model, camera, clip)
                 entry<ChatsKey> { ChatsPlaceholder() }
             },
     )

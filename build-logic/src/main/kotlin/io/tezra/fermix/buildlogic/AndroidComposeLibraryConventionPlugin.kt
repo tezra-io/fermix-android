@@ -33,9 +33,9 @@ internal const val SCREENSHOT_VALIDATION = "verifyRoborazziDebug"
 internal const val SCREENSHOT_DIRECTORY = "src/test/screenshots"
 
 /**
- * A library module that draws: the library convention, Compose, and a screenshot test of every
- * `@Preview` in the module's package, validated by `check`. The design module and every feature module
- * apply it.
+ * A library module that draws: the library convention, Compose, a screenshot test of every `@Preview` in
+ * the module's package, validated by `check`, and instrumented tests, built by `check`. The design module
+ * and every feature module apply it.
  */
 class AndroidComposeLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -60,10 +60,35 @@ class AndroidComposeLibraryConventionPlugin : Plugin<Project> {
             configurePreviewScreenshots(android)
             guardScreenshotReferences()
             addComposeDependencies(libs)
-            // The task is named, not matched, so a build that loses it fails instead of skipping it.
-            tasks.named<Task>("check") { dependsOn(SCREENSHOT_VALIDATION) }
+            configureInstrumentedTests(android, libs)
+            // The tasks are named, not matched, so a build that loses one fails instead of skipping it.
+            tasks.named<Task>("check") { dependsOn(SCREENSHOT_VALIDATION, INSTRUMENTED_TEST_APK) }
         }
     }
+}
+
+/**
+ * The task that builds a module's instrumented tests into their APK. `check` runs it, so `build` compiles
+ * them under the gates the rest of the module passes, and resolves, and so verifies, every library they run
+ * on; CI's `ui` job runs them on the emulator.
+ */
+internal const val INSTRUMENTED_TEST_APK = "assembleDebugAndroidTest"
+
+/**
+ * Instrumented tests in `src/androidTest` (CI/CD design section 3, `ui`): AndroidX Test's runner, its
+ * JUnit 4 runner class, and Compose's test rule, on the Espresso that runs on API 36.
+ */
+private fun Project.configureInstrumentedTests(
+    android: LibraryExtension,
+    libs: VersionCatalog,
+) {
+    android.defaultConfig.testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    val bom = dependencies.platform(libs.library("androidx-compose-bom"))
+    dependencies.addProvider("androidTestImplementation", bom)
+    dependencies.addProvider("androidTestImplementation", libs.library("androidx-compose-ui-test-junit4"))
+    dependencies.addProvider("androidTestImplementation", libs.library("androidx-test-runner"))
+    dependencies.addProvider("androidTestImplementation", libs.library("androidx-test-ext-junit"))
+    dependencies.addProvider("androidTestImplementation", libs.library("androidx-test-espresso-core"))
 }
 
 /** Robolectric's Android runtime as Gradle resolves it: checked against verification-metadata.xml. */

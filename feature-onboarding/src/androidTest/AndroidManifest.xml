@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+          The instrumented tests' hosts: onboarding's entries in Navigation 3's NavDisplay, over the fake
+          pairing control and a stub camera; and a bare activity for a screen drawn alone. A rotation or a
+          fold recreates either, as it does the app's. A Pixel Fold locks as it folds, sometimes only
+          after the activity is made again, and a lock would stop it before the fold test reads it: the
+          onboarding host shows over the lock screen and turns the screen on, so the fold's lock cannot
+          hide it.
+        -->
+        <activity
+            android:name="io.tezra.fermix.onboarding.OnboardingTestActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+</manifest>

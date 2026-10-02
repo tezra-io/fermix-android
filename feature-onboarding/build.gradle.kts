@@ -14,6 +14,9 @@ extensions.configure<LibraryExtension> {
         layout.settingsDirectory
             .dir("contracts/mobile")
             .asFile.path
+    // The fake ceremony, records and clip, which the JVM tests and the instrumented tests both drive.
+    sourceSets.getByName("test").kotlin.directories += "src/sharedTest/kotlin"
+    sourceSets.getByName("androidTest").kotlin.directories += "src/sharedTest/kotlin"
 }
 
 dependencies {
@@ -28,10 +31,20 @@ dependencies {
     api(libs.androidx.navigation3.runtime)
     api(libs.androidx.lifecycle.viewmodel.compose)
     implementation(project(":design"))
-    // The notification permission is asked for through an activity result.
+    // The notification and camera permissions are asked for through an activity result.
     implementation(libs.androidx.activity.compose)
+    // The scan (design sections 12.1 and 13.3): CameraX's preview and analysis bound to the screen's
+    // lifecycle, and zxing-cpp reading each frame in process.
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.compose)
+    implementation(libs.zxing.cpp.android)
 
     testImplementation(libs.kotlinx.coroutines.test)
     // CodeAndCountdownTest reads the previews' SAS from the vendored noise_vectors.json.
     testImplementation(libs.kotlinx.serialization.json)
+    // The instrumented tests show the screens in Navigation 3's NavDisplay, as the app does.
+    androidTestImplementation(libs.androidx.navigation3.ui)
 }

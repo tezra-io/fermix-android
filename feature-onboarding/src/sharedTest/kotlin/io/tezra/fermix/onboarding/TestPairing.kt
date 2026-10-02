@@ -39,6 +39,9 @@ internal val LAN = Candidate("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind
 private const val KEY_BYTES = 32
 private const val PORT = 4031
 
+/** The byte every byte of the push salt is. */
+private const val PUSH_SALT_FILL = 0x73
+
 private fun key(fill: Int): ByteArray = ByteArray(KEY_BYTES) { fill.toByte() }
 
 private fun base64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
@@ -76,7 +79,7 @@ internal fun facts(
         port = PORT,
         deviceId = "device-$gateway",
         keyAlias = "fermix.device.$gateway.0102030405060708",
-        pushSalt = base64(key(0x73)),
+        pushSalt = base64(key(PUSH_SALT_FILL)),
         pushPlatforms = push,
     )
 
@@ -141,6 +144,23 @@ internal class FakeStarter : PairingStarter {
         val control = FakeControl()
         started += control to identity.deviceName
         return control
+    }
+}
+
+/** The primary clip as the tests set it, [held], with every read and clear it was asked for, in order. */
+internal class FakeClip(
+    var held: String?,
+) : PrimaryClip {
+    val calls = mutableListOf<String>()
+
+    override fun text(): String? {
+        calls += "text"
+        return held
+    }
+
+    override fun clear() {
+        calls += "clear"
+        held = null
     }
 }
 

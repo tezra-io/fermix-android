@@ -43,12 +43,15 @@ data/                 the phone's durable state, io.tezra.fermix.data (Android l
                       launch check
 feature-onboarding/   design section 13.3 as screens, io.tezra.fermix.onboarding (Compose library):
                       Welcome to Notifications and every failure, OnboardingViewModel over
-                      core-session's pairing, the Navigation 3 entries, and the screenshot
-                      references in feature-onboarding/src/test/screenshots
+                      core-session's pairing, the Navigation 3 entries, the scan's CameraX preview
+                      and zxing-cpp reader, the paste sheet, and the screenshot references in
+                      feature-onboarding/src/test/screenshots; its instrumented tests in
+                      src/androidTest, and the fakes both test sets compile in src/sharedTest
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 policy/               permissions.txt: the permissions the release APK requests, exactly
-scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job)
-.github/workflows/    ci.yml: contract, build, unit, screens, policy, and gate, the one required check
+scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
+                      settle_emulator.sh (the ui job's wait for a booted emulator's home screen)
+.github/workflows/    ci.yml: contract, build, unit, screens, ui, policy, and gate, the one required check
 ```
 
 ## The contract with the engine
@@ -109,6 +112,18 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   vector key: the on-device Keystore vectors, pairing, attestation, locked-phone push and the pinned
   TLS on the phone's own stack, recorded per handset and OS build (design sections 12.6 and 15.3). A
   test-only key import stays out of the acceptance gate.
+- Instrumented tests (`src/androidTest`, CI's `ui` job) need no daemon and no camera, and never get
+  one. The seams are the fake pairing control (`FakeStarter` in `feature-onboarding/src/sharedTest`, the
+  JVM tests' too) behind `PairingStarter`, and the stub preview behind `ScanCamera`, whose `allowed`
+  stands in for the camera permission, since a connected test's APK is installed with every permission
+  granted; the camera's prompt is answered by `PromptRegistry`, an `ActivityResultRegistry` in
+  `src/sharedTest`, and the clip is `FakeClip`. `check` builds them, so they pass every gate; run them with
+  `./gradlew :feature-onboarding:connectedDebugAndroidTest` on an emulator (`README.md`), settled first
+  by `scripts/settle_emulator.sh`, and on CI's own Google APIs images when the run is evidence for CI. A
+  test that needs the window's focus (a key event, the clipboard) waits for it with `awaitWindowFocus`. A
+  test that changes the device (the animator scale, the rotation, a fold) puts it back however it ends.
+  What needs a real camera, `QrPreview`'s torch and its unbinding, is the device gate's. Stop an
+  emulator with `adb -s <serial> emu kill` and wait for its pid, never by matching a process's name.
 - Screenshots: every preview in a `fermix.android.library.compose` module is a screenshot test, and
   `verifyRoborazziDebug` (in `check`, and CI's `screens` job) compares it with its reference image
   in the module's `src/test/screenshots/`, and fails on a reference no preview drew. A reference

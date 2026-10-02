@@ -40,6 +40,9 @@ import kotlin.time.TestTimeSource
 private val PAIR = OnboardingKey.Pair
 private val SCAN = OnboardingKey.Scan
 
+/** The line `fermix pair` prints the link on, as a terminal copies it whole, its end with it. */
+private fun labelledLine(): String = "Manual pairing URI: " + linkText() + "\n"
+
 /** A phone online with Tailscale off: section 5.2 reads every candidate failing as "Can't reach". */
 private val ONLINE = NetworkFacts(1L, defaultHasVpn = false, defaultHasCgnatAddress = false, otherUidVpnPresent = false)
 
@@ -92,10 +95,10 @@ class OnboardingViewModelTest {
 
         val control: FakeControl get() = starter.control
 
-        /** Get started, then the link, as the owner pastes it on Pair. */
+        /** Get started, then the link on Pair, read as the camera and the paste sheet read theirs. */
         fun pasted(link: String = linkText()) {
             model.getStarted()
-            model.ceremony.onLink(link)
+            model.ceremony.onLink(readLink(link))
         }
 
         suspend fun shows(vararg keys: OnboardingKey) = model.stack.first { it == keys.toList() }
@@ -130,7 +133,7 @@ class OnboardingViewModelTest {
             val rig = Rig(this)
             rig.model.getStarted()
             rig.model.rename("Suj's phone")
-            rig.model.ceremony.onLink(linkText())
+            rig.model.ceremony.onLink(readLink(linkText()))
             assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), rig.model.stack.value)
             assertEquals(
                 "Suj's phone",
@@ -149,10 +152,203 @@ class OnboardingViewModelTest {
             rig.pasted("https://example.com/not-a-pairing")
             assertEquals(listOf(PAIR, SCAN), rig.model.stack.value)
             assertNotNull(rig.model.ui.value.scanRefusal)
-            rig.model.ceremony.onLink(linkText().replace("v=2", "v=3"))
+            rig.model.ceremony.onLink(readLink(linkText().replace("v=2", "v=3")))
             assertEquals(listOf(PAIR, SCAN, OnboardingKey.Failure(FailureCase.NEWER_FERMIX)), rig.model.stack.value)
             assertTrue(rig.starter.started.isEmpty())
         }
+
+    @Test
+    fun `an older Fermix's link is its own screen about the link's host, and no ceremony starts`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.pasted(linkText().replace("v=2", "v=1"))
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Failure(FailureCase.OLDER_FERMIX)), rig.model.stack.value)
+            assertEquals(HOST, rig.model.ui.value.host)
+            assertTrue(rig.starter.started.isEmpty())
+        }
+
+    @Test
+    fun `the paste sheet clears the clip only after its text read as a link, then the ceremony takes it`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.model.getStarted()
+            rig.model.paste.open()
+            val owners = FakeClip("the owner's own text")
+            rig.model.paste.pasteFrom(owners)
+            assertEquals(listOf("text"), owners.calls)
+            assertEquals(PasteField("the owner's own text", refused = true), rig.model.paste.field.value)
+            assertEquals(listOf(PAIR), rig.model.stack.value)
+            val pairing = FakeClip(linkText())
+            rig.model.paste.pasteFrom(pairing)
+            assertEquals(listOf("text", "clear"), pairing.calls)
+            assertNull(rig.model.paste.field.value)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), rig.model.stack.value)
+            assertEquals(1, rig.starter.started.size)
+        }
+
+    @Test
+    fun `a pasted pairing link leaves the clip whatever the phone makes of it, and any other text stays there`() =
+        runTest(main) {
+            val table =
+                listOf(
+                    // The ceremony's.
+                    linkText() to true,
+                    // Parsed, its candidate out of range: Invalid("candidates").
+                    linkText().replace("192.168.1.20", "8.8.8.8") to true,
+                    // Not parsed: Invalid("secret").
+                    linkText().replace(Regex("secret=[^&]*"), "secret=c2hvcnQ%3D") to true,
+                    // An older and a newer Fermix's.
+                    linkText().replace("v=2", "v=1") to true,
+                    linkText().replace("v=2", "v=3") to true,
+                    // Not a pairing link at all.
+                    "https://example.com/pair" to false,
+                )
+            for ((text, cleared) in table) {
+                val rig = Rig(this)
+                rig.model.getStarted()
+                rig.model.paste.open()
+                val clip = FakeClip(text)
+                rig.model.paste.pasteFrom(clip)
+                assertEquals(cleared, "clear" in clip.calls, "${readLink(text)::class.simpleName}: ${clip.calls}")
+            }
+        }
+
+    @Test
+    fun `Continue clears a clip that holds the link it takes, and leaves the owner's own text`() =
+        runTest(main) {
+            val typed = Rig(this)
+            typed.model.getStarted()
+            typed.model.paste.open()
+            typed.model.paste.edit(linkText())
+            val owners = FakeClip("the owner's own text")
+            typed.model.paste.submit(owners)
+            assertEquals(listOf("text"), owners.calls)
+            assertEquals("the owner's own text", owners.held)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), typed.model.stack.value)
+            // The keyboard's paste puts the clip's link in the field.
+            val keyboard = Rig(this)
+            keyboard.model.getStarted()
+            keyboard.model.paste.open()
+            keyboard.model.paste.edit(linkText())
+            val clip = FakeClip(linkText() + "\n")
+            keyboard.model.paste.submit(clip)
+            assertEquals(listOf("text", "clear"), clip.calls)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), keyboard.model.stack.value)
+        }
+
+    @Test
+    fun `a link with blank around it, as a terminal's line ends, is taken from Paste and from Continue`() =
+        runTest(main) {
+            val pasted = Rig(this)
+            pasted.model.getStarted()
+            pasted.model.paste.open()
+            val clip = FakeClip(linkText() + "\n")
+            pasted.model.paste.pasteFrom(clip)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), pasted.model.stack.value)
+            assertNull(clip.held)
+            val typed = Rig(this)
+            typed.model.getStarted()
+            typed.model.paste.open()
+            typed.model.paste.edit(" " + linkText() + " ")
+            typed.model.paste.submit(FakeClip(null))
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), typed.model.stack.value)
+        }
+
+    @Test
+    fun `fermix pair's labelled line copied whole is taken for its link from Paste and from Continue`() =
+        runTest(main) {
+            val pasted = Rig(this)
+            pasted.model.getStarted()
+            pasted.model.paste.open()
+            val clip = FakeClip(labelledLine())
+            pasted.model.paste.pasteFrom(clip)
+            assertEquals(listOf("text", "clear"), clip.calls)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), pasted.model.stack.value)
+            // The keyboard's paste puts the whole line in the field.
+            val keyboard = Rig(this)
+            keyboard.model.getStarted()
+            keyboard.model.paste.open()
+            keyboard.model.paste.edit(labelledLine())
+            val line = FakeClip(labelledLine())
+            keyboard.model.paste.submit(line)
+            assertEquals(listOf("text", "clear"), line.calls)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), keyboard.model.stack.value)
+        }
+
+    @Test
+    fun `a clip holding fermix pair's line is cleared when Continue takes the link trimmed out of it by hand`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.model.getStarted()
+            rig.model.paste.open()
+            rig.model.paste.edit(linkText())
+            val line = FakeClip(labelledLine())
+            rig.model.paste.submit(line)
+            assertEquals(listOf("text", "clear"), line.calls)
+            assertNull(line.held)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), rig.model.stack.value)
+        }
+
+    @Test
+    fun `Continue takes a typed link as Paste does, and a refused one stays in the field`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.model.getStarted()
+            rig.model.paste.open()
+            val clip = FakeClip(null)
+            rig.model.paste.edit(linkText().replace(Regex("secret=[^&]*"), "secret=c2hvcnQ%3D"))
+            rig.model.paste.submit(clip)
+            assertEquals(
+                true,
+                rig.model.paste.field.value
+                    ?.refused,
+            )
+            rig.model.paste.edit(linkText().replace("v=2", "v=1"))
+            assertEquals(
+                false,
+                rig.model.paste.field.value
+                    ?.refused,
+            )
+            rig.model.paste.submit(clip)
+            assertEquals(listOf("text", "text"), clip.calls, "an empty clipboard has nothing to clear")
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Failure(FailureCase.OLDER_FERMIX)), rig.model.stack.value)
+            assertTrue(rig.starter.started.isEmpty())
+        }
+
+    @Test
+    fun `an empty clipboard pastes nothing, and the sheet belongs to the screen that opened it`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.model.getStarted()
+            rig.model.paste.open()
+            rig.model.paste.edit("fermix://pair?v=2")
+            rig.model.paste.pasteFrom(FakeClip(null))
+            assertEquals(PasteField("fermix://pair?v=2", refused = false), rig.model.paste.field.value)
+            rig.model.scan()
+            assertNull(rig.model.paste.field.value)
+            assertThrows<IllegalStateException> { rig.model.paste.edit("fermix://") }
+            assertThrows<IllegalStateException> { rig.model.paste.pasteFrom(FakeClip(null)) }
+        }
+
+    @Test
+    fun `the paste sheet opens on Pair, Scan and a failure screen, and nowhere else`() =
+        runTest(main) {
+            val rig = Rig(this)
+            assertThrows<IllegalArgumentException> { rig.model.paste.open() }
+            rig.pasted()
+            assertThrows<IllegalArgumentException> { rig.model.paste.open() }
+            assertEquals(
+                OnboardingKey.Connecting,
+                rig.model.stack.value
+                    .last(),
+            )
+        }
+
+    @Test
+    fun `the paste sheet's field is never printed`() {
+        val printed = PasteField(linkText(), refused = false).toString()
+        assertFalse(printed.contains("secret"), printed)
+    }
 
     @Test
     fun `Connecting advances, says Trying Tailscale after 4 s, and paces Securing before Verify`() =
@@ -340,7 +536,7 @@ class OnboardingViewModelTest {
             advanceUntilIdle()
             assertEquals(listOf(PAIR, SCAN), rig.model.stack.value)
             assertEquals("8.8.8.8 is outside the LAN and tailnet ranges", rig.model.ui.value.scanRefusal)
-            rig.model.ceremony.onLink(linkText())
+            rig.model.ceremony.onLink(readLink(linkText()))
             assertNull(rig.model.ui.value.scanRefusal)
             assertEquals(2, rig.starter.started.size)
         }

@@ -30,6 +30,22 @@
     <!-- Step 3, Scan. -->
     <string name="onboarding_scan_hint">Point at the code on your computer</string>
     <string name="onboarding_scan_not_fermix">That\'s not a Fermix pairing code.</string>
+    <!--
+      The camera rationale, which step 3 asks for before the system's prompt without giving its words: these
+      two are the owner's to settle. Its action is step 6's "Continue".
+    -->
+    <string name="onboarding_camera_rationale_title">Allow the camera to scan the code</string>
+    <string name="onboarding_camera_rationale_body">The code is read on this phone and never leaves it.</string>
+    <!-- Step 3's camera denied. -->
+    <string name="onboarding_camera_off_title">Camera is off for Fermix</string>
+    <string name="onboarding_open_settings">Open settings</string>
+
+    <!--
+      Step 2's second way in, the paste sheet: the field's hint is the link as step 2 writes it, and its
+      paste button's label is section 13.6's attach sheet chip.
+    -->
+    <string name="onboarding_paste_hint" translatable="false">fermix://pair?…</string>
+    <string name="onboarding_paste">Paste</string>
 
     <!-- Step 4, Connecting. -->
     <string name="onboarding_connecting_reaching">Reaching %1$s…</string>

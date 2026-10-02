@@ -4,6 +4,9 @@
 
 # core-transport's network callbacks, behind the reachability facts of design section 5.2.
 android.permission.ACCESS_NETWORK_STATE
+# The scan's camera, onboarding's step 3 (design sections 12.1 and 13.3), asked for after its rationale;
+# no camera is a required feature, as the pasted link is the other way in.
+android.permission.CAMERA
 # The pairing-wait notification's short foreground service (design section 12.5).
 android.permission.FOREGROUND_SERVICE
 # The WebSocket to a daemon (design section 5.1), core-transport's.
