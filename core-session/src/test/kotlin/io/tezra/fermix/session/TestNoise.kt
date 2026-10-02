@@ -10,15 +10,16 @@ import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.spec.NamedParameterSpec
 import java.security.spec.X509EncodedKeySpec
+import java.security.spec.XECPrivateKeySpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-// The daemon's half of Noise IK over the JDK's own primitives, so a test stands where the daemon does.
-// core-noise's responder lives in its own tests and uses its internal classes, so this one is written
-// again from the Noise spec; core-noise's vector tests are what pin the handshake byte for byte.
+// The daemon's half of Noise IK and IKpsk2 over the JDK's own primitives, so a test stands where the
+// daemon does. core-noise's responder lives in its own tests and uses its internal classes, so this one
+// is written again from the Noise spec; PairingVectorTest holds it to the vendored vectors byte for byte.
 
 /** The SubjectPublicKeyInfo of an X25519 key, before its 32 raw bytes. */
 private const val SPKI_PREFIX = "302a300506032b656e032100"
@@ -26,9 +27,12 @@ private const val SPKI_BYTES = SPKI_PREFIX.length / 2
 private const val KEY_BYTES = 32
 private const val TAG_BYTES = 16
 private const val NONCE_BYTES = 12
-private const val PROTOCOL_NAME = "Noise_IK_25519_ChaChaPoly_SHA256"
-private val PRELUDE = "FXM1".encodeToByteArray() + byteArrayOf(1)
-private val PROLOGUE = "fermix-mobile-v1".encodeToByteArray() + PRELUDE
+private const val IK_NAME = "Noise_IK_25519_ChaChaPoly_SHA256"
+private const val IKPSK2_NAME = "Noise_IKpsk2_25519_ChaChaPoly_SHA256"
+private const val PROLOGUE_TEXT = "fermix-mobile-v1"
+private const val SAS_LABEL = "fermix-mobile-sas-v1"
+private const val SAS_MODULUS = 1_000_000L
+private const val SAS_DIGITS = 6
 
 /** The empty associated data of every transport message. */
 private val NO_DATA = ByteArray(0)
@@ -52,6 +56,16 @@ internal class SoftwareKey private constructor(
             generator.initialize(NamedParameterSpec.X25519)
             return SoftwareKey(generator.generateKeyPair())
         }
+
+        /** A fixed key, a vector's: its raw 32-byte private scalar and the public key it yields. */
+        fun of(
+            privateKey: ByteArray,
+            publicKey: ByteArray,
+        ): SoftwareKey {
+            val factory = KeyFactory.getInstance("XDH")
+            val private = factory.generatePrivate(XECPrivateKeySpec(NamedParameterSpec.X25519, privateKey))
+            return SoftwareKey(KeyPair(publicKeyOf(publicKey), private))
+        }
     }
 }
 
@@ -70,49 +84,69 @@ internal class TransportCipher(
 }
 
 /**
- * The responder's side of `<- s ... -> e, es, s, ss  <- e, ee, se`: it reads the phone's message 1,
- * prelude included, writes message 2 with an empty payload, and splits into its two ciphers.
+ * What a responder made of message 1: message 2, its receive and send ciphers after Split, the handshake
+ * hash the SAS is derived from, and the phone's static key, which message 1 carried.
+ */
+internal class Responded(
+    val second: ByteArray,
+    val receive: TransportCipher,
+    val send: TransportCipher,
+    val handshakeHash: ByteArray,
+    val initiatorStatic: ByteArray,
+)
+
+/**
+ * The responder's side of `<- s ... -> e, es, s, ss  <- e, ee, se`, and with [psk] of IKpsk2's, which
+ * mixes each `e` into the key too and ends message 2 with `psk`: it reads the phone's message 1, prelude
+ * included, writes message 2 on [ephemeral], and splits into its two ciphers.
  */
 internal class IkResponder(
     private val static: SoftwareKey,
+    private val psk: ByteArray? = null,
+    private val ephemeral: SoftwareKey = SoftwareKey.generate(),
 ) {
-    private var hash = PROTOCOL_NAME.encodeToByteArray()
+    private val prelude = "FXM1".encodeToByteArray() + byteArrayOf(if (psk == null) 1 else 2)
+    private var hash = initialHash(if (psk == null) IK_NAME else IKPSK2_NAME)
     private var chainingKey = hash.copyOf()
     private var key = ByteArray(0)
     private var nonce = 0L
 
     init {
-        check(hash.size == KEY_BYTES) { "the protocol name is the hash's initial value only at 32 bytes" }
-        mixHash(PROLOGUE)
+        mixHash(PROLOGUE_TEXT.encodeToByteArray() + prelude)
         mixHash(static.publicKey)
     }
 
-    /** Message 2 for [first], and the responder's receive and send ciphers after Split. */
-    fun respond(first: ByteArray): Triple<ByteArray, TransportCipher, TransportCipher> {
-        check(first.copyOf(PRELUDE.size).contentEquals(PRELUDE)) { "message 1 lacks the IK prelude" }
-        val staticAt = PRELUDE.size + KEY_BYTES
+    /** Message 2, carrying [payload], for [first]; and the ciphers, the hash and the phone's key. */
+    fun respond(
+        first: ByteArray,
+        payload: ByteArray = ByteArray(0),
+    ): Responded {
+        check(first.copyOf(prelude.size).contentEquals(prelude)) { "message 1 lacks the prelude ${prelude.last()}" }
+        val staticAt = prelude.size + KEY_BYTES
         val payloadAt = staticAt + KEY_BYTES + TAG_BYTES
-        val initiatorEphemeral = first.copyOfRange(PRELUDE.size, staticAt)
-        mixHash(initiatorEphemeral)
+        val initiatorEphemeral = first.copyOfRange(prelude.size, staticAt)
+        mixEphemeral(initiatorEphemeral)
         mixKey(static.agree(initiatorEphemeral))
         val initiatorStatic = decryptAndHash(first.copyOfRange(staticAt, payloadAt))
         mixKey(static.agree(initiatorStatic))
         decryptAndHash(first.copyOfRange(payloadAt, first.size))
-        val ephemeral = SoftwareKey.generate()
-        mixHash(ephemeral.publicKey)
+        mixEphemeral(ephemeral.publicKey)
         mixKey(ephemeral.agree(initiatorEphemeral))
         mixKey(ephemeral.agree(initiatorStatic))
-        val second = ephemeral.publicKey + encryptAndHash(ByteArray(0))
+        psk?.let(::mixKeyAndHash)
+        val second = ephemeral.publicKey + encryptAndHash(payload)
         val (receive, send) = hkdf(chainingKey, ByteArray(0))
-        return Triple(second, TransportCipher(receive), TransportCipher(send))
+        return Responded(second, TransportCipher(receive), TransportCipher(send), hash.copyOf(), initiatorStatic)
+    }
+
+    /** An `e` token: hashed, and in a PSK handshake mixed into the key as well. */
+    private fun mixEphemeral(publicKey: ByteArray) {
+        mixHash(publicKey)
+        if (psk != null) mixKey(publicKey)
     }
 
     private fun mixHash(data: ByteArray) {
-        hash =
-            MessageDigest.getInstance("SHA-256").run {
-                update(hash)
-                digest(data)
-            }
+        hash = sha256(hash + data)
     }
 
     private fun mixKey(inputKeyMaterial: ByteArray) {
@@ -122,12 +156,44 @@ internal class IkResponder(
         nonce = 0
     }
 
+    private fun mixKeyAndHash(inputKeyMaterial: ByteArray) {
+        val temporaryKey = hmac(chainingKey, inputKeyMaterial)
+        chainingKey = hmac(temporaryKey, byteArrayOf(1))
+        val temporaryHash = hmac(temporaryKey, chainingKey + byteArrayOf(2))
+        mixHash(temporaryHash)
+        key = hmac(temporaryKey, temporaryHash + byteArrayOf(3))
+        nonce = 0
+    }
+
     private fun encryptAndHash(plaintext: ByteArray): ByteArray =
         chaChaPoly(Cipher.ENCRYPT_MODE, key, nonce++, hash, plaintext).also { mixHash(it) }
 
     private fun decryptAndHash(ciphertext: ByteArray): ByteArray =
         chaChaPoly(Cipher.DECRYPT_MODE, key, nonce++, hash, ciphertext).also { mixHash(ciphertext) }
 }
+
+/** A protocol name of 32 bytes is the hash's initial value as it is, and a longer one is hashed. */
+private fun initialHash(protocolName: String): ByteArray {
+    val name = protocolName.encodeToByteArray()
+    return if (name.size <= KEY_BYTES) name.copyOf(KEY_BYTES) else sha256(name)
+}
+
+/**
+ * The SAS as PROTOCOL.md derives it: HMAC-SHA256 of the handshake hash over `fermix-mobile-sas-v1`, its
+ * first four bytes as a big-endian unsigned integer, modulo a million, zero-padded to six digits.
+ */
+internal fun sasOf(handshakeHash: ByteArray): String {
+    val digest = hmac(handshakeHash, SAS_LABEL.encodeToByteArray())
+    val value =
+        ByteBuffer
+            .wrap(digest, 0, Int.SIZE_BYTES)
+            .int
+            .toUInt()
+            .toLong()
+    return (value % SAS_MODULUS).toString().padStart(SAS_DIGITS, '0')
+}
+
+private fun sha256(data: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(data)
 
 /** Noise's HKDF over HMAC-SHA256: its first two outputs. */
 private fun hkdf(

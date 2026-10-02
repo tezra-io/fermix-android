@@ -64,9 +64,23 @@ internal class FakeLink : Link {
         toPhone.close()
         toDaemon.close()
     }
+
+    /** The socket fails with no close frame, as a dropped network leaves it. */
+    fun fail(cause: Exception) {
+        ended.complete(TransportException.Unreachable(cause))
+        toPhone.close()
+        toDaemon.close()
+    }
 }
 
-/** The daemon's end of one connection: the IK responder, its seq, and the frames both ways. */
+/** A `pair_request` as the daemon reads it: its frame, its event, and its raw tail split into the chain. */
+internal class PairRequestRead(
+    val frame: ClientFrame,
+    val request: ClientEvent.PairRequest,
+    val chain: List<ByteArray>,
+)
+
+/** The daemon's end of one connection: the IK or IKpsk2 responder, its seq, and the frames both ways. */
 internal class DaemonConnection(
     val link: FakeLink,
     private val gatewayKey: SoftwareKey,
@@ -76,12 +90,31 @@ internal class DaemonConnection(
     private var sending: TransportCipher? = null
     private var seq = 0uL
 
+    /** The handshake's outcome on the daemon's side, once message 2 went: its hash and the phone's key. */
+    var responded: Responded? = null
+        private set
+
     /** Reads message 1 and answers it with message 2. */
-    suspend fun handshake() {
-        val (second, receive, send) = IkResponder(gatewayKey).respond(link.toDaemon.receive())
-        receiving = receive
-        sending = send
-        link.deliver(second)
+    suspend fun handshake() = respondWith(IkResponder(gatewayKey))
+
+    /** Reads a pairing's message 1, `FXM1·02` and IKpsk2 with [psk], and answers it with message 2. */
+    suspend fun pair(psk: ByteArray) = respondWith(IkResponder(gatewayKey, psk.copyOf()))
+
+    /** Reads message 1 and refuses it before message 2, as a daemon with no window open does. */
+    suspend fun refuseHandshake(
+        code: Int,
+        reason: String,
+    ) {
+        link.toDaemon.receive()
+        close(code, reason)
+    }
+
+    private suspend fun respondWith(responder: IkResponder) {
+        val outcome = responder.respond(link.toDaemon.receive())
+        receiving = outcome.receive
+        sending = outcome.send
+        responded = outcome
+        link.deliver(outcome.second)
     }
 
     /** Answers message 1 with bytes that do not authenticate as the paired daemon's. */
@@ -133,6 +166,20 @@ internal class DaemonConnection(
     }
 
     suspend inline fun <reified E : ClientEvent> expect(): E = assertInstanceOf<E>(receive()?.event)
+
+    /**
+     * The phone's next frame, which must be a `pair_request` whose `attestation.cert_lengths` add up to its
+     * raw tail exactly; the tail split by them, leaf first.
+     */
+    suspend fun pairRequest(): PairRequestRead {
+        val frame = next()
+        val request = assertInstanceOf<ClientEvent.PairRequest>(frame.event)
+        val lengths = checkNotNull(request.attestation) { "a protocol v2 pair_request carries attestation" }.certLengths
+        assertEquals(frame.raw.size, lengths.sum()) { "cert_lengths add up to the raw tail" }
+        var at = 0
+        val chain = lengths.map { length -> frame.raw.copyOfRange(at, at + length).also { at += length } }
+        return PairRequestRead(frame, request, chain)
+    }
 
     /** The `ack`s the phone sends next, up to the one for [seq]; any other frame first fails the test. */
     suspend fun acksThrough(seq: ULong): List<ULong> {

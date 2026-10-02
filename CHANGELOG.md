@@ -42,6 +42,12 @@ whose version matches `version.properties`.
   reconnect reconciliation, the keepalive and the close codes, and the turn machines with the
   working indicator; its JVM tests run it against a fake daemon built from the protocol's own
   models, on a virtual clock.
+- **Pairing.** `attest` checks that the phone can hold a Fermix key, makes each pairing attempt's
+  key in AndroidKeyStore under a fresh alias, attested with the pairing secret's challenge, and
+  checks its chain's shape; `core-session` runs the pairing ceremony over it, from the scanned link to
+  the code to compare and the owner's decision, and hands the approved connection on as the first
+  session. The key the phone held for that daemon before is deleted only once the new record is
+  stored, and every other ending deletes the attempt's key. A newer pairing link is refused as such.
 - **The design language.** `design` holds design section 13.1 as code: the colours, the six tints,
   the type scale in the bundled Google Sans Flex and Google Sans Code (google/fonts' files,
   unmodified, with their OFL), the shapes, spacing, the centred column, motion with reduce-motion,

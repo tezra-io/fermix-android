@@ -201,6 +201,24 @@ private val attestationRules: FieldCheck.(Attestation) -> Unit = { attestation -
     )
 }
 
+/** `pair_request`'s texts, which the owner reads in the daemon's pairing prompt. */
+private val PAIR_REQUEST_TEXTS = setOf("device_name", "model", "app_version")
+
+/**
+ * Refuses [value] as `pair_request`'s [field], `device_name`, `model` or `app_version`, by the rule the
+ * codec encodes it under (PROTOCOL.md, the `pair_request` row): non-blank, at most 128 bytes of UTF-8, and
+ * no lone surrogate or C0, C1 or DEL control character. For a caller that holds a text before the event
+ * exists, such as a name the owner typed; it throws the ProtocolException.InvalidField the encoder would.
+ */
+fun requirePairRequestText(
+    field: String,
+    value: String,
+) {
+    require(field in PAIR_REQUEST_TEXTS) { "$field is none of pair_request's texts" }
+    val t = serializer<ClientEvent.PairRequest>().descriptor.serialName
+    FieldCheck(t, V2, rawSize = 0).printable(field, value, MAX_PAIR_TEXT_BYTES)
+}
+
 private val CLIENT_SESSION_RULES: List<EventRule<ClientEvent>> =
     listOf(
         client<ClientEvent.Hello>(versioned = listOf(VersionedField("last_mutation_seq", ONLY_V2, ONLY_V2))) {

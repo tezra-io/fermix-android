@@ -132,6 +132,19 @@ class PairingLinkTest {
     }
 
     @Test
+    fun `a link of a newer format is refused with its version, before anything else is read`() {
+        listOf("3" to 3, "10" to 10, "999999999" to 999_999_999).forEach { (written, version) ->
+            val refusal =
+                assertThrows<ProtocolException.NewerLinkVersion>(written) {
+                    PairingLink.parse("fermix://pair?v=$written&secret=%ZZ")
+                }
+            assertEquals(version, refusal.version, written)
+        }
+        // Past nine digits a version is no number this parser reads.
+        assertThrows<ProtocolException.MalformedParameter> { PairingLink.parse(replacing("v", "1000000000")) }
+    }
+
+    @Test
     fun `a parameter named twice is refused`() {
         assertEquals(
             "port",
@@ -145,7 +158,7 @@ class PairingLinkTest {
         val shortKey = Base64.getEncoder().encodeToString(ByteArray(31) { 7 }).encodeForm()
         val cases =
             listOf(
-                "v" to "3",
+                "v" to "0",
                 "v" to "",
                 "v" to "01",
                 "v" to "%2B1",

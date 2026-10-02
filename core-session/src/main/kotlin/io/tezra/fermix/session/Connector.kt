@@ -22,16 +22,31 @@ internal class Attempt(
 )
 
 /**
+ * A pairing's connection after `pair_approved` (PROTOCOL.md "Noise modes and pairing", step 3): the
+ * candidate it was won over, and its link, Noise session and channel, whose seq the pairing's frames have
+ * moved on. A session's first attempt takes it over instead of racing (Session.adopt).
+ */
+internal class Adopted(
+    val candidate: Candidate,
+    val won: Handshaken,
+    val channel: SecureChannel,
+)
+
+/**
  * One attempt: race the candidates, last successful first (design section 5.1); the winner's hello at
  * seq 1; and, once `hello_ack` completes it, the connection until it ends. Hello goes on the winner
  * alone, so the daemon sees one session per race. Hello carries protocol v2's `last_mutation_seq`
- * (design section 7, the `mutation_seq` row), the mutation feed's cursor.
+ * (design section 7, the `mutation_seq` row), the mutation feed's cursor. A session that adopted a
+ * pairing's connection makes its first attempt on that connection, with hello at its next seq, and
+ * races from the second on.
  */
 internal class Connector(
     private val core: SessionCore,
     private val requests: Requests,
 ) {
     suspend fun attempt(): Attempt {
+        val adopted = core.takeAdopted()
+        if (adopted != null) return adopted.won.use { connection(adopted.candidate, it, adopted.channel) }
         val parts = core.parts
         val gatewayKey = core.instance.gatewayPublicKey
         val order = candidateOrder(core.candidates, core.lastSuccessful)
@@ -60,8 +75,8 @@ internal class Connector(
     private suspend fun connection(
         candidate: Candidate,
         won: Handshaken,
+        channel: SecureChannel = SecureChannel(won.link, won.noise),
     ): Attempt {
-        val channel = SecureChannel(won.link, won.noise)
         val lastMutationSeq =
             core.parts.store
                 .cursors()

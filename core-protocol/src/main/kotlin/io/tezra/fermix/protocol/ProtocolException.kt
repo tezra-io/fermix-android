@@ -147,6 +147,15 @@ sealed class ProtocolException(
     /** A link that does not start with `fermix://pair?`. */
     class NotAPairingLink : ProtocolException("the link does not start with $PAIRING_LINK_PREFIX")
 
+    /**
+     * A pairing link of a format past link version 2, written as a plain decimal [version]: a newer
+     * Fermix made it, and this app must update (design section 13.3, step 3: "Newer Fermix"). Nothing
+     * after its `v` is read.
+     */
+    class NewerLinkVersion(
+        val version: Int,
+    ) : ProtocolException("the pairing link is of version $version, newer than this app reads")
+
     /** A pairing link without a parameter its version requires. */
     class MissingParameter(
         val name: String,

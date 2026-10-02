@@ -11,7 +11,8 @@ leaves it. Each daemon is its own trust domain, and the phone pairs with each on
 
 The repository is at its first stages: the build, its gates, the vendored wire contract, CI, the
 Noise layer (`core-noise`), the wire codec (`core-protocol`), the transport (`core-transport`), the
-session (`core-session`), the design language with its screenshot tests (`design`) and the phone's
+device key and its attestation (`attest`), the pairing ceremony and the session (`core-session`), the
+design language with its screenshot tests (`design`) and the phone's
 durable state (`data`) exist, and the app draws its name and nothing else yet. The design documents
 are named below.
 
@@ -23,7 +24,8 @@ contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
-core-session/           one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
+attest/                 the device key: the hardware gate, the Keystore key and its attestation chain's shape (io.tezra.fermix.attest)
+core-session/           the pairing ceremony, and one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
 design/                 the design language as code, its fonts, previews and screenshot references (io.tezra.fermix.design)
 data/                   the instance records, each profile's database and media cache, the launch check (io.tezra.fermix.data)
 gradle/                 the version catalog, the dependency checksums and the wrapper
@@ -68,7 +70,8 @@ of values is not bounded, by the contract or here: a 1 MiB logical event of smal
 of MiB of heap while it is decoded, and a row holds its metadata's tree, which core-session budgets
 for. `EventPartAssembler` joins `event_part` runs, one `count` and one `v` throughout and
 consecutive `seq`s, and `PairingLink` reads the owner's QR code into a secret the caller zeroes. The
-link's `v`, exactly `1` or `2`, is read first and then only that version's parameters; names and
+link's `v`, exactly `1` or `2`, is read first and then only that version's parameters, and a plain
+decimal past 2 is refused as `NewerLinkVersion`, the scan's "Newer Fermix"; names and
 values are form-decoded, a fragment is no part of the query, `name` and `profile` are neither blank
 nor hold a control character, and the keys are canonical base64. Every refusal is a
 `ProtocolException` that names what it refused and quotes nothing of the header but an event's name
@@ -114,6 +117,9 @@ another address presents the pinned certificate, the open succeeds and the refus
 Until each address is a route of its own, a name candidate falls short of design section 13.3's "no
 retry", and how to close that is the owner's decision. `candidateOrder` puts the last successful
 candidate first, then the tailnet addresses, the MagicDNS names and the LAN addresses.
+`linkCandidate` classifies a pairing link's host, which carries no scope, by the ranges the daemon
+draws them from, from the text alone: 100.64.0.0/10 and a MagicDNS name under `ts.net` are the
+tailnet, 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 the LAN, and anything else is no candidate.
 `CandidateRacer` starts the caller's attempts 250 ms apart (core-session's WSS open and Noise
 handshake), takes the first to complete and cancels the rest, ends at once on a pin mismatch, and
 closes every winner the caller does not get, however the race ends. It reads its clock from the
@@ -133,9 +139,41 @@ run android.* code inside OkHttp. The phone's own TLS stack is the device gate's
 12.6 and 15.3), and that is still open: a certificate that is not pinned must come out as
 `PinMismatch` there before core-session relies on it.
 
+`attest` (`io.tezra.fermix.attest`) is the phone's device key as pairing makes it, on core-noise.
+`HardwareGate.check` is design section 6.1's gate, run at "Get started": Android 15 or newer and
+`FEATURE_HARDWARE_KEYSTORE` at version 200, hardware Curve25519, else `SdkBelowFloor` or
+`NoHardwareCurve25519`, with no software key to fall back to. `DeviceKeys` is the only code that
+makes or deletes a device key: `generate(alias, challenge)` makes an X25519 key for AGREE_KEY alone
+in AndroidKeyStore (`KeyPairGenerator` `XDH` on `ECGenParameterSpec("x25519")`, which android.jar 37
+names no constant for), attested with the challenge, and returns its chain, leaf first, as an
+`AttestedKey`, deleting the key if anything after its generation fails, with that failure the one
+thrown and a failed clean-up attached to it; `staticKey` is the
+`KeystoreStaticKey` the handshake runs. Each of its calls refuses an alias outside `fermix.device.`
+before it reaches the Keystore, so no other key of the app's is ever touched there. It implements `DeviceKeyFacade`, which core-session's pairing
+takes, so the JVM tests put a software key in its place. `AttestationChallenge.of(secret)` is
+`SHA-256("fermix-mobile-attest-v1" ‖ secret)`, the challenge the daemon derives from its window's
+secret. `AliasNames.next` is section 6.1's alias, `fermix.device.`, the first 8 bytes of
+`sha256(gateway_pk)` and 8 random bytes, both in hex: one prefix per daemon and a new alias per
+attempt, so a second scan never touches a working key. `Chain.validateShape` checks what the phone
+can before any socket opens (section 6.2, check 1): one to six certificates of at most 16 KiB
+together, each one DER SEQUENCE, the leaf's SubjectPublicKeyInfo id-X25519 with the device key, each
+refusal a typed `ChainShapeException`; the signatures, roots, KeyMint facts, challenge, boot state and
+revocation are the daemon's. The JVM tests hold the challenge to digests computed by hand, the
+vendored link's secret among them, the alias to the vendored `gateway_pk`, the gate to its table, and
+the shape check to certificates assembled byte by byte, which the JDK reads as X.509, and to every
+root the JDK trusts, and `DeviceKeys` to its refusals of another alias. The Keystore paths are the device gate's, never these tests' (design section
+12.6): `DeviceKeys.generate` on a real phone with a fresh alias, the `XDH` name and the curve
+accepted, a chain whose leaf carries the key and the challenge and passes `validateShape`, a
+`KeystoreStaticKey` agreement with it, `delete` and `exists`, and `HardwareGate.check` on a phone
+that reports version 200 and on one that does not. The key's flags of section 6.1 have no JVM check
+either, since `KeyGenParameterSpec.Builder` is the framework's: the device gate reads the leaf's KeyMint
+extension on the handset and records purpose `{AGREE_KEY}` alone, the security level
+`TrustedEnvironment` (never StrongBox), no `USER_SECURE_ID` and no unlocked-device tag, and one
+agreement made with the screen locked after the first unlock.
+
 `core-session` (`io.tezra.fermix.session`) is one paired session with one daemon, for one profile,
 from its first race until it ends. It is an Android library with no android.* in it, tested on the
-JVM against a fake daemon that answers Noise IK and builds every event from core-protocol's models,
+JVM against a fake daemon that answers Noise IK and IKpsk2 and builds every event from core-protocol's models,
 on a virtual clock. `Session.open` races the candidates, runs the IK handshake and sends `hello` at
 seq 1 on the winner alone, with the stored cursors and `protocol_v: 2`; a `hello_ack` whose window
 leaves out 2, or a protocol v1 daemon's `unsupported_protocol_version`, ends the session as
@@ -181,6 +219,57 @@ last 200 notable things, and `acks` the last 200 acks sent, with how long each w
 announcer that throws ends the session as `Failed`, and cancelling its scope as `Closed`. The app's
 other client events, `push_register` and `push_unregister` first (design section 10,
 "Registration"), have no path through the session yet; the push module adds one.
+
+`Pairing.start(link, keys, identity, parts, scope)` runs the pairing ceremony (design section 6.3,
+PROTOCOL.md "Noise modes and pairing") as a `PairingHandle` whose `StateFlow<PairingState>` is the
+onboarding screens' (section 13.3); a scope that ended already is refused. In order: the link is
+checked on the phone, a version-1 link
+ending as `OlderFermix` and a candidate outside the LAN and tailnet ranges as `InvalidLink` before
+any key exists; a new alias is generated with the challenge of the link's secret, and its chain's
+shape checked (`NoSecureHardware` otherwise, nothing dialed), where an alias the Keystore holds
+already fails loud and is never deleted, and a key the Keystore made is recorded before a cancel can
+land, so a pairing cancelled while the key is made still deletes it; every Keystore call runs on `PairingParts.keystore`, off the
+main thread; the candidates are raced with IKpsk2 over the dialer `PairingParts.dialerFor` makes for
+the link's own port and `tls_fp` pin (`Reaching`, `Checking` once a pinned socket opens), and the
+link's secret is zeroed once the race is over, since each handshake took its copy; `pair_request`
+goes at seq 1 with the chain as its raw tail and `cert_lengths` (`Securing`, which `Verify` replaces
+at once, so the Connecting screen paces its third line itself), then `Verify` shows the SAS and the
+120 s countdown. The device name, `rename()`, lands only before `pair_request` goes out, which is as
+the handshake completes and before `Verify` shows; section 13.3, step 5, and the visual canon put the
+rename on `Verify`, and which of the two gives is the owner's decision. While the owner decides, a
+ping goes every 25 s and two missed pongs are `LostMidWait`. `pair_approved` at protocol v2, naming
+the session's profile, gives `Approved`: the instance record's facts and a paired session that took
+over the same connection, whose `hello` goes at its next seq (PROTOCOL.md, step 3; design section
+6.3's diagram and onboarding section 3 reconnect with `FXM1·01` first, which the wire contract and the
+engine do not). `commit(store)` runs the caller's store of the record, which returns the key alias of
+the record its write replaced, as data's `InstanceStore.upsert` and `merge` return that record, and
+then deletes that key, refusing one that is no device key's or the pairing's own; once commit has
+taken the approval, both run to the end whatever becomes of its caller, with no `cancel()` between
+them, a caller cancelled before the take takes nothing, and a store that fails undoes the approval.
+An approval or a `CannotReach` the caller has not taken on is abandoned when the handle's scope ends:
+the secret zeroed, an approval's session closed and its key deleted, `Cancelled`. The ceremony runs
+even on a scope that ended before it was first dispatched, so it still releases what it holds and
+shows `Cancelled`; one cancelled or failed on the way out zeroes the secret, and a `CannotReach` whose
+ceremony failed is never retried. Each call decides and takes what it acts on in one step on the
+handle's dispatcher, so a `retry()` or `commit()` that comes while `cancel()` ends the ceremony takes
+nothing. Every other ending zeroes the secret first, closes the socket, `1002` after a
+protocol error, and deletes the attempt's key, never the old one, publishing the ending even when
+that delete throws. Each row of section 13.3's failure table the wire can produce is an ending:
+`pair_denied` by reason (`denied` and `cancelled` are `Denied`, `timeout` `Expired`,
+`device_disconnected` `LostMidWait`, `attestation` and `platform_unsupported` `AttestationRefused`,
+`attestation_unavailable` `AttestationUnavailable`); a pairing handshake the daemon closes `1002`, or
+whose message 2 does not authenticate, `Expired`; a `1002` after `pair_request`
+`AnotherPairingInProgress`, the likeliest reading, since the engine closes every pairing error with
+that same `1002`; a `4001` while the owner decides `LostMidWait`; a pin mismatch `WrongMachine`; a
+version refusal `OlderFermix` or `NewerFermix`; every candidate out of reach `CannotReach`, the one
+ending `retry()` takes, with a new key; and `cancel()`. `RateLimited` is reserved and never produced:
+a fifth failure's address gets the same `1002` before message 2 as a closed window, so it reads as
+`Expired` until the contract names it. `PhoneIdentity`'s texts are held to core-protocol's own
+`requirePairRequestText`, and `deviceModel` joins `Build.MANUFACTURER` and `Build.MODEL` with a space.
+`Verify` prints without its SAS. The tests run the ceremony against the fake daemon, which answers
+IKpsk2 with the link's secret, splits the raw tail by `cert_lengths` and checks the leaf carries the
+handshake's key; its responder writes the vendored `noise_vectors.json` message 2, handshake hash and
+SAS byte for byte, and the SAS the phone shows is that derivation of the daemon's hash.
 
 `design` (`io.tezra.fermix.design`) is design section 13.1's language as code, a Compose library
 every screen builds on. `FermixTheme` provides it and hands it to Material 3 too, so that Material's

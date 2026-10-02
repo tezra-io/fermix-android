@@ -7,6 +7,7 @@ import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.MAX_CANDIDATES
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.withTimeoutOrNull
+import io.tezra.fermix.protocol.Candidate as WireCandidate
 
 /**
  * How long the daemon has to answer a reconciliation request, counted while the session waits on it
@@ -122,9 +123,9 @@ internal class Reconciler(
 
     /** The daemon's routes, best first, replace the ones the session races, when it sends any. */
     private suspend fun candidates(ack: ServerEvent.HelloAck) {
-        val routes = ack.candidates.map { Candidate(it.host, scopeOf(it.scope), kindOf(it.host)) }.distinct()
+        val routes = routesOf(ack.candidates)
         if (routes.isEmpty()) return
-        core.candidates = routes.take(MAX_CANDIDATES)
+        core.candidates = routes
         core.emit(SessionEvent.Candidates(core.candidates))
     }
 
@@ -210,6 +211,16 @@ private fun ServerEvent.Error.gone(): Boolean = code == ServerEvent.Error.MUTATI
  */
 private fun ServerEvent.refusal(): ServerEvent.Error? =
     (this as? ServerEvent.Error)?.takeIf { it.clientMsgId == null && it.ref == null }
+
+/**
+ * The daemon's routes from a `hello_ack` or a `pair_approved`, best first, each once and at most 16: its
+ * scope as the daemon says, its kind from the host.
+ */
+internal fun routesOf(candidates: List<WireCandidate>): List<Candidate> =
+    candidates
+        .map { Candidate(it.host, scopeOf(it.scope), kindOf(it.host)) }
+        .distinct()
+        .take(MAX_CANDIDATES)
 
 private fun kindOf(host: String): Candidate.Kind =
     if (':' in host || IPV4_LITERAL.matches(host)) Candidate.Kind.IP else Candidate.Kind.NAME

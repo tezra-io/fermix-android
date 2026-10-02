@@ -114,6 +114,20 @@ class ValidationTest {
         encodeClientEvent(1, 1uL, ClientEvent.PairRequest("é".repeat(64), "é".repeat(64), "é".repeat(64)))
     }
 
+    @Test
+    fun `a pair_request text checked before the event exists is refused exactly where the codec refuses it`() {
+        val texts =
+            listOf("Owner's phone", "é".repeat(64), "é".repeat(64) + "a", "Owner\u0085s", "Owner\uD800s", " ", "")
+        val cases = listOf("device_name", "model", "app_version").flatMap { field -> texts.map { field to it } }
+        cases.forEach { (field, text) ->
+            val codec = runCatching { encodeClientEvent(1, 1uL, pairRequest(field, text)) }.exceptionOrNull()
+            val caller = runCatching { requirePairRequestText(field, text) }.exceptionOrNull()
+            assertEquals(codec?.javaClass, caller?.javaClass, "$field '$text'")
+            assertEquals(codec?.message, caller?.message, "$field '$text'")
+        }
+        assertThrows<IllegalArgumentException> { requirePairRequestText("name", "Owner's phone") }
+    }
+
     /** A protocol v1 pair_request with [text] as its [field] and plain text in the other two. */
     private fun pairRequest(
         field: String,

@@ -50,12 +50,16 @@ internal class SecureChannel(
     private val assembler = EventPartAssembler()
 
     /**
-     * Sends [event] at the next seq. A link that is closing takes nothing; its reader then sees the
-     * link end and says why, so nothing here waits on the answer.
+     * Sends [event] at the next seq, with [raw] as its tail: a protocol v2 `pair_request` carries its
+     * attestation chain there, and no event of a paired session carries one. A link that is closing takes
+     * nothing; its reader then sees the link end and says why, so nothing here waits on the answer.
      */
-    fun send(event: ClientEvent) {
+    fun send(
+        event: ClientEvent,
+        raw: ByteArray = ByteArray(0),
+    ) {
         sentSeq++
-        link.send(noise.encrypt(encodeClientEvent(SESSION_VERSION, sentSeq, event)))
+        link.send(noise.encrypt(encodeClientEvent(SESSION_VERSION, sentSeq, event, raw)))
     }
 
     /**

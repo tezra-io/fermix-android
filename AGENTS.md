@@ -26,9 +26,13 @@ core-protocol/        the wire codec, io.tezra.fermix.protocol (pure JVM): frame
                       event_part runs, the pairing link; gated on the vendored fixtures and schema
 core-transport/       the transport, io.tezra.fermix.transport (Android library): the pinned TLS
                       WebSocket, the candidate race, the network facts; JVM-tested but NetworkWatcher
-core-session/         one paired session, io.tezra.fermix.session (Android library, no android.*,
-                      JVM-tested against a fake daemon): hello, the outbox, cursors and acks,
-                      reconnect reconciliation, keepalive and close codes, the turn machines
+attest/               the device key, io.tezra.fermix.attest (Android library): the hardware gate,
+                      DeviceKeys over AndroidKeyStore, the attestation challenge, key aliases, the
+                      chain's shape check; JVM-tested but the Keystore paths, which are the device gate's
+core-session/         the pairing ceremony and one paired session, io.tezra.fermix.session (Android
+                      library, no android.*, JVM-tested against a fake daemon): Pairing over attest's
+                      DeviceKeyFacade, hello, the outbox, cursors and acks, reconnect reconciliation,
+                      keepalive and close codes, the turn machines
 design/               design section 13.1 as code, io.tezra.fermix.design (Compose library): tokens,
                       FermixTheme, the bundled OFL fonts with SOURCE.json, @FermixPreviews, and the
                       screenshot references in design/src/test/screenshots

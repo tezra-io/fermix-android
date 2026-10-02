@@ -34,6 +34,11 @@ internal class SessionCore(
     /** The watch on the session's scope, which ends the session with it; let go once the session ends. */
     var scopeWatch: DisposableHandle? = null
 
+    /** A pairing's connection the first attempt takes over (Session.adopt); closed if the session ends first. */
+    var adopted: Adopted? = null
+
+    fun takeAdopted(): Adopted? = adopted.also { adopted = null }
+
     /** Milliseconds since the session opened, on its monotonic clock. */
     fun now(): Long = started.elapsedNow().inWholeMilliseconds
 
@@ -54,11 +59,12 @@ internal class SessionCore(
         if (state.value !is SessionState.Ended) state.value = next
     }
 
-    /** The session ends as [ended], unless it ended already; its events end with it. */
+    /** The session ends as [ended], unless it ended already; its events end with it, and an adopted link not taken. */
     fun end(ended: SessionState.Ended) {
         publish(ended)
         events.close()
         scopeWatch?.dispose()
+        takeAdopted()?.won?.close()
     }
 
     fun requireOpen() {

@@ -30,6 +30,9 @@ private const val UNUSED_KEY_BITS = 0b11
 private val PORT = Regex("[1-9][0-9]{0,4}")
 private val FINGERPRINT = Regex("[0-9a-f]{64}")
 
+/** A link version as a plain decimal, at most nine digits so it is an Int; one past 2 is a newer format. */
+private val DECIMAL_VERSION = Regex("[1-9][0-9]{0,8}")
+
 /**
  * A daemon's pairing link, the owner's QR code (PROTOCOL.md "Pairing link"):
  * `fermix://pair?v=…&candidates=…&port=…&tls_fp=…&gateway_pk=…&secret=…&name=…`, and from link
@@ -93,10 +96,15 @@ class PairingLink private constructor(
     }
 }
 
-/** The link's version, written exactly `1` or `2`: the schema's `pairingLink.v` is the string "1". */
+/**
+ * The link's version, written exactly `1` or `2`: the schema's `pairingLink.v` is the string "1". A plain
+ * decimal past 2 is a newer format's, refused as such so the scan can say which side to update.
+ */
 private fun linkVersion(values: Map<String, ByteArray>): Int {
     val text = values["v"]?.let { text("v", it) } ?: throw ProtocolException.MissingParameter("v")
-    return LINK_VERSIONS[text] ?: throw ProtocolException.MalformedParameter("v", "is '$text', not 1 or 2")
+    LINK_VERSIONS[text]?.let { return it }
+    refuseIf(DECIMAL_VERSION.matches(text)) { ProtocolException.NewerLinkVersion(text.toInt()) }
+    throw ProtocolException.MalformedParameter("v", "is '$text', not 1 or 2")
 }
 
 private fun candidates(bytes: ByteArray): List<String> {

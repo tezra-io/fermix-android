@@ -45,11 +45,12 @@ internal val HELLO_ACK =
         mutationHeadSeq = 0uL,
     )
 
-/** One client frame as the daemon reads it. */
+/** One client frame as the daemon reads it, with its raw tail: a `pair_request`'s attestation chain. */
 internal class ClientFrame(
     val v: Int,
     val seq: ULong,
     val event: ClientEvent,
+    val raw: ByteArray = ByteArray(0),
 )
 
 /** A server event's JSON object as the daemon writes it: `t` and its fields, no envelope. */
@@ -90,14 +91,15 @@ internal fun unknownFrame(
 ): ByteArray = Frame("""{"v":2,"t":"$t","seq":$seq,"future":true}""".encodeToByteArray(), ByteArray(0)).encode()
 
 internal fun clientFrame(bytes: ByteArray): ClientFrame {
-    val header = wireJson.parseToJsonElement(Frame.decode(bytes).header.decodeToString()).jsonObject
+    val frame = Frame.decode(bytes)
+    val header = wireJson.parseToJsonElement(frame.header.decodeToString()).jsonObject
     val event = wireJson.decodeFromJsonElement(serializer<ClientEvent>(), JsonObject(header - "v" - "seq"))
     val seq =
         header
             .getValue("seq")
             .jsonPrimitive.content
             .toULong()
-    return ClientFrame(header.getValue("v").jsonPrimitive.int, seq, event)
+    return ClientFrame(header.getValue("v").jsonPrimitive.int, seq, event, frame.raw)
 }
 
 internal fun message(

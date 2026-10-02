@@ -159,6 +159,28 @@ class Session private constructor(
             candidates: List<Candidate>,
             parts: SessionParts,
             scope: CoroutineScope,
+        ): Session = start(instance, candidates, parts, scope, adopted = null)
+
+        /**
+         * [open], but the first attempt takes over [adopted], a pairing's connection just approved, and
+         * sends `hello` on it at its next seq instead of racing (PROTOCOL.md "Noise modes and pairing",
+         * step 3), so the first chat opens without a second handshake. From the second attempt on the
+         * session races [candidates] as [open]'s does. Pairing alone calls it.
+         */
+        internal fun adopt(
+            instance: PairedInstance,
+            candidates: List<Candidate>,
+            parts: SessionParts,
+            scope: CoroutineScope,
+            adopted: Adopted,
+        ): Session = start(instance, candidates, parts, scope, adopted)
+
+        private fun start(
+            instance: PairedInstance,
+            candidates: List<Candidate>,
+            parts: SessionParts,
+            scope: CoroutineScope,
+            adopted: Adopted?,
         ): Session {
             require(candidates.isNotEmpty()) { "a session needs a candidate to race" }
             require(candidates.size <= MAX_CANDIDATES) { "${candidates.size} candidates is past $MAX_CANDIDATES" }
@@ -169,6 +191,7 @@ class Session private constructor(
             requireNotNull(scopeJob) { "a session's scope has a job, whose end ends the session" }
             val confined = dispatcher.limitedParallelism(1)
             val core = SessionCore(instance, parts, candidates)
+            core.adopted = adopted
             // The scope's job completes once every coroutine of the session has, so nothing else runs then.
             core.scopeWatch = scopeJob.invokeOnCompletion { core.end(SessionState.Closed) }
             val requests = Requests(core)

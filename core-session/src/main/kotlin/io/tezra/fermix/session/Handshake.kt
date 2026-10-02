@@ -31,15 +31,39 @@ internal class Handshaken(
 /**
  * One candidate's attempt: the socket, then Noise IK to [gatewayKey] with an empty payload, the protocol
  * v1 daemon's only one. A message 2 that does not authenticate throws NoiseException.AuthenticationFailed,
- * the daemon's identity changing; a close during it throws the close, which the race reads. The timeout
- * may fire even as its block returns, so what the block opens is held outside it, and closed on every
- * path but the one that hands it over.
+ * the daemon's identity changing; a close during it throws the close, which the race reads.
  */
 internal suspend fun handshake(
     dialer: Dialer,
     candidate: Candidate,
     staticKey: StaticKey,
     gatewayKey: ByteArray,
+): Handshaken = handshakeOver(dialer, candidate) { InitiatorHandshake.ik(staticKey, gatewayKey) }
+
+/**
+ * One candidate's pairing attempt (PROTOCOL.md "Noise modes and pairing"): the socket, then the `FXM1·02`
+ * prelude and Noise IKpsk2 to the link's [gatewayKey], with the link's secret as [psk] and an empty
+ * payload. The handshake takes its own copy of [psk] once the socket is open, so the caller zeroes its
+ * own only after the race has ended. Failures are typed as [handshake]'s are; a message 2 that does not
+ * authenticate is, in IKpsk2, also a secret the daemon no longer holds.
+ */
+internal suspend fun pairingHandshake(
+    dialer: Dialer,
+    candidate: Candidate,
+    staticKey: StaticKey,
+    gatewayKey: ByteArray,
+    psk: ByteArray,
+): Handshaken = handshakeOver(dialer, candidate) { InitiatorHandshake.ikpsk2(staticKey, gatewayKey, psk) }
+
+/**
+ * The socket to [candidate], then the handshake [begin] starts on it, both within the connect timeout
+ * (design section 5.1). The timeout may fire even as its block returns, so what the block opens is held
+ * outside it, and closed on every path but the one that hands it over.
+ */
+private suspend fun handshakeOver(
+    dialer: Dialer,
+    candidate: Candidate,
+    begin: () -> InitiatorHandshake,
 ): Handshaken {
     var link: Link? = null
     var noise: NoiseSession? = null
@@ -47,7 +71,7 @@ internal suspend fun handshake(
     try {
         withTimeout(HANDSHAKE_TIMEOUT_MS) {
             val opened = dialer.dial(candidate).also { link = it }
-            noise = ik(opened, staticKey, gatewayKey)
+            noise = noiseOver(opened, begin)
         }
         won = Handshaken(checkNotNull(link), checkNotNull(noise))
         return won
@@ -59,12 +83,11 @@ internal suspend fun handshake(
     }
 }
 
-private suspend fun ik(
+private suspend fun noiseOver(
     link: Link,
-    staticKey: StaticKey,
-    gatewayKey: ByteArray,
+    begin: () -> InitiatorHandshake,
 ): NoiseSession =
-    InitiatorHandshake.ik(staticKey, gatewayKey).use { handshake ->
+    begin().use { handshake ->
         // A link that is closing takes nothing; the receive below then reads why it closed.
         link.send(handshake.writeFirstMessage(ByteArray(0)))
         val second = link.incoming.receiveCatching().getOrNull() ?: throw link.closed.await()
@@ -91,9 +114,11 @@ internal sealed interface HelloOutcome {
 }
 
 /**
- * Sends [hello] at seq 1 and reads the first event back (PROTOCOL.md "Envelope, ordering, and version
- * negotiation"): a `hello_ack` at v2 whose window holds 2, or `unsupported_protocol_version`, which a
- * protocol v1 daemon sends at v1. Anything else is a protocol error.
+ * Sends [hello] at the channel's next seq, 1 on a connection of its own and the one after the pairing's
+ * frames on a connection a pairing hands over, and reads the first event back (PROTOCOL.md "Envelope,
+ * ordering, and version negotiation", "Noise modes and pairing"): a `hello_ack` at v2 whose window holds 2,
+ * or `unsupported_protocol_version`, which a protocol v1 daemon sends at v1. Anything else is a protocol
+ * error.
  */
 internal suspend fun exchangeHello(
     channel: SecureChannel,
@@ -136,13 +161,19 @@ private fun answer(
 }
 
 private fun refusal(error: ServerEvent.Error): HelloOutcome {
-    val direction = error.direction ?: error.maxVersion?.let(::directionOf)
+    val direction = error.refusedDirection()
     return if (direction == null) {
         HelloOutcome.Failed(Ending.ProtocolError("unsupported_protocol_version names no direction"))
     } else {
         HelloOutcome.Refused(error, Ending.Refused(direction))
     }
 }
+
+/**
+ * Which side an `unsupported_protocol_version` refusal says must update: its `direction`, or else what its
+ * window says; null when it says neither.
+ */
+internal fun ServerEvent.Error.refusedDirection(): VersionDirection? = direction ?: maxVersion?.let(::directionOf)
 
 /** A window that ends below protocol v2 is an older daemon's; one that starts above it, a newer one's. */
 private fun directionOf(maxVersion: Int): VersionDirection =
