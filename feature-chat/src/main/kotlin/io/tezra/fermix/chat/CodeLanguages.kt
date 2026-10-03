@@ -33,6 +33,22 @@ private val TINTED: Map<String, SyntaxLanguage> =
 /** The lexer that tints a fence of [language], none for an untinted one. */
 fun tintOf(language: String?): SyntaxLanguage? = language?.let { TINTED[it.lowercase()] }
 
+/**
+ * The most characters a fence holds and is still tinted. The card tints as it composes, so that the tint is in its
+ * first frame, and highlights' work grows faster than the fence. On a laptop's desktop-class core, warm and at best,
+ * it takes about 10 ms at this bound (2 ms at 4 Ki characters, 120 ms at 64 Ki, 2 s at 256 Ki), and the first call
+ * in a process about 110 ms (55 ms at 1 Ki); a phone's core is slower, and is not measured yet. A
+ * folded card tints only the lines it shows, so the whole bound is spent when a card is unfolded or a fence of
+ * fourteen lines or fewer is long. A longer fence is drawn as an untinted language's is.
+ */
+const val TINT_MAX_CHARS = 16_384
+
+/** The lexer that tints [code], a fence of [language]: none for an untinted language, or past [TINT_MAX_CHARS]. */
+fun tintOf(
+    language: String?,
+    code: String,
+): SyntaxLanguage? = if (code.length > TINT_MAX_CHARS) null else tintOf(language)
+
 /** A fence's info string read: the language its chip shows, and the file its header names, when it names one. */
 data class FenceInfo(
     val language: String?,

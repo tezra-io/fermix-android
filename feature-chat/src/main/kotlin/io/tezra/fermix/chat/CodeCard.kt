@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -86,8 +86,8 @@ data class TextActions(
 /**
  * A code card (design section 13.5): `#16171B` in both themes, 16 dp, its header with the language chip, the
  * file it names, Copy and Share; no soft wrap, the code pans; past 14 lines it folds, and a tap on the fold
- * shows it all. The design's lexers that highlights has are tinted (tintOf); the rest stay untinted.
- * [key] keeps whether it is unfolded across a rotation.
+ * shows it all. The design's lexers that highlights has are tinted (tintOf), in a fence of up to TINT_MAX_CHARS;
+ * the rest stay untinted. [key] keeps whether it is unfolded across a rotation.
  */
 @Composable
 internal fun CodeCard(
@@ -109,7 +109,7 @@ internal fun CodeCard(
     ) {
         CodeHeader(info, code, actions)
         Box {
-            CodeBody(tintOf(info.language)?.name, shown)
+            CodeBody(tintOf(info.language, code)?.name, shown)
             if (foldable && !unfolded) Fold(Modifier.align(Alignment.BottomCenter))
         }
         if (foldable) FoldToggle(unfolded, code.lines().size) { unfolded = !unfolded }
@@ -195,14 +195,20 @@ private fun CodeBody(
         LocalMarkdownPadding provides
             markdownPadding(codeBlock = PaddingValues(start = 12.dp, top = 0.dp, end = 12.dp, bottom = 4.dp)),
     ) {
-        MarkdownHighlightedCode(
-            code,
-            lexer,
-            style,
-            builder,
-            showHeader = false,
-            immediate = LocalInspectionMode.current,
-        )
+        // Tinted as it composes, never later on a thread of its own: the tint is in the card's first frame, so no
+        // screenshot or first frame races a scheduler. TINT_MAX_CHARS keeps the work small. The renderer's own
+        // immediate path keeps its code layout, so no pixel moves, but it remembers the tint by the code alone:
+        // the lexer keys it here, so a fence whose language changes is tinted anew.
+        key(lexer) {
+            MarkdownHighlightedCode(
+                code,
+                lexer,
+                style,
+                builder,
+                showHeader = false,
+                immediate = true,
+            )
+        }
     }
 }
 

@@ -6,11 +6,11 @@
 # No job retries, except that ui runs its tests once more when the emulator did not boot, and says so
 # in its summary (section 3's one exception).
 #
-# The contract, build and unit timeouts are twice their budgets in section 3 (2, 8 and 5 minutes):
-# the budget is the target, the timeout the ceiling past which a job is stuck, not slow. The
-# screens timeout is its budget, 8 minutes, as stage A2 set it, and so is ui's, 25 minutes, room for
-# the build, a boot that fails and the second one. The policy check's is its budget, 2 minutes, after a
-# release build that shares the build job's 16.
+# The contract, unit and screens timeouts are twice their budgets in section 3 (2, 5 and 8 minutes):
+# the budget is the target, the timeout the ceiling past which a job is stuck, not slow. The build
+# job's is 30 minutes, as it runs the whole build, which outgrew twice section 3's 8 (below, and among
+# README.md's departures). ui's is its budget, 25 minutes, room for the build, a boot that fails and
+# the second one. The policy check's is its budget, 2 minutes, after 16 for the release build.
 #
 # setup-gradle runs with cache-provider basic, the open-source cache on the GitHub Actions cache,
 # not its default proprietary one. Basic saves ~/.gradle/caches (the dependencies, the build cache
@@ -53,7 +53,8 @@ jobs:
   # dependency matches gradle/verification-metadata.xml; the wrapper jar is Gradle's own.
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 16
+    # 10.8, 14.6, then over 16 minutes (cancelled) as A2 and A3 grew: it runs all of `build`, AGENTS.md's done.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -118,7 +119,7 @@ jobs:
   # The JVM tests: today the build logic's (signing, version), and with stage A1's modules the JVM
   # half of the device gate (design section 12.6). The root `test` does not reach into the included
   # build-logic build, so its tests are named. The build job's `build` runs them as well, through
-  # check; A1 moves the JVM tests to this job alone.
+  # check, on purpose: it is the gate's first line, AGENTS.md's done.
   unit:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -152,7 +153,8 @@ jobs:
   # side. The references go up too, for the HTML report that links to them.
   screens:
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    # 5.3, 5.2, then 6.4 minutes over the last three runs, before A3's cards added 144 references (+20 %).
+    timeout-minutes: 16
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -362,7 +362,9 @@ and are compared with nothing. Roborazzi's own copies from `build/intermediates/
 references are off, so a build never writes build state into the source tree. The references are
 drawn on Linux x86-64, as CI's ubuntu-24.04 runner draws them. Robolectric does not render alike on
 macOS or Windows, so there a verify, and `./gradlew build` with it, is not authoritative; record
-references on Linux only. CI's `screens` job fails on an image that differs from its reference beyond
+references on Linux only. The code card's tint is computed as the card composes, never on a thread of
+its own, so it is in the first frame and its references cannot race a slower runner (`CodeCardTest`).
+CI's `screens` job fails on an image that differs from its reference beyond
 Roborazzi's default tolerance: a pixel whose RGBA moves by less than 0.007 (on 0 to 1) counts as
 unchanged, so a colour nudged by a step or two passes there and fails its value test in
 `FermixColorsTest` instead. A failure is reported under the name of its preview, which its twelve
@@ -737,7 +739,8 @@ Each top-level fence and table is a card grouped under the bubble (`segmentsOf`;
 parts from its last settled card on are read again, `segmentsAfter`), and only the answer's last part streams,
 so the prose above a fence that closed or a table that formed is sealed at once: the code card, `#16171B` in both themes, with its language chip, Copy and
 Share, no soft wrap, folded past 14 lines, and tinted by highlights 1.1.0 for Kotlin, Swift,
-JavaScript/TypeScript, Python and shell; the table card, flat, figures (times, counts, amounts, a number
+JavaScript/TypeScript, Python and shell from its first frame, in a fence of up to 16,384 characters;
+the table card, flat, figures (times, counts, amounts, a number
 with a short unit) in mono to the right, past four columns in columns as wide as their words, which share the
 card's room when they need less and pan when they need more, a cell past three lines opening whole. A job's
 tag stands above an answer's first part and the cursor after its last, whatever they are, and an answer made
@@ -857,6 +860,12 @@ owner to settle:
 - A refused item has both section 13.5's error card ("Retry sending") and section 13.6's tap menu ("Try
   again" · "Remove from outbox"); the canon asks for one word.
 - highlights 1.1.0 has no lexer for Elixir, JSON, YAML, SQL or diff, so those fences are mono, untinted.
+- A fence of more than 16,384 characters (`TINT_MAX_CHARS`) is untinted too, drawn as an untinted language's.
+  The card tints as it composes, so that the tint is in its first frame, and highlights' work grows faster
+  than the fence, where a reply may hold 1 MiB: on a laptop's desktop-class core, warm and at best, about 10 ms
+  at that bound, 2 ms at 4 Ki characters, 120 ms at 64 Ki and 2 s at 256 Ki, and about 110 ms for the first
+  call in a process. A phone's figures are not measured yet, and may argue for a smaller bound. A folded card
+  tints only the lines it shows. Section 13.5 names no size.
 - Each top-level fence and table is cut out of the answer before the renderer (`segmentsOf`), to group it
   as a card under its bubble as the canon draws; the renderer parses each prose part again, so an answer is
   parsed twice, and the renderer's own fence and table components draw only nested ones.
@@ -1069,6 +1078,13 @@ also records only what this machine resolved. `aapt2` is resolved per operating 
 that the linux, osx and windows `aapt2` jars are all still listed; add any that went missing, with
 the sha256 of the jar from Google's Maven repository. The file trusts without a checksum only the
 `-sources` and `-javadoc` jars an IDE fetches for reading, which the build never runs.
+
+Where CI departs from CI/CD design section 3, for the owner to settle:
+
+- Section 3 budgets `build` at 8 minutes, for compiling, lint, detekt, ktlint and the checksums. CI's build
+  job runs all of `./gradlew build`, the done above and the gate's first line, so it runs the JVM tests and
+  the screenshots too, as `unit` and `screens` do. It took 10.8 and then 14.6 minutes, and was cancelled at
+  16 as stages A2 and A3 grew. Its timeout is 30 minutes.
 
 ## Instrumented tests
 

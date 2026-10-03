@@ -39,6 +39,15 @@ class CodeLanguagesTest {
     }
 
     @Test
+    fun `a fence is tinted up to TINT_MAX_CHARS characters, and past them it is not`() {
+        val atBound = "val x = 1\n".repeat(TINT_MAX_CHARS / 10 + 1).take(TINT_MAX_CHARS)
+        assertEquals(SyntaxLanguage.KOTLIN, tintOf("kotlin", atBound))
+        assertNull(tintOf("kotlin", atBound + "1"))
+        assertNull(tintOf("elixir", "def export(report), do: report"))
+        assertNull(tintOf(null, "val x = 1"))
+    }
+
+    @Test
     fun `a fence's info string gives its language and the file it names`() {
         assertEquals(FenceInfo("elixir", "report_job.ex"), fenceInfo("elixir report_job.ex"))
         assertEquals(FenceInfo("kotlin", "Main.kt"), fenceInfo("kotlin:Main.kt"))
