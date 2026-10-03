@@ -144,7 +144,7 @@ class ScreenWiringTest {
     }
 
     /** The app's sink over [store], its chats' folds on a clock that stands still. */
-    private fun events(store: InstanceStore) = SessionEvents(store, databases, ChatFolds(TestClock) { 0uL })
+    private fun events(store: InstanceStore) = SessionEvents(store, databases, ChatFolds(TestClock) { 0uL }, NoAlerts)
 
     private suspend fun TestScope.store(): InstanceStore {
         val records = instanceDataStore(File(directory, "instances.json"), backgroundScope)

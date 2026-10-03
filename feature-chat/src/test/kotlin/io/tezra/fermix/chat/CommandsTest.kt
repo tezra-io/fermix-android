@@ -2,7 +2,9 @@ package io.tezra.fermix.chat
 
 import io.tezra.fermix.protocol.ClientEvent
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /** The slash palette and what the composer sends (design section 13.6). */
@@ -31,6 +33,15 @@ class CommandsTest {
         assertEquals(msg("c4", "Restart the worker"), requestOf("Restart the worker", COMMANDS, "c4", PROFILE))
         assertNull(requestOf("   ", COMMANDS, "c5", PROFILE))
         assertEquals(ClientEvent.Command("c6", PROFILE, "model", "reset"), resetModel("c6", PROFILE))
+    }
+
+    @Test
+    fun `the model command alone, by its name or an alias, asks for the models, and with words it does not`() {
+        listOf("/model", " /model ", "/m", "/MODEL").forEach { assertTrue(asksForModels(it, COMMANDS), it) }
+        val others = listOf("/model reset", "/m\nopus", "/stop", "model", "/")
+        others.forEach { assertFalse(asksForModels(it, COMMANDS), it) }
+        val noModel = COMMANDS.filterNot { it.name == "model" }
+        assertFalse(asksForModels("/model", noModel), "a daemon with no model command")
     }
 
     @Test

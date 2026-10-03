@@ -38,6 +38,8 @@ abstract class ProfileDatabase : RoomDatabase() {
 
     internal abstract fun cache(): CacheDao
 
+    internal abstract fun rowEdits(): RowEditsDao
+
     internal abstract fun outbox(): OutboxDao
 
     /**

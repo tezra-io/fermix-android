@@ -27,7 +27,8 @@ private data class ChatOf(
  */
 class OnScreenChats(
     private val wait: Long = LISTED_WAIT_MILLIS,
-) : ChatOnScreen {
+) : ChatOnScreen,
+    ChatShowing {
     private val listed = MutableStateFlow<Map<ChatOf, ULong>>(emptyMap())
 
     init {
@@ -43,6 +44,11 @@ class OnScreenChats(
         val chat = ChatOf(instanceId, profileId)
         return ChatPresence { upTo -> listed.update { if (upTo == null) it - chat else it + (chat to upTo) } }
     }
+
+    override fun isOnScreen(
+        instanceId: String,
+        profileId: String,
+    ): Boolean = ChatOf(instanceId, profileId) in listed.value
 
     override suspend fun shows(
         instanceId: String,

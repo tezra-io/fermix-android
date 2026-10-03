@@ -1,9 +1,11 @@
 package io.tezra.fermix.data
 
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.RequestFailure
+import io.tezra.fermix.session.RowEdits
 import io.tezra.fermix.session.SessionStore
 import io.tezra.fermix.session.StoredCursors
 import kotlinx.serialization.serializer
@@ -13,11 +15,12 @@ import kotlinx.serialization.serializer
  * opening one makes its folder, which the main thread a pairing starts on never does. Each call is one
  * statement or one transaction, so it is written whole or not at all; a write that finds the cursors row
  * missing fails. The rows a session announces are persisted by the app's Announcer through
- * [ProfileDatabase.timeline], the cache this store's mutations and rebuild act on.
+ * [ProfileDatabase.timeline], the cache this store's mutations, rebuild and row edits ([RoomRowEdits]) act on.
  */
 class RoomSessionStore(
     opened: Lazy<ProfileDatabase>,
-) : SessionStore {
+) : SessionStore,
+    RowEdits by RoomRowEdits(opened) {
     constructor(database: ProfileDatabase) : this(lazyOf(database))
 
     private val cache by lazy { opened.value.cache() }
@@ -79,4 +82,21 @@ internal fun OutboxEntity.toItem(): OutboxItem {
     val item = OutboxItem(request, failure, written)
     check(item.clientMsgId == clientMsgId) { "outbox row $clientMsgId holds ${item.clientMsgId}" }
     return item
+}
+
+/** A reaction or a link preview on the row [opened]'s cache holds (RowEdits), each one transaction. */
+internal class RoomRowEdits(
+    opened: Lazy<ProfileDatabase>,
+) : RowEdits {
+    private val edits by lazy { opened.value.rowEdits() }
+
+    override suspend fun applyReaction(
+        clientMsgId: String,
+        emoji: String,
+    ): Boolean = edits.applyReaction(clientMsgId, emoji)
+
+    override suspend fun addLinkPreview(
+        serverSeq: ULong,
+        card: LinkPreviewCard,
+    ): Boolean = edits.addLinkPreview(serverSeq.toColumn(), card)
 }

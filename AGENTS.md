@@ -166,6 +166,18 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   only once the run and every request made before it (`send`, `retry`, `markRead`, `remove`, in the caller's
   coroutine) have ended. A pairing's session is the supervisor's only from `adopt`, and "Pair again" merges
   only into a row in a trust state, whose run is over.
+- The phone reaches no address but its daemon's. A link preview's thumbnail, like any blob, comes only
+  through `Session.fetchMedia`, never from the URL an event names, and `feature-chat`'s own code holds no
+  HTTP client, socket, URL fetch or web view (`ChatMediaTest` scans its sources and build script, and the
+  class names its compiled code refers to). An approval's token and routes stay in core-session, which
+  answers a card by its id. Its answer travels as an outbox `command` (`approval-answer:`), which holds the
+  token until the daemon accepts it and which the chat never draws; the daemon's row of it is kept without
+  its words (`keptMessage`), so no cache, announcement or index holds the token, and no search shows it.
+- In `src/sharedTest`, detekt's `TooManyFunctions` applies, as its default excludes only `test` and
+  `androidTest`: a fake of a wide interface delegates a part (`SessionStore, RowEdits by NoRowEdits`). The
+  type-resolving tasks `build` runs (`detektDebug`, `detektRelease`, `detektDebugUnitTest`,
+  `detektDebugAndroidTest`) find what a bare `detekt` does not, `InjectDispatcher` and
+  `ImplicitDefaultLocale` among them, so check with them.
 - A permission the app starts to request lands in `policy/permissions.txt` in the same change, with
   the design section that asks for it; CI's `policy` job fails a release APK whose permissions differ
   from that file's in either direction (`scripts/check_release_policy.sh`).

@@ -190,8 +190,11 @@ internal fun makeDirectory(directory: File) {
     if (!directory.mkdirs() && !directory.isDirectory) throw IOException("could not make $directory")
 }
 
+/** Whether [name] can name a cached blob: a SHA-256 in lowercase hex, which [MediaCache.get] and put require. */
+fun isMediaName(name: String): Boolean = SHA256_HEX.matches(name)
+
 private fun requireName(sha256: String) {
-    require(SHA256_HEX.matches(sha256)) { "a cached blob is named by a SHA-256 in lowercase hex" }
+    require(isMediaName(sha256)) { "a cached blob is named by a SHA-256 in lowercase hex" }
 }
 
 private fun delete(file: File) {

@@ -5,8 +5,8 @@ import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.session.TimelineRow
 
 /**
- * What follows a row with no row of its own: the notices and model lines after the row that was newest as
- * they came, and each turn's ending after its last sealed bubble, or else its request's row, or else the
+ * What follows a row with no row of its own: the notices, model lines and approval cards after the row that
+ * was newest as they came, and each turn's ending after its last sealed bubble, or else its request's row, or else the
  * row that was newest as it ended. An ending whose last bubble's row has not come yet goes with the turn's
  * bubbles at the bottom (liveItems). A request the daemon refused before `accepted` shows on its outbox item,
  * not as the turn's error card.
@@ -31,7 +31,7 @@ internal fun extras(
                     Placed(endingAnchor(turn, ascending), 1, item) to turn.ending?.wallMs
                 }
             }
-    return (pills + endings).sortedBy { it.second ?: Long.MAX_VALUE }.map { it.first }
+    return (pills + endings + approvalItems(inputs.live)).sortedBy { it.second ?: Long.MAX_VALUE }.map { it.first }
 }
 
 internal fun pillItems(pill: LivePill): List<Pair<Placed, Long?>> {

@@ -1,6 +1,7 @@
 package io.tezra.fermix.session
 
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
 
 /**
@@ -53,13 +54,39 @@ data class OutboxItem(
 }
 
 /**
+ * What the daemon puts on a row it sent already, kept on the row the cache holds (SessionStore): each call is
+ * one write, and false when the cache holds no such row, whose history carries it from then on.
+ */
+interface RowEdits {
+    /**
+     * A `reaction` on the owner's message [clientMsgId]: the cached row takes `{"emoji": [emoji]}` as its
+     * metadata's `reaction`, its other metadata kept, as the mutation that persists it will put it (design
+     * section 7, `reaction` durability, with its `ts`).
+     */
+    suspend fun applyReaction(
+        clientMsgId: String,
+        emoji: String,
+    ): Boolean
+
+    /**
+     * A `link_preview` on row [serverSeq]: the cached row keeps [card] among its link previews, once per url
+     * and at most four (PROTOCOL.md "Link previews").
+     */
+    suspend fun addLinkPreview(
+        serverSeq: ULong,
+        card: LinkPreviewCard,
+    ): Boolean
+}
+
+/**
  * What one (instance, profile) persists for its session; the data layer implements it over its Room
  * database. Each call is one write the store makes whole or not at all. One session at a time owns a
  * store: the data layer opens at most one [Session] per (instance, profile), since two would race,
  * resend the same outbox and announce the same rows. The session calls it from its own dispatcher,
- * and an exception from it fails the session: its state is lost data otherwise.
+ * and an exception from it fails the session: its state is lost data otherwise. The edits a live event
+ * makes to a cached row are its [RowEdits].
  */
-interface SessionStore {
+interface SessionStore : RowEdits {
     suspend fun cursors(): StoredCursors
 
     /**

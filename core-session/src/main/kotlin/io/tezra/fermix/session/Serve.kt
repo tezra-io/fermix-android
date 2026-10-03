@@ -84,7 +84,10 @@ private suspend fun act(
 ): Ending =
     try {
         reconciler.reconcile(ack)
-        repeat(MAX_EVENTS_PER_CONNECTION) { dispatch.event(inbox.next()) }
+        repeat(MAX_EVENTS_PER_CONNECTION) {
+            val frame = inbox.next()
+            dispatch.event(frame.event, frame.raw)
+        }
         Ending.LifetimeReached
     } catch (ended: ConnectionEnded) {
         ended.ending

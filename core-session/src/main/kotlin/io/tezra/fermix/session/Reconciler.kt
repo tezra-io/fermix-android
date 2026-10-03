@@ -2,6 +2,7 @@ package io.tezra.fermix.session
 
 import io.tezra.fermix.protocol.CandidateScope
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.Decoded
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.MAX_CANDIDATES
@@ -41,9 +42,10 @@ internal class Inbox(
     private val dispatch: Dispatch,
     private val now: () -> Long,
 ) {
-    suspend fun next(): ServerEvent =
+    /** The next event with its envelope: a blob's chunk carries its bytes in the frame's raw tail. */
+    suspend fun next(): Decoded<ServerEvent> =
         when (val input = inputs.receive()) {
-            is Input.Frame -> input.decoded.event
+            is Input.Frame -> input.decoded
             is Input.End -> throw ConnectionEnded(input.ending)
         }
 
@@ -60,12 +62,12 @@ internal class Inbox(
         var waitedMs = 0L
         repeat(MAX_EVENTS_BEFORE_ANSWER) {
             val from = now()
-            val event =
+            val frame =
                 withTimeoutOrNull(ANSWER_TIMEOUT_MS - waitedMs) { next() }
                     ?: throw SessionProtocolError("no $what within $ANSWER_TIMEOUT_MS ms")
             waitedMs += now() - from
-            match(event)?.let { found -> return found }
-            dispatch.event(event)
+            match(frame.event)?.let { found -> return found }
+            dispatch.event(frame.event, frame.raw)
         }
         throw SessionProtocolError("no $what in $MAX_EVENTS_BEFORE_ANSWER events")
     }

@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import io.tezra.fermix.design.Sender
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.linkPreviewsOf
 
 /**
  * When each row came. A message carries its time; a reply's bubble carries none (TimelineRow.Reply), so it
@@ -34,7 +35,12 @@ internal fun rowTimes(
     }
 }
 
-/** A row's message, none for a row with no words to show yet (a media row is Task 13's). */
+/**
+ * A row's message, none for a row with no words to show yet (a media row is Task 13's), none for an approval's
+ * answer: the daemon writes it as the owner's row, and the card's receipt is all the chat shows of it
+ * (core-session's APPROVAL_ANSWER_PREFIX); and none for a model picked on the sheet, which the daemon's own line
+ * tells of (MODEL_PICK_PREFIX).
+ */
 internal fun rowItem(
     row: TimelineRow,
     wallMs: Long?,
@@ -45,7 +51,7 @@ internal fun rowItem(
             is TimelineRow.Message -> messageOf(row, wallMs)
             is TimelineRow.Reply -> replyOf(row, wallMs)
         }
-    if (message.text.isBlank()) return null
+    if (message.text.isBlank() || isQuietRow(row)) return null
     return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, live), message))
 }
 
@@ -66,6 +72,8 @@ internal fun messageOf(
         clientMsgId = message.clientMsgId,
         turnId = metadata?.string(TURN_ID_KEY),
         route = metadata?.let(::routeOf),
+        reaction = if (user) metadata?.let(::reactionOf) else null,
+        previews = shownPreviews(linkPreviewsOf(row)),
     )
 }
 
@@ -81,6 +89,7 @@ internal fun replyOf(
         seq = row.serverSeq,
         turnId = row.turnId,
         route = row.route,
+        previews = shownPreviews(linkPreviewsOf(row)),
     )
 
 /**

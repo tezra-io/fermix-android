@@ -82,22 +82,30 @@ internal fun PaletteSheet(
 }
 
 /**
- * The dock (design section 13.6): the composer in the 640 dp column above the navigation bar and the keyboard.
- * While the palette is open it is the sheet's foot: the sheet's tone runs behind it to the window's bottom edge
- * and the field sits on the canvas inside it (the canon's `.sheet .cmp`), the scrim beside it.
+ * The dock (design section 13.6): the composer in the 640 dp column above the navigation bar and the keyboard,
+ * the model's hint over it (ComposerHint). While the palette is open it is the sheet's foot: the sheet's tone
+ * runs behind it to the window's bottom edge and the field sits on the canvas inside it (the canon's
+ * `.sheet .cmp`), the scrim beside it. While search is open it is search's: nothing in its list, and the
+ * stepping bar in the chat (design section 13.7).
  */
 @Composable
 internal fun Dock(
     ui: ChatUi,
     actions: ChatScreenActions,
 ) {
+    val search = ui.search
+    if (search != null) {
+        if (search.mode == SearchMode.IN_CHAT) StepBar(search, actions.search)
+        return
+    }
     val sheet = if (ui.palette) Modifier.background(LocalFermixColors.current.tonalSolid) else Modifier
+    val state = ui.state
     FermixColumn(ColumnWidth.Wide) {
         Column(modifier = sheet.navigationBarsPadding().imePadding()) {
+            if (!ui.palette) ComposerHint(state.model, state.switchPending)
             Composer(
                 ui.field,
-                ui.state.header.record.title,
-                ui.state.turnRuns && ui.field.text.isBlank(),
+                ComposerLook(state.header.record.title, state.turnRuns && ui.field.text.isBlank(), state.model),
                 actions.composer,
                 inSheet = ui.palette,
             )

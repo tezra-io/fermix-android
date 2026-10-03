@@ -379,10 +379,15 @@ fun PalettePreview() {
 fun BannersPreview() {
     FermixPreviewTheme {
         Column {
-            ChatBar(ChatHeader(sample(), Link.WaitingForNetwork, thinking = false), onBack = {}, onTitle = {})
+            ChatBar(
+                ChatHeader(sample(), Link.WaitingForNetwork, thinking = false),
+                onBack = {},
+                onTitle = {},
+                onSearch = {},
+            )
             BannerLine(Banner.OFFLINE, HOST, onUnreachable = {})
             Spacer(modifier = Modifier.height(24.dp))
-            ChatBar(ChatHeader(sample(), Link.CannotReach, thinking = false), onBack = {}, onTitle = {})
+            ChatBar(ChatHeader(sample(), Link.CannotReach, thinking = false), onBack = {}, onTitle = {}, onSearch = {})
             BannerLine(Banner.UNREACHABLE, HOST, onUnreachable = {})
         }
     }

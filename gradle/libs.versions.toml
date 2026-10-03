@@ -30,6 +30,10 @@ androidxTestEspresso = "3.7.0"
 # The window size classes of design section 13.11. Compose UI 1.12.1 already resolves window 1.5.0,
 # whose window-core computes a class from the window's size in dp, with no Activity, so previews have one.
 androidxWindow = "1.5.0"
+# A link preview's tap opens a Custom Tab tinted with the instance's colour (design section 13.5): AndroidX
+# Browser's CustomTabsIntent. 1.10.0 (2026-03-25) is the newest release; it declares no permission and no
+# <queries>, as launching a tab needs neither.
+androidxBrowser = "1.10.0"
 # The screenshot tests of the `screens` job (CI/CD design section 3): Roborazzi generates a test for
 # each preview, found by ComposablePreviewScanner, and renders it on Robolectric's native graphics.
 # The official Compose Preview Screenshot Testing plugin needs android.experimental.enableScreenshotTest,
@@ -92,6 +96,7 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-window-core = { module = "androidx.window:window-core", version.ref = "androidxWindow" }
+androidx-browser = { module = "androidx.browser:browser", version.ref = "androidxBrowser" }
 markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
 markdown-renderer-code = { module = "com.mikepenz:multiplatform-markdown-renderer-code", version.ref = "markdownRenderer" }
 highlights = { module = "dev.snipme:highlights", version.ref = "highlights" }

@@ -119,6 +119,9 @@ internal class Connector(
                 serve(core, live, requests, accepted.ack)
             } finally {
                 core.live = null
+                // A one-shot waits on this connection alone: its caller hears that it ended.
+                live.asked.interrupt()
+                live.fetches.interrupt()
             }
         return ended(candidate, link, ending, upMs = core.now() - upAt)
     }

@@ -89,6 +89,9 @@ class ChatComposer(
         replace(pickedCommand(command))
     }
 
+    /** Whether the field holds the model command alone, by its name or an alias (asksForModels). */
+    fun asksForModels(): Boolean = asksForModels(text.value.text, commands())
+
     /**
      * Send: the field's request, the field emptied once the session took it, unless the owner typed on; then
      * [onTaken], where the screen plays send's haptic, which says something went (design section 13.1). A

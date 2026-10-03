@@ -22,8 +22,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.GroupPosition
@@ -61,9 +64,12 @@ internal fun MessageItem(
             onLongClick = { context.onLongPress(item) },
         )
     Box(modifier = modifier.fillMaxWidth().background(wash)) {
-        when (message.sender) {
-            Sender.User -> UserMessage(message, context, gestures)
-            Sender.Agent -> AgentMessage(item, context, gestures)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            when (message.sender) {
+                Sender.User -> UserMessage(message, context, gestures)
+                Sender.Agent -> AgentMessage(item, context, gestures)
+            }
+            LinkPreviews(message.previews, message.sender, context)
         }
         if (context.menuFor == item.key) {
             Box(modifier = Modifier.align(Alignment.BottomEnd)) {
@@ -81,6 +87,7 @@ internal fun MessageItem(
  * The owner's message; [modifier], its tap and long-press, goes on the bubble, not on the row it sits in. Its
  * stamp floats on the text's last line when it fits (StampedText). Under it, a queued or pending item says so,
  * and a refused one says "Not sent. Tap to retry sending." in the error colour, its bubble keeping the clock.
+ * The host's reaction hangs over the bubble's bottom-left, popping in only when it lands while it is shown.
  */
 @Composable
 private fun UserMessage(
@@ -89,30 +96,21 @@ private fun UserMessage(
     modifier: Modifier,
 ) {
     val colors = LocalFermixColors.current
+    val firstReaction = remember { message.reaction }
+    val ring = ringAlpha(context.highlight?.seq?.let { it == message.seq } == true)
+    val shape = bubbleShape(Sender.User, message.position)
+    val bubble = @Composable { UserBubble(message, context, modifier.pulseRing(ring, colors.accentInk, shape)) }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         Box(
             modifier = Modifier.fillMaxWidth(FermixSpacing.USER_BUBBLE_MAX_WIDTH),
             contentAlignment = Alignment.CenterEnd,
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .alpha(if (message.delivery == Delivery.QUEUED) QUEUED_ALPHA else 1f)
-                        .clip(bubbleShape(Sender.User, message.position))
-                        .background(colors.accent)
-                        .then(modifier)
-                        .padding(
-                            horizontal = FermixSpacing.bubblePaddingHorizontal,
-                            vertical = FermixSpacing.bubblePaddingVertical,
-                        ),
-            ) {
-                val words = @Composable { onLayout: (TextLayoutResult) -> Unit ->
-                    Text(message.text, style = FermixType.body, color = colors.onAccent, onTextLayout = onLayout)
-                }
-                if (message.delivery == Delivery.QUEUED) {
-                    words {}
-                } else {
-                    StampedText(words) { Stamp(message, context, colors.onAccent) }
+            val reaction = message.reaction
+            if (reaction == null) {
+                bubble()
+            } else {
+                ReactedBubble(message.previews.isNotEmpty(), bubble) {
+                    ReactionChip(reaction, pops = reaction != firstReaction)
                 }
             }
         }
@@ -121,6 +119,40 @@ private fun UserMessage(
             Delivery.PENDING -> StateLine(stringResource(R.string.chat_queued), error = false)
             Delivery.FAILED -> StateLine(stringResource(R.string.chat_not_sent), error = true)
             else -> Unit
+        }
+    }
+}
+
+/** The owner's bubble: the accent, the words and the stamp; [modifier] holds the gestures and the jump's ring. */
+@Composable
+private fun UserBubble(
+    message: ShownMessage,
+    context: TimelineContext,
+    modifier: Modifier,
+) {
+    val colors = LocalFermixColors.current
+    Box(
+        modifier =
+            modifier
+                .alpha(if (message.delivery == Delivery.QUEUED) QUEUED_ALPHA else 1f)
+                .clip(bubbleShape(Sender.User, message.position))
+                .background(colors.accent)
+                .padding(
+                    horizontal = FermixSpacing.bubblePaddingHorizontal,
+                    vertical = FermixSpacing.bubblePaddingVertical,
+                ),
+    ) {
+        // The words search marks, washed as the canon's `.b mark` but in the bubble's own ink: the canon's
+        // accentInk is the accent itself in the light theme, which would wash the bubble in its own colour.
+        val wash = SpanStyle(background = colors.onAccent.copy(alpha = MARK_ALPHA))
+        val text = withMarks(AnnotatedString(message.text), context.marksIn(message), wash)
+        val words = @Composable { onLayout: (TextLayoutResult) -> Unit ->
+            Text(text, style = FermixType.body, color = colors.onAccent, onTextLayout = onLayout)
+        }
+        if (message.delivery == Delivery.QUEUED) {
+            words {}
+        } else {
+            StampedText(words) { Stamp(message, context, colors.onAccent) }
         }
     }
 }
@@ -237,7 +269,9 @@ private fun CardPart(
     context: TimelineContext,
     card: @Composable () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    val ring = ringAlpha(context.highlight?.seq?.let { it == message.seq } == true)
+    val ink = LocalFermixColors.current.accentInk
+    Column(modifier = Modifier.fillMaxWidth().pulseRing(ring, ink, FermixShapes.card)) {
         if (place.first) message.job?.let { JobTag(it) }
         card()
         if (place.last && message.streaming) BeamCursor(Modifier.padding(top = 2.dp))
@@ -255,9 +289,11 @@ private fun ProseBubble(
 ) {
     val colors = LocalFermixColors.current
     val streams = message.streaming && place.last
+    val ring = ringAlpha(context.highlight?.seq?.let { it == message.seq } == true)
     Column(
         modifier =
             Modifier
+                .pulseRing(ring, colors.accentInk, bubbleShape(Sender.Agent, place.position))
                 .clip(bubbleShape(Sender.Agent, place.position))
                 .background(colors.agentBubble)
                 .padding(
@@ -266,7 +302,7 @@ private fun ProseBubble(
                 ),
     ) {
         if (place.first) message.job?.let { JobTag(it) }
-        Prose(prose.markdown, streams, message.resets, context.text)
+        Prose(prose.markdown, streams, message.resets, context.text, context.marksIn(message))
         // The renderer places the cursor after a paragraph's words and an open fence's chip; below anything else.
         val below = streams && remember(prose.markdown) { cursorHome(prose.markdown) == CursorHome.OTHER }
         if (below) BeamCursor(Modifier.padding(top = 2.dp))
@@ -299,46 +335,4 @@ private fun JobTag(job: String) {
         color = LocalFermixColors.current.inkSecondary,
         modifier = Modifier.padding(bottom = 2.dp),
     )
-}
-
-/**
- * A bubble's time and, on the owner's, its mark (design section 13.5): the clock until `accepted`, then one
- * tick and never two; a refused one keeps the clock, as the canon draws it; at 60 %, in the bubble's ink.
- */
-@Composable
-private fun Stamp(
-    message: ShownMessage,
-    context: TimelineContext,
-    ink: Color,
-    modifier: Modifier = Modifier,
-) {
-    val time = message.wallMs?.let { timeOf(it, context) }
-    Row(
-        modifier = modifier.padding(top = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        time?.let { Text(it, style = FermixType.labelSmall, color = ink.copy(alpha = FermixSpacing.TIMESTAMP_ALPHA)) }
-        DeliveryMark(message.delivery, ink)
-    }
-}
-
-@Composable
-private fun DeliveryMark(
-    delivery: Delivery,
-    ink: Color,
-) {
-    val faded = ink.copy(alpha = FermixSpacing.TIMESTAMP_ALPHA)
-    val (icon, label, tint) =
-        when (delivery) {
-            Delivery.SENDING, Delivery.PENDING -> Triple(R.drawable.ic_chat_clock, R.string.chat_mark_sending, faded)
-
-            Delivery.DELIVERED -> Triple(R.drawable.ic_chat_check, R.string.chat_mark_delivered, faded)
-
-            // The canon keeps the clock; the failure is said under the bubble, on the canvas (StateLine).
-            Delivery.FAILED -> Triple(R.drawable.ic_chat_clock, R.string.chat_mark_failed, faded)
-
-            Delivery.NONE, Delivery.QUEUED -> return
-        }
-    Icon(painterResource(icon), stringResource(label), tint = tint, modifier = Modifier.size(12.dp))
 }

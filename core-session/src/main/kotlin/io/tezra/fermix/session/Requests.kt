@@ -89,34 +89,51 @@ internal class Requests(
         return store.withdraw(clientMsgId)
     }
 
-    /** `error{client_msg_id}`: the request failed, before `accepted` or after it, and so did its turn. */
+    /**
+     * `error{client_msg_id}`: the request failed, before `accepted` or after it, and so did its turn. An
+     * approval's answer runs no turn of its own; the turn it answers goes on with or without it.
+     */
     suspend fun failed(
         clientMsgId: String,
         error: ServerEvent.Error,
     ) {
         val failure = RequestFailure(error.code, error.message)
+        if (isApprovalAnswer(clientMsgId)) return answerFailed(clientMsgId, failure)
         val inOutbox = markFailedIfHeld(clientMsgId, failure)
         core.emit(SessionEvent.RequestFailed(clientMsgId, failure, inOutbox))
         core.turns { it.apply(TurnEvent.TurnError(turnIdOf(clientMsgId), error.code, error.message)) }
     }
 
     /**
-     * A `request_status_page`: a request the daemon has is no longer the outbox's, unless it failed. A
-     * shown turn's request left the outbox at `accepted`, so only the outbox's own are marked failed; a
-     * failed one is told as `error{client_msg_id}` tells it, whether the outbox holds it or not; the app
-     * hears every outcome, and each request's turn moves as its state says (statusTurnEvent).
+     * A `request_status_page`: a request the daemon has is no longer the outbox's, unless it failed (outboxOf);
+     * the app hears every outcome, and each request's turn moves as its state says (statusTurnEvent). An
+     * approval's answer runs no turn, so its state moves none.
      */
     suspend fun status(page: ServerEvent.RequestStatusPage) {
         page.requests.forEach { outcome ->
-            if (outcome.status == RequestState.FAILED) {
-                val failure = RequestFailure(outcome.error ?: REQUEST_FAILED, FAILED_WHILE_AWAY)
-                val inOutbox = markFailedIfHeld(outcome.clientMsgId, failure)
-                core.emit(SessionEvent.RequestFailed(outcome.clientMsgId, failure, inOutbox))
-            } else {
-                store.dequeue(outcome.clientMsgId)
-            }
+            val answer = isApprovalAnswer(outcome.clientMsgId)
+            outboxOf(outcome, answer)
             core.emit(SessionEvent.RequestStatus(outcome))
-            core.turns { it.apply(statusTurnEvent(outcome)) }
+            if (!answer) core.turns { it.apply(statusTurnEvent(outcome)) }
+        }
+    }
+
+    /**
+     * What a request's state at a reconnect does to the outbox: one the daemon has leaves it, unless it failed.
+     * A shown turn's request left the outbox at `accepted`, so only the outbox's own are marked failed; a failed
+     * one is told as `error{client_msg_id}` tells it, whether the outbox holds it or not, and a failed
+     * approval's answer as [failed] tells it.
+     */
+    private suspend fun outboxOf(
+        outcome: RequestOutcome,
+        answer: Boolean,
+    ) {
+        val clientMsgId = outcome.clientMsgId
+        val failure = RequestFailure(outcome.error ?: REQUEST_FAILED, FAILED_WHILE_AWAY)
+        when {
+            outcome.status != RequestState.FAILED -> store.dequeue(clientMsgId)
+            answer -> answerFailed(clientMsgId, failure)
+            else -> core.emit(SessionEvent.RequestFailed(clientMsgId, failure, markFailedIfHeld(clientMsgId, failure)))
         }
     }
 
@@ -128,6 +145,20 @@ internal class Requests(
         val held = store.outbox().any { it.clientMsgId == clientMsgId }
         if (held) store.markFailed(clientMsgId, failure)
         return held
+    }
+
+    /**
+     * An approval's answer refused or failed: it leaves the outbox, the token with it, and its card may be
+     * answered again, its buttons its retry (Session.answerApproval). The app hears it as a request that left
+     * the outbox; the turn it answers goes on with or without it.
+     */
+    private suspend fun answerFailed(
+        clientMsgId: String,
+        failure: RequestFailure,
+    ) {
+        core.approvals.answerRefused(clientMsgId)
+        store.dequeue(clientMsgId)
+        core.emit(SessionEvent.RequestFailed(clientMsgId, failure, inOutbox = false))
     }
 
     /** The requests `request_status` asks after: every outbox item not failed, then [turnRequests]. */

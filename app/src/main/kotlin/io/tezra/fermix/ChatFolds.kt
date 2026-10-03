@@ -17,8 +17,9 @@ import kotlinx.coroutines.flow.update
  * Each instance's session events folded into what its chat shows besides its rows (feature-chat's ChatLive):
  * the card, the live bubbles, the endings, `accepted` and the centred lines, kept for the process's life, so a
  * chat opened mid-turn shows the turn as it stands. Each event is read at its [Moment] on [clock], over the
- * scope its session was connected over then; a line with no row of its own, a notice or a turn's ending, is
- * placed after the newest row the chat had kept, which [newestSeq] reads from the profile's database.
+ * scope its session was connected over then; a line with no row of its own, a notice, a model change, an
+ * approval card or a turn's ending, is placed after the newest row the chat had kept, which [newestSeq] reads
+ * from the profile's database.
  */
 class ChatFolds(
     private val clock: ChatClock,
@@ -37,7 +38,10 @@ class ChatFolds(
     ) {
         require(instanceId.isNotBlank()) { "an event names its instance" }
         val placed =
-            event is SessionEvent.Server || (event is SessionEvent.Turn && event.effect is TurnEffect.TurnEnded)
+            event is SessionEvent.Server ||
+                event is SessionEvent.Approval ||
+                event is SessionEvent.ModelChanged ||
+                (event is SessionEvent.Turn && event.effect is TurnEffect.TurnEnded)
         val newest = if (placed) newestSeq(instanceId) else 0uL
         val path = (session.state.value as? SessionState.Connected)?.scope
         val at = Moment(clock.monoMs(), clock.wallMs(), path, newest)

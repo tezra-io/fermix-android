@@ -99,6 +99,53 @@
     <string name="chat_switched">Switched to %1$s</string>
     <string name="chat_back_to_default">Back to the default · %1$s</string>
 
+    <!-- The approval poll (sections 8.4, 13.5, 13.8 and 13.9). The kinds' words are the visual canon's. -->
+    <string name="chat_approval_sandbox">Sandbox</string>
+    <string name="chat_approval_soul">Soul</string>
+    <string name="chat_approve">Approve</string>
+    <string name="chat_deny">Deny</string>
+    <!-- A no-break space holds each number to its "s" (section 13.8, 200 % type). -->
+    <string name="chat_approval_expires">Expires in %1$d s · approving resumes the paused turn</string>
+    <string name="chat_approval_approved">✓ Approved — access granted</string>
+    <string name="chat_approval_denied">✕ Denied — turn continued without it</string>
+    <string name="chat_approval_expired">– Expired — no answer in %1$d s</string>
+    <string name="chat_approval_closed">– Closed while this phone was away</string>
+
+    <!-- Reactions and link previews (section 13.5). Labels the design does not give (section 13.8). -->
+    <string name="chat_reaction">Reacted %1$s</string>
+    <string name="chat_open_link">Open %1$s</string>
+
+    <!-- The model chip and the "Model" sheet (sections 8.6, 13.6 and 13.9, and the visual canon's sheet). -->
+    <string name="chat_model_title">Model</string>
+    <string name="chat_model_subtitle">Applies to this chat on %1$s. Your config\'s default is unchanged.</string>
+    <string name="chat_model_default">Default · %1$s (from config)</string>
+    <string name="chat_model_unlisted">Couldn\'t list models on %1$s</string>
+    <string name="chat_model_no_live_typing">no live typing</string>
+    <string name="chat_switches_after_reply">Switches after this reply</string>
+    <string name="chat_connect_to_change_model">Connect to change the model</string>
+    <!-- Not the design's: a model with its trait, as the canon writes "Claude Opus 5.5 (best quality)", and the
+         chip's label (section 13.8). -->
+    <string name="chat_model_trait">%1$s (%2$s)</string>
+    <string name="chat_model_chip">Model: %1$s</string>
+
+    <!-- Search (sections 13.7 and 13.9). The roles, the chips and the step counter are the visual canon's. -->
+    <string name="chat_search_cached_only">Cached messages only — connect to search everything</string>
+    <string name="chat_search_all">All</string>
+    <string name="chat_search_media">Media</string>
+    <string name="chat_search_files">Files</string>
+    <string name="chat_search_links">Links</string>
+    <string name="chat_search_agent">Fermix</string>
+    <string name="chat_search_step">%1$d / %2$d</string>
+    <!-- Labels the design does not give (section 13.8). -->
+    <string name="chat_search">Search</string>
+    <string name="chat_search_close">Close search</string>
+    <string name="chat_search_clear">Clear</string>
+    <string name="chat_search_older">Older match</string>
+    <string name="chat_search_newer">Newer match</string>
+    <!-- Not the design's, which is silent on a search the computer fails while connected: the model sheet's
+         "Couldn't list models on {host}" read for search, with section 13.6's "Try again" (chat_try_again). -->
+    <string name="chat_search_failed">Couldn\'t search %1$s</string>
+
     <!-- The composer (section 13.6). -->
     <string name="chat_placeholder">Message %1$s…</string>
     <string name="chat_send">Send</string>

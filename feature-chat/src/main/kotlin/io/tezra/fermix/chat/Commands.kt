@@ -51,6 +51,19 @@ fun requestOf(
     }
 }
 
+/**
+ * Whether [text] is the model command alone, by its name or one of its aliases among the daemon's [commands]:
+ * "/model" with nothing after it, which asks the daemon for its models (design section 7, `models`).
+ */
+fun asksForModels(
+    text: String,
+    commands: List<CommandDescriptor>,
+): Boolean {
+    val words = text.trim()
+    if (!words.startsWith("/") || words.any { it.isWhitespace() }) return false
+    return commandOf(words.drop(1), commands)?.name == MODEL_COMMAND
+}
+
 /** A command's name and what follows it, split at the first whitespace of any kind after the "/". */
 private fun commandWords(words: String): Pair<String, String> {
     val body = words.drop(1)

@@ -1,6 +1,8 @@
 package io.tezra.fermix.chat
 
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.Route
+import io.tezra.fermix.session.REACTION_KEY
 import io.tezra.fermix.session.TimelineRow
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -34,9 +36,20 @@ internal fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimiti
 internal fun jobOf(metadata: JsonObject): String? =
     metadata.string(JOB_KEY) ?: (metadata[JOB_KEY] as? JsonObject)?.string("name")
 
+/** The daemon's reaction on the owner's row: `metadata.reaction.emoji` (design section 7, `reaction` durability). */
+internal fun reactionOf(metadata: JsonObject): String? =
+    (metadata[REACTION_KEY] as? JsonObject)?.string("emoji")?.takeIf { it.isNotEmpty() }
+
 internal fun routeOf(metadata: JsonObject): Route? {
     val route = metadata[ROUTE_KEY] as? JsonObject
     val provider = route?.string("provider")
     val model = route?.string("model")
     return if (provider != null && model != null) Route(provider, model) else null
 }
+
+/** The link previews a message shows, under it (design section 13.5): at most two. */
+internal const val MAX_SHOWN_PREVIEWS = 2
+
+/** The previews a message shows: its first two web addresses; a preview of any other scheme is never shown. */
+internal fun shownPreviews(previews: List<LinkPreviewCard>): List<LinkPreviewCard> =
+    previews.filter { isWebLink(it.url) }.take(MAX_SHOWN_PREVIEWS)

@@ -6,6 +6,9 @@ import io.tezra.fermix.protocol.Caps
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.CommandDescriptor
 import io.tezra.fermix.protocol.HistoryMessage
+import io.tezra.fermix.protocol.ModelEntry
+import io.tezra.fermix.protocol.ModelRef
+import io.tezra.fermix.protocol.ModelState
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.transport.Candidate
@@ -59,6 +62,24 @@ internal fun sample(
         pushPlatforms = listOf(PushPlatform.FCM),
         caps = Caps(commands = COMMANDS, maxMediaBytes = 20_000_000L),
         notificationsEnabled = true,
+    )
+
+/** A record whose daemon says its model: the config's GPT-6 Astra. */
+internal fun withModel() =
+    sample().let {
+        it.copy(
+            caps = it.caps?.copy(modelState = ModelState(ModelRef("codex", "gpt-6-astra", "GPT-6 Astra"))),
+        )
+    }
+
+/** The models the daemon lists, as the canon's "Model" sheet shows them: two providers and one it cannot list. */
+internal val ENTRIES =
+    listOf(
+        ModelEntry("codex", "gpt-6-sol", "GPT-6 Sol"),
+        ModelEntry("codex", "gpt-6-luna", "GPT-6 Luna", trait = "fast, cheaper"),
+        ModelEntry("anthropic", "claude-opus-5.5", "Claude Opus 5.5", "best quality", streams = false, active = true),
+        ModelEntry("anthropic", "claude-haiku-4.5", "Claude Haiku 4.5", "fastest", streams = false),
+        ModelEntry("ollama", listingUnavailable = true),
     )
 
 /** A chat with no draft, no agent name and previews on, as a database starts. */

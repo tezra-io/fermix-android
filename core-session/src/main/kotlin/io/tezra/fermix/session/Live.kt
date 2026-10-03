@@ -55,6 +55,15 @@ internal class Live(
 
     private val profile: String get() = core.instance.profileId
 
+    /** The searches and model pulls asked on this connection (Session.search, Session.pullModels). */
+    val asked = Asked(core, ::post)
+
+    /** The blobs fetched on this connection (Session.fetchMedia). */
+    val fetches = Fetches(::post)
+
+    /** Whether the reconnect reconciliation is done: a one-shot is asked only then, after the outbox. */
+    val reconciled: Boolean get() = drain == Drain.DONE
+
     fun post(event: ClientEvent) {
         channel.send(event)
         keepalive.sent(core.now())

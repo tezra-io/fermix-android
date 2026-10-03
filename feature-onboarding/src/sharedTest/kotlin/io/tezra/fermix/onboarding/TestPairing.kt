@@ -6,6 +6,7 @@ import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.noise.StaticKey
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.session.Announcement
 import io.tezra.fermix.session.Announcer
@@ -16,6 +17,7 @@ import io.tezra.fermix.session.PairedInstance
 import io.tezra.fermix.session.PairingState
 import io.tezra.fermix.session.RequestFailure
 import io.tezra.fermix.session.Retry
+import io.tezra.fermix.session.RowEdits
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionParts
 import io.tezra.fermix.session.SessionStore
@@ -217,7 +219,7 @@ private object NoKey : StaticKey {
 }
 
 /** The store of a session that never connects: empty cursors and outbox, and no write. */
-private object NoStore : SessionStore {
+private object NoStore : SessionStore, RowEdits by NoRowEdits {
     override suspend fun cursors() = StoredCursors(0uL, 0uL, 0uL, 0uL, 0uL)
 
     override suspend fun setServerCursor(
@@ -249,4 +251,17 @@ private object NoStore : SessionStore {
         clientMsgId: String,
         failure: RequestFailure,
     ) = error("the idle session never sends")
+}
+
+/** The row edits of a session that never connects: none, since nothing reaches it. */
+private object NoRowEdits : RowEdits {
+    override suspend fun applyReaction(
+        clientMsgId: String,
+        emoji: String,
+    ) = error("the idle session gets no reaction")
+
+    override suspend fun addLinkPreview(
+        serverSeq: ULong,
+        card: LinkPreviewCard,
+    ) = error("the idle session gets no link preview")
 }

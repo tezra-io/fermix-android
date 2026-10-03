@@ -2,13 +2,16 @@ package io.tezra.fermix.data
 
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.HistoryMessage
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MediaRef
 import io.tezra.fermix.protocol.MutationRow
+import io.tezra.fermix.session.APPROVAL_ANSWER_PREFIX
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.RequestFailure
 import io.tezra.fermix.session.SessionStore
 import io.tezra.fermix.session.StoredCursors
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.linkPreviewsOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -91,6 +94,16 @@ abstract class SessionStoreContract {
             assertEquals(TimelineRow.Message(question.copy(metadata = REACTED)), cached(2uL))
             assertNull(cached(9uL), "a mutation made a row the cache did not hold")
             assertEquals(cursors(0uL, 0uL, 12uL, 0uL, 0uL), store.cursors())
+        }
+
+    @Test
+    fun `a mutation never gives an approval's answer its words back`() =
+        runTest {
+            val answer = message(3uL, "user", "").copy(clientMsgId = "${APPROVAL_ANSWER_PREFIX}ap-1:00")
+            persist(TimelineRow.Message(answer))
+            val words = MutationRow(3uL, 13uL, content = "/confirm opaque-token", metadata = REACTED)
+            store.applyMutations(listOf(words), 13uL)
+            assertEquals(TimelineRow.Message(answer.copy(metadata = REACTED)), cached(3uL))
         }
 
     @Test
@@ -197,6 +210,41 @@ abstract class SessionStoreContract {
             val refusal = runCatching { store.markFailed("m9", RequestFailure("x", "y")) }.exceptionOrNull()
             assertNotNull(refusal)
             assertEquals(listOf(OutboxItem(msg("m1"))), store.outbox())
+        }
+
+    @Test
+    fun `a reaction lands in the owner's row's metadata, its other keys kept, and nowhere else`() =
+        runTest {
+            val asked = message(2uL, "user", "is it raining?").copy(clientMsgId = "c-2", metadata = TRANSCRIBED)
+            val answer = message(3uL, "assistant", "yes").copy(clientMsgId = "c-2")
+            persist(TimelineRow.Message(asked))
+            persist(TimelineRow.Message(answer))
+            assertTrue(store.applyReaction("c-2", "👍"))
+            val reacted =
+                buildJsonObject {
+                    put("transcript", JsonPrimitive(true))
+                    put("reaction", buildJsonObject { put("emoji", "👍") })
+                }
+            assertEquals(TimelineRow.Message(asked.copy(metadata = reacted)), cached(2uL))
+            assertEquals(TimelineRow.Message(answer), cached(3uL), "only the owner's row is reacted to")
+            assertFalse(store.applyReaction("c-9", "👍"), "a row the cache does not hold")
+        }
+
+    @Test
+    fun `a link preview is kept on its row, a reply's too, once per url and four at most`() =
+        runTest {
+            persist(TimelineRow.Message(message(4uL, "assistant", "see https://example.com")))
+            persist(TimelineRow.Reply(5uL, "turn-c-5", "see https://example.org", truncated = false, route = null))
+            val example = LinkPreviewCard("https://example.com", "Example", "Example page")
+            assertTrue(store.addLinkPreview(4uL, example))
+            assertTrue(store.addLinkPreview(4uL, example))
+            (1..5).forEach { store.addLinkPreview(5uL, example.copy(url = "https://example.org/$it")) }
+            assertEquals(listOf(example), linkPreviewsOf(checkNotNull(cached(4uL))))
+            assertEquals(
+                (1..4).map { "https://example.org/$it" },
+                linkPreviewsOf(checkNotNull(cached(5uL))).map { it.url },
+            )
+            assertFalse(store.addLinkPreview(9uL, example), "a row the cache does not hold")
         }
 
     protected companion object {

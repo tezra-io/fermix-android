@@ -20,6 +20,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
@@ -35,18 +36,25 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 
-/** The screen as it reads: its state, the composer's field, and whether the palette shows. */
+/**
+ * The screen as it reads: its state, the composer's field, whether the palette shows, search while it is open,
+ * the "Model" sheet while it is, and the latest jump to a search hit, which the list scrolls to and pulses.
+ */
 data class ChatUi(
     val state: ChatScreenState,
     val field: TextFieldValue,
     val palette: Boolean,
+    val search: SearchUi? = null,
+    val sheet: ModelSheet? = null,
+    val jump: Jump? = null,
 )
 
 /**
  * What the screen's owner does for it: leave, open the Instance screen (its title, and the unreachable banner
  * at the Connection section), the composer, the palette's pick and close, an error card's action, an outbox
  * item's tap menu, the list reaching its ends, and the newest row it lists while on screen; [info] and
- * [modelOf] read what Info shows; [nowMono] is the indicator's clock; [text] copies and shares.
+ * [modelOf] read what Info shows; [nowMono] is the indicator's clock; [text] copies and shares; [cards] answers
+ * approvals and opens previews; [models] runs the model chip's sheet, and [search] search.
  */
 data class ChatScreenActions(
     val onBack: () -> Unit,
@@ -61,13 +69,18 @@ data class ChatScreenActions(
     val modelOf: (Route) -> String,
     val nowMono: () -> Long,
     val text: TextActions,
+    val cards: CardActions = CardActions(),
+    val models: ModelActions = ModelActions(),
+    val search: SearchActions = SearchActions(),
 )
 
 /**
  * What the list draws its items with: the owner's zone, locale and today; the host and the model an error
  * card names; the monotonic clock the indicator reads; what Copy and Share do; the messages selected and the
  * outbox item whose tap menu is open; and what a tap, a long-press, an error card's action and an outbox menu's
- * pick (none when it closes) do.
+ * pick (none when it closes) do; what the cards do; whether a connection is up, which a thumbnail is asked
+ * again on; the row jumped to last, which pulses; and while search steps through the chat, the words it marks
+ * in the row stepped to.
  */
 data class TimelineContext(
     val zone: ZoneId,
@@ -83,7 +96,14 @@ data class TimelineContext(
     val onLongPress: (ChatItem.Message) -> Unit,
     val onError: (ShownError) -> Unit,
     val onOutbox: (ShownMessage, OutboxEntry?) -> Unit,
-)
+    val cards: CardActions = CardActions(),
+    val linkUp: Boolean = false,
+    val highlight: Jump? = null,
+    val marks: InChatMarks? = null,
+) {
+    /** The words search marks in [message] while it steps through the chat at its row; none otherwise. */
+    fun marksIn(message: ShownMessage): List<String> = marks?.takeIf { it.seq == message.seq }?.words.orEmpty()
+}
 
 /**
  * Where the chat goes: back to the Chats list, to its Instance screen; [showing] says whether the chat is on
@@ -136,8 +156,10 @@ private fun rememberOverlays(): Overlays {
  * The Chat screen (design sections 13.5 to 13.7, 13.11): the bar, or the selection's while messages are
  * selected; the banner; the timeline in the 640 dp column, with the scroll pill and, during a fast scroll, the
  * date pill ([datePillHeld] keeps it up for a preview); the palette as a sheet the dock opens into, over a scrim
- * on the whole window; a lifted message with its menu; Info and Select text as sheets. Back puts down what is
- * open first. An answer's arrival plays its haptic and is announced only while the chat is on screen.
+ * on the whole window; a lifted message with its menu; Info, Select text and the "Model" sheet as sheets; search
+ * (design section 13.7), its bar over its list or over the chat it steps through, opened from the bar or with
+ * Ctrl+F; a hit jumped to pulses, and [pulsing] holds a preview's pulse as it stands. Back puts down what is open
+ * first. An answer's arrival plays its haptic and is announced only while the chat is on screen.
  */
 @Composable
 fun ChatScreen(
@@ -145,30 +167,42 @@ fun ChatScreen(
     actions: ChatScreenActions,
     listState: LazyListState = rememberLazyListState(),
     datePillHeld: Boolean = false,
+    pulsing: Jump? = null,
 ) {
     val overlays = rememberOverlays()
-    val context = timelineContext(ui.state, actions, overlays)
+    val highlight = jumpHighlight(ui, listState) ?: pulsing
+    val context =
+        timelineContext(ui.state, actions, overlays).copy(highlight = highlight, marks = inChatMarksOf(ui.search))
     val shown = rememberOnScreen()
-    BackHandler(enabled = overlays.lifted != null || overlays.selected.isNotEmpty() || ui.palette) {
+    val opened = overlays.lifted != null || overlays.selected.isNotEmpty() || ui.palette || ui.search != null
+    BackHandler(enabled = opened) {
         when {
             overlays.lifted != null -> overlays.lifted = null
             overlays.selected.isNotEmpty() -> overlays.selected = emptySet()
-            else -> actions.onClosePalette()
+            ui.palette -> actions.onClosePalette()
+            else -> actions.search.onBack()
         }
     }
-    Box(modifier = Modifier.fillMaxSize().background(LocalFermixColors.current.canvas)) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(
+                    LocalFermixColors.current.canvas,
+                ).onPreviewKeyEvent(findKey(actions.search)),
+    ) {
         ChatFrame(
             body = {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Top(ui.state, actions, overlays, context)
-                    Box(modifier = Modifier.weight(1f)) { Body(ui, context, listState, datePillHeld) }
+                    Top(ui, actions, overlays, context)
+                    Box(modifier = Modifier.weight(1f)) { Body(ui, context, listState, datePillHeld, actions) }
                 }
             },
             scrim = { if (ui.palette) Scrim(actions.onClosePalette) },
             sheet = { if (ui.palette) PaletteSheet(ui, actions) },
             dock = { Dock(ui, actions) },
         )
-        Overlaid(ui.state, context, overlays, actions)
+        Overlaid(ui, context, overlays, actions)
         Arrivals(ui.state.arrived, shown)
     }
     ListEffects(ui.state, shown, listState, actions.list)
@@ -176,15 +210,19 @@ fun ChatScreen(
 
 @Composable
 private fun Top(
-    state: ChatScreenState,
+    ui: ChatUi,
     actions: ChatScreenActions,
     overlays: Overlays,
     context: TimelineContext,
 ) {
+    val state = ui.state
     val top = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     Column(modifier = Modifier.background(LocalFermixColors.current.tonal).windowInsetsPadding(top)) {
-        if (overlays.selected.isEmpty()) {
-            ChatBar(state.header, actions.onBack, actions.onInstance)
+        val search = ui.search
+        if (search != null) {
+            SearchBar(search, actions.search)
+        } else if (overlays.selected.isEmpty()) {
+            ChatBar(state.header, actions.onBack, actions.onInstance, actions.search.onOpen)
         } else {
             val chosen = state.items.filterIsInstance<ChatItem.Message>().filter { it.key in overlays.selected }
             val words = transcriptOf(chosen.asReversed().map { it.message }, state.header.record.title, context)
@@ -205,9 +243,13 @@ private fun Body(
     context: TimelineContext,
     listState: LazyListState,
     datePillHeld: Boolean,
+    actions: ChatScreenActions,
 ) {
+    val search = ui.search
     FermixColumn(ColumnWidth.Wide) {
-        if (ui.state.items.isEmpty()) {
+        if (search != null && search.mode == SearchMode.LIST) {
+            SearchList(search, context, actions.search)
+        } else if (ui.state.items.isEmpty()) {
             EmptyChat(ui.state.name)
         } else {
             Timeline(ui.state.items, context, listState)
@@ -216,15 +258,16 @@ private fun Body(
     }
 }
 
-/** A lifted message and its menu, Info and Select text, over everything. */
+/** A lifted message and its menu, Info, Select text and the "Model" sheet, over everything. */
 @Composable
 private fun Overlaid(
-    state: ChatScreenState,
+    ui: ChatUi,
     context: TimelineContext,
     overlays: Overlays,
     actions: ChatScreenActions,
 ) {
-    val messages = state.items.filterIsInstance<ChatItem.Message>()
+    ui.sheet?.let { ModelSheetView(it, ui.state, actions.models) }
+    val messages = ui.state.items.filterIsInstance<ChatItem.Message>()
     messages.find { it.key == overlays.lifted }?.let { item ->
         LiftedMessage(
             item = item,

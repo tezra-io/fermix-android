@@ -3,6 +3,7 @@ package io.tezra.fermix
 import io.tezra.fermix.chat.ChatClock
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.noise.StaticKey
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
 import io.tezra.fermix.session.Announcement
 import io.tezra.fermix.session.Announcer
@@ -116,6 +117,16 @@ internal object NoStore : SessionStore {
         clientMsgId: String,
         failure: RequestFailure,
     ) = error("the idle session sends nothing")
+
+    override suspend fun applyReaction(
+        clientMsgId: String,
+        emoji: String,
+    ) = error("the idle session gets no reaction")
+
+    override suspend fun addLinkPreview(
+        serverSeq: ULong,
+        card: LinkPreviewCard,
+    ) = error("the idle session gets no link preview")
 }
 
 /**
@@ -166,3 +177,17 @@ internal object TestClock : ChatClock {
 
     override fun wallMs(): Long = 0L
 }
+
+/** No approval is notified: every chat counts as on screen. */
+internal val NoAlerts =
+    ApprovalAlerts(
+        { _, _ -> true },
+        object : ApprovalNotifier {
+            override fun canNotify(instanceId: String): Boolean = false
+
+            override fun notify(
+                instanceId: String,
+                approval: SessionEvent.Approval,
+            ): Unit = error("no approval is notified in these tests")
+        },
+    ) { 0L }

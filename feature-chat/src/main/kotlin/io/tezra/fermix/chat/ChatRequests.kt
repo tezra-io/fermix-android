@@ -62,9 +62,12 @@ class ChatRequests(
         return went
     }
 
-    /** "Reset to default" on a `model_unavailable` card: `command{name:"model", args:"reset"}`. */
+    /**
+     * "Reset to default" on a `model_unavailable` card: `command{name:"model", args:"reset"}`, drawn as a pick is
+     * ([MODEL_PICK_PREFIX]).
+     */
     fun resetModel() {
-        scope.launch { send(resetModel(newId(), profileId)) }
+        scope.launch { send(resetModel("$MODEL_PICK_PREFIX${newId()}", profileId)) }
     }
 
     /**
@@ -87,7 +90,7 @@ class ChatRequests(
      */
     fun resend(request: ClientEvent) {
         val refused = OutboxItem(request).clientMsgId
-        val again = renamed(request, newId())
+        val again = renamed(request, idLike(refused, newId()))
         scope.launch {
             val taken = whileWithdrawn(refused) { send(again) }
             if (!taken) return@launch
@@ -107,7 +110,7 @@ class ChatRequests(
      */
     fun retry(request: ClientEvent) {
         val failed = OutboxItem(request).clientMsgId
-        val again = newId()
+        val again = idLike(failed, newId())
         scope.launch {
             val taken = whileWithdrawn(failed) { session.value?.retry(request, again) == true }
             if (taken) remember(retried(request, again, failed))
@@ -136,6 +139,12 @@ class ChatRequests(
         }
     }
 }
+
+/** [fresh] as the id of a request sent again in place of [old]'s: a model pick's stays one, drawn as it was. */
+private fun idLike(
+    old: String,
+    fresh: String,
+): String = if (isModelPick(old)) "$MODEL_PICK_PREFIX$fresh" else fresh
 
 /** [request] as it was, under [id]. */
 private fun renamed(

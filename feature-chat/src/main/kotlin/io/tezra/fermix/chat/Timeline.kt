@@ -134,6 +134,10 @@ private fun LazyItemScope.TimelineItem(
         is ChatItem.Pill -> {
             CentredPill(item.text, modifier)
         }
+
+        is ChatItem.Approval -> {
+            ApprovalItem(item.card, context, modifier)
+        }
     }
 }
 

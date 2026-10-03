@@ -64,29 +64,36 @@ private const val FIELD_LINES = 6
 private const val CROSS_ROTATION = 90f
 
 /**
- * What the composer does: the field's change, send, stop, and the palette (long-press send, Ctrl+K). Send
- * takes what to do once the session took the request, where the composer plays its haptic.
+ * What the composer does: the field's change, send, stop, the palette (long-press send, Ctrl+K), and the model
+ * chip's sheet. Send takes what to do once the session took the request, where the composer plays its haptic.
  */
 data class ComposerActions(
     val onField: (TextFieldValue) -> Unit,
     val onSend: (onTaken: () -> Unit) -> Unit,
     val onStop: () -> Unit,
     val onPalette: () -> Unit,
+    val onModel: () -> Unit = {},
+)
+
+/** How the composer looks: the [title] its placeholder names, whether send is stop ([stops]), and the model chip. */
+data class ComposerLook(
+    val title: String,
+    val stops: Boolean,
+    val chip: ModelChip?,
 )
 
 /**
  * The composer (design section 13.6): a floating 28 dp tonal pill. Row 1 is the field, "Message {title}…", up to
- * six lines; row 2 (40 dp) holds the send ↑ in a filled circle at its end, which is stop while a turn runs and
- * the field is empty, cross-rotating in 200 ms. Its leading slots, attach and the model chip, are Tasks 13 and
- * 12's. Enter sends and Shift+Enter breaks the line on a hardware keyboard; Ctrl+K opens the palette. Nothing
- * here is ever disabled. [inSheet]: the palette's sheet holds it, on the canvas inside the sheet's tone (the
- * canon's `.sheet .cmp`).
+ * six lines; row 2 (40 dp) holds the model chip (design section 8.6), none when the daemon says no model, and
+ * the send ↑ in a filled circle at its end, which is stop while a turn runs and the field is empty,
+ * cross-rotating in 200 ms. Its first slot, attach, is Task 13's. Enter sends and Shift+Enter breaks the line on
+ * a hardware keyboard; Ctrl+K opens the palette. Only the chip is ever disabled, with no connection. [inSheet]:
+ * the palette's sheet holds it, on the canvas inside the sheet's tone (the canon's `.sheet .cmp`).
  */
 @Composable
 internal fun Composer(
     field: TextFieldValue,
-    title: String,
-    stops: Boolean,
+    look: ComposerLook,
     actions: ComposerActions,
     inSheet: Boolean,
 ) {
@@ -108,10 +115,11 @@ internal fun Composer(
                 .then(surface)
                 .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 6.dp),
     ) {
-        Field(field, title, actions)
+        Field(field, look.title, actions)
         Row(modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+            look.chip?.let { ModelChipButton(it, actions.onModel) }
             Spacer(Modifier.weight(1f))
-            SendOrStop(stops, actions)
+            SendOrStop(look.stops, actions)
         }
     }
 }

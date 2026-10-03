@@ -19,12 +19,14 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
+import io.tezra.fermix.protocol.CommandDescriptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * The Chat screen over [model]: its state, its composer and its actions, the draft kept as the screen stops,
- * and the platform's clipboard, toast and share sheet for Copy and Share.
+ * The Chat screen over [model]: its state, its composer and its actions, search, the "Model" sheet and the
+ * jump to a hit while search is open, the draft kept as the screen stops, the platform's clipboard, toast and
+ * share sheet for Copy and Share, and a Custom Tab in the instance's tint for a link preview.
  */
 @Composable
 fun ChatRoute(
@@ -34,10 +36,14 @@ fun ChatRoute(
     val state by model.state.collectAsStateWithLifecycle()
     val field by model.composer.field.collectAsStateWithLifecycle()
     val palette by model.composer.palette.collectAsStateWithLifecycle()
+    val search by model.search.state.collectAsStateWithLifecycle()
+    val sheet by model.models.sheet.collectAsStateWithLifecycle()
+    val jump by model.jumps.jump.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.composer.keep() }
     val text = rememberTextActions()
-    val actions = remember(model, navigation, text) { actionsOf(model, navigation, text) }
-    state?.let { ChatScreen(ChatUi(it, field, palette), actions) }
+    val openLink = rememberLinkOpener(state?.header?.record?.tint)
+    val actions = remember(model, navigation, text, openLink) { actionsOf(model, navigation, text, openLink) }
+    state?.let { ChatScreen(ChatUi(it, field, palette, search, sheet, jump.takeIf { search != null }), actions) }
 }
 
 /** Copy, with the toast and the haptic (design section 13.5), and Share, one share sheet with the plain text. */
@@ -80,6 +86,7 @@ private fun actionsOf(
     model: ChatViewModel,
     navigation: ChatNavigation,
     text: TextActions,
+    openLink: (String) -> Unit,
 ): ChatScreenActions {
     fun guarded(action: () -> Unit): () -> Unit = { if (navigation.showing()) action() }
     val composer = model.composer
@@ -89,11 +96,12 @@ private fun actionsOf(
         composer =
             ComposerActions(
                 onField = composer::edit,
-                onSend = { onTaken -> if (navigation.showing()) composer.send(onTaken) },
+                onSend = { onTaken -> if (navigation.showing()) sendAction(model, onTaken) },
                 onStop = guarded(model.requests::stop),
                 onPalette = guarded(composer::openPalette),
+                onModel = guarded(model.models::open),
             ),
-        onPick = composer::pick,
+        onPick = { command -> paletteAction(model, command) },
         onClosePalette = composer::closePalette,
         onError = { error -> if (navigation.showing()) errorAction(model.requests, error) },
         onOutbox = { message, entry -> if (navigation.showing()) outboxAction(model, message, entry) },
@@ -102,7 +110,51 @@ private fun actionsOf(
         modelOf = model::modelOf,
         nowMono = model::nowMono,
         text = text,
+        cards =
+            CardActions(
+                onAnswer = { id, approve -> if (navigation.showing()) model.approvals.answer(id, approve) },
+                thumbnail = { ref -> model.thumbnails.thumbnail(ref)?.let { decodeThumbnail(it) } },
+                onLink = { url -> if (navigation.showing()) openLink(url) },
+            ),
+        models =
+            ModelActions(
+                onOpen = guarded(model.models::open),
+                onPick = { row -> model.models.pick(row, model.state.value?.turnRuns == true) },
+                onClose = model.models::close,
+            ),
+        search = searchActionsOf(model.search),
     )
+}
+
+/**
+ * A command picked on the palette: `/model`, while the chat has a model chip, does what the chip does (design
+ * section 8.6): opens the "Model" sheet, and nothing while the chip is disabled, the line above the composer
+ * saying to connect; any other puts "/name " in the field.
+ */
+private fun paletteAction(
+    model: ChatViewModel,
+    command: CommandDescriptor,
+) {
+    val chip = model.state.value?.model
+    if (command.name != MODEL_COMMAND || chip == null) return model.composer.pick(command)
+    model.composer.closePalette()
+    if (chip.enabled) model.models.open()
+}
+
+/**
+ * Send; but `/model` typed alone, while the chat has a model chip, does what the chip does (design section 8.6):
+ * the daemon answers that command with `models` pages, which the sheet is the one place to show. While the chip
+ * is disabled nothing goes, and the line above the composer says to connect.
+ */
+private fun sendAction(
+    model: ChatViewModel,
+    onTaken: () -> Unit,
+) {
+    val chip = model.state.value?.model
+    if (chip == null || !model.composer.asksForModels()) return model.composer.send(onTaken)
+    if (!chip.enabled) return
+    model.composer.closePalette()
+    model.models.open()
 }
 
 /**

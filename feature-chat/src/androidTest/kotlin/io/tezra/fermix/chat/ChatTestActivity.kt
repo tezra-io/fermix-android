@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.tezra.fermix.design.FermixTheme
 import io.tezra.fermix.session.IndicatorPools
+import io.tezra.fermix.session.OneShot
 import io.tezra.fermix.session.SessionEvent
 import io.tezra.fermix.session.TurnEffect
 import io.tezra.fermix.session.TurnOutcome
@@ -27,6 +28,10 @@ internal const val FENCED_ROW = 38
 /** The turn the host's thinking card belongs to, and when it started on the fake monotonic clock. */
 private const val THINKING_TURN = "turn-m41"
 internal const val CARD_STARTED_MS = 1_000L
+
+/** The daemon's approval card the rig shows: a sandbox poll on a folder, with a minute to answer. */
+internal val APPROVAL =
+    SessionEvent.Approval("ap-1", "sandbox", "Allow reading ~/Documents?", "~/Documents/**", ttlS = 60)
 
 /** Row [seq]'s words: the owner's on odd rows, the agent's on even ones, the fenced row's with its code. */
 internal fun threadWords(seq: Int): String =
@@ -47,15 +52,21 @@ internal val THREAD =
 /**
  * What the tests set and count, kept across the activity's recreation as the app's session and cache are: the
  * fake cache and session, the app's fold of the session's events, the monotonic clock, and how many times the
- * activity was made.
+ * activity was made. The record's daemon says its model, and lists [ENTRIES] when asked.
  */
 internal class ChatTestRig : ViewModel() {
     val creations = AtomicInteger()
     val store = FakeChatStore(rows = THREAD, frontier = THREAD_ROWS.toULong())
-    val session = FakeChatSession(store)
+    val session = FakeChatSession(store).apply { models = OneShot.Answered(ENTRIES) }
     val live = MutableStateFlow(ChatLive())
     val clock = FakeChatClock(mono = CARD_STARTED_MS)
-    val parts = fakeParts(sample(), session, store, viewModelScope).copy(live = live, clock = clock)
+    val parts = fakeParts(withModel(), session, store, viewModelScope).copy(live = live, clock = clock)
+
+    /** [APPROVAL] shown now on the rig's clock with [ttlS] seconds left: again, it is replayed in place. */
+    fun approval(ttlS: Int) {
+        val moment = Moment(clock.mono, clock.wall, Candidate.Scope.TAILNET, THREAD_ROWS.toULong())
+        live.value = live.value.after(APPROVAL.copy(ttlS = ttlS), moment)
+    }
 
     /** A turn the daemon has said nothing of yet, its card on screen [elapsedMs] after it showed. */
     fun thinking(elapsedMs: Long) {

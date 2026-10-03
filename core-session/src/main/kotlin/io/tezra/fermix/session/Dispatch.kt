@@ -2,10 +2,14 @@ package io.tezra.fermix.session
 
 import io.tezra.fermix.protocol.ServerEvent
 
+/** A frame with no raw tail: every event but a blob's chunk. */
+private val NO_RAW = ByteArray(0)
+
 /**
  * Where each server event of a reconciled or reconciling connection goes: rows to the timeline, a
- * turn's stream to its machine, receipts and refusals to the outbox, and everything the session does
- * not own to the app as it came. An event out of its place is a protocol error.
+ * turn's stream to its machine, receipts and refusals to the outbox, what stands beside them (SideEvents:
+ * blobs, approvals, reactions, link previews, one-shots' answers and model changes), and everything the
+ * session does not own to the app as it came. An event out of its place is a protocol error.
  */
 internal class Dispatch(
     private val core: SessionCore,
@@ -13,16 +17,19 @@ internal class Dispatch(
     private val requests: Requests,
 ) {
     private val profile: String get() = core.instance.profileId
+    private val sides = SideEvents(core, live)
 
-    suspend fun event(event: ServerEvent) {
+    /** [event], whose frame carried [raw] after its header: a blob's chunk's bytes, none for any other. */
+    suspend fun event(
+        event: ServerEvent,
+        raw: ByteArray = NO_RAW,
+    ) {
         when (event) {
             is ServerEvent.Unknown -> core.log(DiagnosticKind.UNKNOWN_EVENT, event.t)
 
             is ServerEvent.Row -> if (mine(event.profileId, event)) liveRow(event.toTimelineRow())
 
             is ServerEvent.TextDone -> textDone(event)
-
-            is ServerEvent.MediaBegin -> media(event)
 
             is ServerEvent.HistoryPage -> page(event)
 
@@ -32,13 +39,11 @@ internal class Dispatch(
 
             is ServerEvent.Error -> error(event)
 
-            is ServerEvent.Approval, is ServerEvent.ApprovalResolved -> approval(event)
-
             is ServerEvent.HelloAck, is ServerEvent.PairApproved, is ServerEvent.PairDenied,
             is ServerEvent.RequestStatusPage, is ServerEvent.MutationsPage, is ServerEvent.EventPart,
             -> throw SessionProtocolError("${nameOf(event)} out of its place")
 
-            is ServerEvent.Known -> other(event)
+            is ServerEvent.Known -> if (!sides.take(event, raw)) other(event)
         }
     }
 
@@ -77,17 +82,6 @@ internal class Dispatch(
     }
 
     /**
-     * A media reply's row comes whole from history: the session applies no row live without its media
-     * refs. The blob's frames are the app's media cache's (PROTOCOL.md "Media").
-     */
-    private suspend fun media(event: ServerEvent.MediaBegin) {
-        val timeline = core.timeline()
-        timeline.saw(event.serverSeq)
-        if (event.serverSeq > timeline.cursor) live.pullForward()
-        core.emit(SessionEvent.Server(event))
-    }
-
-    /**
      * A page's rows are the ones its pull asked for, after its `after_seq` or before its `before_seq`
      * (PROTOCOL.md "History pages"), so each forward pull starts past the one before and the pulls end.
      */
@@ -96,7 +90,7 @@ internal class Dispatch(
         if (page.profileId != profile) throw SessionProtocolError("a history_page for ${page.profileId}")
         val stray = page.messages.firstOrNull { !pull.holds(it.serverSeq) }
         if (stray != null) throw SessionProtocolError("a ${pull.kind} history_page holds row ${stray.serverSeq}")
-        val rows = page.messages.map { TimelineRow.Message(it) }
+        val rows = page.messages.map { TimelineRow.Message(keptMessage(it)) }
         val timeline = core.timeline()
         if (pull.kind == PullKind.OLDER) {
             core.emit(SessionEvent.OlderLoaded(timeline.older(rows), page.prevBeforeSeq))
@@ -120,16 +114,17 @@ internal class Dispatch(
         live.report()
     }
 
+    /**
+     * A refusal: of a request the outbox holds, or of the fetch its ref names; one that is neither goes to the
+     * app as it came. One naming neither a request nor a ref is never taken for a search's or a pull's (Asked):
+     * no code is one only they can get (PROTOCOL.md "Errors"), and `request_backlog_full` comes so for a `msg`.
+     */
     private suspend fun error(event: ServerEvent.Error) {
         core.log(DiagnosticKind.REFUSED, event.code)
         val clientMsgId = event.clientMsgId
-        if (clientMsgId != null) requests.failed(clientMsgId, event) else core.emit(SessionEvent.Refused(event))
-    }
-
-    private suspend fun approval(event: ServerEvent.Known) {
-        if (event is ServerEvent.Approval) core.approvals.shown(event.approvalId)
-        if (event is ServerEvent.ApprovalResolved) core.approvals.resolved(event.approvalId)
-        core.emit(SessionEvent.Server(event))
+        if (clientMsgId != null) return requests.failed(clientMsgId, event)
+        val fetch = event.ref != null && live.fetches.refused(event)
+        if (!fetch) core.emit(SessionEvent.Refused(event))
     }
 
     private suspend fun other(event: ServerEvent.Known) {

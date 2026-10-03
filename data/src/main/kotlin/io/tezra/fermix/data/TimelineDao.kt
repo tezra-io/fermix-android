@@ -40,8 +40,6 @@ abstract class TimelineDao(
         }
     }
 
-    suspend fun row(serverSeq: ULong): TimelineRow? = entity(serverSeq.toColumn())?.toRow()
-
     /** The newest [limit] rows the cache holds, newest first, again on every change. */
     fun newest(limit: Int): Flow<List<TimelineRow>> {
         require(limit > 0) { "a limit of $limit rows" }
@@ -68,6 +66,12 @@ abstract class TimelineDao(
 
     @Query("SELECT * FROM timeline WHERE server_seq = :serverSeq")
     internal abstract suspend fun entity(serverSeq: Long): TimelineEntity?
+
+    @Query("SELECT COUNT(*) FROM timeline WHERE server_seq >= :serverSeq")
+    internal abstract suspend fun countFromColumn(serverSeq: Long): Int
+
+    @Query("SELECT MIN(server_seq) FROM timeline")
+    internal abstract suspend fun oldestColumn(): Long?
 
     @Insert
     internal abstract suspend fun insert(entity: TimelineEntity)
@@ -118,3 +122,12 @@ internal fun ftsMatch(words: List<List<String>>): String? {
     val phrases = words.filter { it.isNotEmpty() }
     return if (phrases.isEmpty()) null else phrases.joinToString(" ") { "\"${it.joinToString(" ")}*\"" }
 }
+
+/** The cached row [serverSeq], none when the cache does not hold it. */
+suspend fun TimelineDao.row(serverSeq: ULong): TimelineRow? = entity(serverSeq.toColumn())?.toRow()
+
+/** How many cached rows are at [serverSeq] or after it: how many of the newest a list holds to reach it. */
+suspend fun TimelineDao.countFrom(serverSeq: ULong): Int = countFromColumn(serverSeq.toColumn())
+
+/** The oldest row the cache holds, none when it holds none: where the next older page starts below it. */
+suspend fun TimelineDao.oldest(): ULong? = oldestColumn()?.toSeq()

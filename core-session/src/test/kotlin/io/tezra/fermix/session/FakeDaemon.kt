@@ -204,6 +204,15 @@ internal class DaemonConnection(
         v: Int = 2,
     ) = sendAt(seq + 1u, event, v)
 
+    /** Sends [event] with [raw] as its frame's tail: a blob's chunk. */
+    fun sendWithRaw(
+        event: ServerEvent.Known,
+        raw: ByteArray,
+    ) {
+        seq++
+        deliverSealed(serverFrame(2, seq, event, raw))
+    }
+
     /** Sends [event] at [at], which a test may put out of sequence. */
     fun sendAt(
         at: ULong,

@@ -1,5 +1,6 @@
 package io.tezra.fermix.chats
 
+import io.tezra.fermix.chat.isQuietRow
 import io.tezra.fermix.chat.rowWords
 import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
@@ -116,16 +117,23 @@ fun rowOf(
     )
 }
 
-/** The newest row's words on one line (rowWords): the agent's markdown as its plain words, the owner's as typed. */
+/**
+ * The newest row's words on one line (rowWords): the agent's markdown as its plain words, the owner's as typed.
+ * A row the chat draws no bubble for is passed by (isQuietRow): an approval's answer, kept without its words
+ * since they held the card's token, and a model picked on the sheet.
+ */
 private fun lastText(newest: List<TimelineRow>): String? =
-    newest.firstOrNull()?.let(::rowWords)?.takeIf { it.isNotBlank() }
+    newest.firstOrNull { !isQuietRow(it) }?.let(::rowWords)?.takeIf { it.isNotBlank() }
 
 /**
- * When the newest row with a time came: a reply's bubble carries none (TimelineRow), its message does. A
- * time the daemon wrote that is not ISO 8601 leaves the row without one, which is all it can say.
+ * When the newest row with a time came, of those the chat draws: a reply's bubble carries none (TimelineRow),
+ * its message does. A time the daemon wrote that is not ISO 8601 leaves the row without one, which is all it
+ * can say.
  */
 private fun lastTime(newest: List<TimelineRow>): Instant? {
-    val stamp = newest.firstNotNullOfOrNull { (it as? TimelineRow.Message)?.message?.ts } ?: return null
+    val stamp =
+        newest.filterNot(::isQuietRow).firstNotNullOfOrNull { (it as? TimelineRow.Message)?.message?.ts }
+            ?: return null
     val position = ParsePosition(0)
     DateTimeFormatter.ISO_INSTANT.parseUnresolved(stamp, position)
     val readable = position.errorIndex < 0 && position.index == stamp.length

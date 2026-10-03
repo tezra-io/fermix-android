@@ -1,16 +1,19 @@
 package io.tezra.fermix.session
 
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
@@ -40,6 +43,9 @@ internal class MemoryStore(
     val items = mutableListOf<OutboxItem>()
     val mutations = mutableListOf<MutationRow>()
     val rebuilds = mutableListOf<ULong>()
+
+    /** The cache's rows a reaction or a link preview lands on, as the app's announcer would have kept them. */
+    val cached = mutableMapOf<ULong, TimelineRow>()
 
     /** The next outbox read takes its snapshot, then waits for this; it is used once. */
     var outboxGate: CompletableDeferred<Unit>? = null
@@ -122,6 +128,27 @@ internal class MemoryStore(
         require(items.any { it.clientMsgId == clientMsgId }) { "$clientMsgId is not in the outbox" }
         items.replaceAll { if (it.clientMsgId == clientMsgId) it.copy(failure = failure) else it }
     }
+
+    override suspend fun applyReaction(
+        clientMsgId: String,
+        emoji: String,
+    ): Boolean {
+        val row =
+            cached.values
+                .filterIsInstance<TimelineRow.Message>()
+                .firstOrNull { it.message.clientMsgId == clientMsgId && it.message.role == "user" } ?: return false
+        cached[row.serverSeq] = row.withReaction(emoji)
+        return true
+    }
+
+    override suspend fun addLinkPreview(
+        serverSeq: ULong,
+        card: LinkPreviewCard,
+    ): Boolean {
+        val row = cached[serverSeq] ?: return false
+        cached[serverSeq] = withLinkPreview(row, card)
+        return true
+    }
 }
 
 /**
@@ -171,12 +198,14 @@ internal class Harness(
 
     /**
      * Opens the session in [scope], the test's background scope unless a test ends its own, with
-     * [lastSuccessful] as the candidate an earlier session last reached.
+     * [lastSuccessful] as the candidate an earlier session last reached, a fetch's file written on [io].
      */
     fun open(
         candidates: List<Candidate> = listOf(TAILNET),
         scope: CoroutineScope = test.backgroundScope,
         lastSuccessful: Candidate? = null,
+        // A fetch's writes on the test's own scheduler, so its virtual clock never runs on while they do.
+        io: CoroutineDispatcher = StandardTestDispatcher(test.testScheduler),
     ): Session {
         val parts =
             SessionParts(
@@ -188,6 +217,7 @@ internal class Harness(
                 network = network,
                 clock = test.testScheduler.timeSource,
                 random = Random(SEED),
+                io = io,
             )
         val instance = PairedInstance("device-1", PROFILE, daemon.gatewayKey.publicKey)
         session = Session.open(instance, candidates, parts, scope, lastSuccessful)
@@ -197,11 +227,14 @@ internal class Harness(
     }
 
     /**
-     * Opens the session and completes its first connection with [ack], then lets the reconciliation run
-     * as far as it goes without the daemon.
+     * Opens the session, a fetch's file written on [io], and completes its first connection with [ack], then
+     * lets the reconciliation run as far as it goes without the daemon.
      */
-    suspend fun connect(ack: ServerEvent.HelloAck = HELLO_ACK): DaemonConnection {
-        open()
+    suspend fun connect(
+        ack: ServerEvent.HelloAck = HELLO_ACK,
+        io: CoroutineDispatcher = StandardTestDispatcher(test.testScheduler),
+    ): DaemonConnection {
+        open(io = io)
         val connection = daemon.accept()
         connection.connect(ack)
         settle()

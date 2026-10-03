@@ -117,6 +117,17 @@ sealed interface Older {
     data object None : Older
 }
 
+/**
+ * The chat's model as the daemon last said it (`model_changed`): an override, or the config's default; none
+ * until one comes in this connection, when `hello_ack`'s `caps.model_state` says it.
+ */
+data class LiveModel(
+    val provider: String,
+    val model: String,
+    val label: String,
+    val source: ModelSource,
+)
+
 /** A centred line with no row of its own (design section 8.4): a `notice`, or a model change. */
 sealed interface LivePill {
     val wallMs: Long
@@ -142,8 +153,9 @@ sealed interface LivePill {
  * What a chat's session told the app that its rows do not hold, folded from the session's events by the
  * app's one collector (core-session's Session.events), for as long as the process lives: the [turns] it
  * shows or showed, when each request was [accepted] (Info's "Delivered"), the requests the daemon [refused]
- * before `accepted`, whose outbox item shows instead of an error card, the notices and model lines, and where
- * the next older page starts. A value: every event gives a new one.
+ * before `accepted`, whose outbox item shows instead of an error card, the notices and model lines, where
+ * the next older page starts, the approval cards, and the [model] the daemon last said the chat is on. A
+ * value: every event gives a new one.
  */
 data class ChatLive(
     val turns: List<LiveTurn> = emptyList(),
@@ -151,6 +163,8 @@ data class ChatLive(
     val refused: Set<String> = emptySet(),
     val pills: List<LivePill> = emptyList(),
     val older: Older = Older.Unknown,
+    val approvals: List<LiveApproval> = emptyList(),
+    val model: LiveModel? = null,
 ) {
     /** The chat after [event], which came [at]. */
     fun after(
@@ -160,11 +174,36 @@ data class ChatLive(
         when (event) {
             is SessionEvent.Turn -> copy(turns = bounded(turnsAfter(turns, event, at)))
             is SessionEvent.Accepted -> copy(accepted = (accepted + (event.clientMsgId to at.wallMs)).newest())
-            is SessionEvent.RequestFailed -> if (event.inOutbox) refusing(event.clientMsgId) else this
+            is SessionEvent.RequestFailed -> refusing(event).copy(approvals = approvalsAfter(approvals, event, at))
             is SessionEvent.OlderLoaded -> copy(older = event.prevBeforeSeq?.let(Older::Before) ?: Older.None)
-            is SessionEvent.Server -> pillOf(event.event, at)?.let(::withPill) ?: this
+            is SessionEvent.ModelChanged -> modelChanged(event, at)
+            is SessionEvent.Server -> server(event.event, at)
+            else -> copy(approvals = approvalsAfter(approvals, event, at))
+        }
+
+    private fun refusing(event: SessionEvent.RequestFailed): ChatLive =
+        if (event.inOutbox) refusing(event.clientMsgId) else this
+
+    /** A `notice` is a centred line; a `hello_ack` hands the model back to its `caps.model_state`. */
+    private fun server(
+        event: ServerEvent.Known,
+        at: Moment,
+    ): ChatLive =
+        when (event) {
+            is ServerEvent.Notice -> withPill(LivePill.Notice(event.text, at.wallMs, at.newestSeq))
+            is ServerEvent.HelloAck -> copy(model = null)
             else -> this
         }
+
+    /** The chat's model now, and its line: "Switched to {model}", or "Back to the default · {model}". */
+    private fun modelChanged(
+        event: SessionEvent.ModelChanged,
+        at: Moment,
+    ): ChatLive {
+        val toDefault = event.source == ModelSource.DEFAULT
+        val pill = LivePill.ModelChanged(event.label, toDefault, event.note, at.wallMs, at.newestSeq)
+        return withPill(pill).copy(model = LiveModel(event.provider, event.model, event.label, event.source))
+    }
 
     private fun refusing(clientMsgId: String): ChatLive =
         copy(refused = (refused - clientMsgId + clientMsgId).toList().takeLast(MAX_REMEMBERED_REQUESTS).toSet())
@@ -187,26 +226,6 @@ private fun bounded(turns: List<LiveTurn>): List<LiveTurn> {
     val dropped = if (oldestEnded >= 0) oldestEnded else 0
     return turns.filterIndexed { index, _ -> index != dropped }
 }
-
-/** A line [event] puts in the chat with no row of its own: a `notice` or a `model_changed`; none for anything else. */
-private fun pillOf(
-    event: ServerEvent.Known,
-    at: Moment,
-): LivePill? =
-    when (event) {
-        is ServerEvent.Notice -> {
-            LivePill.Notice(event.text, at.wallMs, at.newestSeq)
-        }
-
-        is ServerEvent.ModelChanged -> {
-            val toDefault = event.source == ModelSource.DEFAULT
-            LivePill.ModelChanged(event.label, toDefault, event.note, at.wallMs, at.newestSeq)
-        }
-
-        else -> {
-            null
-        }
-    }
 
 /**
  * The working indicator's line on a turn's [card] at [nowMono] (design section 8.2): core-session's choice

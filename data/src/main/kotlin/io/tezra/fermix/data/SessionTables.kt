@@ -7,7 +7,11 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
+import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.withLinkPreview
+import io.tezra.fermix.session.withReaction
 import kotlinx.coroutines.flow.Flow
 
 /** The id of the one cursors row, which the database's creation writes (ProfileDatabase.kt). */
@@ -98,6 +102,39 @@ internal interface CacheDao {
 
     @Query("UPDATE cursors SET last_server_seq = 0, last_mutation_seq = :mutationHeadSeq WHERE id = $CURSORS_ROW")
     suspend fun startOver(mutationHeadSeq: Long): Int
+}
+
+/** The edits a live event makes to a cached row in place (RowEdits), each in one transaction. */
+@Dao
+internal interface RowEditsDao {
+    /** The owner's row [clientMsgId] with [emoji] as its reaction (TimelineRow.withReaction); false when not cached. */
+    @Transaction
+    suspend fun applyReaction(
+        clientMsgId: String,
+        emoji: String,
+    ): Boolean {
+        val held = ownersEntity(clientMsgId)?.toRow() as? TimelineRow.Message ?: return false
+        return update(held.withReaction(emoji).toEntity()) == 1
+    }
+
+    /** Row [serverSeq] with [card] among its link previews (withLinkPreview); false when not cached. */
+    @Transaction
+    suspend fun addLinkPreview(
+        serverSeq: Long,
+        card: LinkPreviewCard,
+    ): Boolean {
+        val held = entity(serverSeq) ?: return false
+        return update(withLinkPreview(held.toRow(), card).toEntity()) == 1
+    }
+
+    @Query("SELECT * FROM timeline WHERE server_seq = :serverSeq")
+    suspend fun entity(serverSeq: Long): TimelineEntity?
+
+    @Query("SELECT * FROM timeline WHERE client_msg_id = :clientMsgId AND role = 'user' LIMIT 1")
+    suspend fun ownersEntity(clientMsgId: String): TimelineEntity?
+
+    @Update
+    suspend fun update(entity: TimelineEntity): Int
 }
 
 /** The outbox's rows, in the order they were enqueued. */

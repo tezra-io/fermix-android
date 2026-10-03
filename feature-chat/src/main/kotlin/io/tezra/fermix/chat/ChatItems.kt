@@ -3,6 +3,7 @@ package io.tezra.fermix.chat
 import io.tezra.fermix.design.GroupPosition
 import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.TurnOutcome
@@ -20,7 +21,8 @@ enum class Delivery { NONE, SENDING, DELIVERED, QUEUED, PENDING, FAILED }
  * place in a group, its [delivery], and whether it still [streaming] (the cursor, no time). [resets] counts
  * the replaced snapshots of a live bubble (LiveBubble). [job] is the scheduled job a delivery wears. [seq],
  * [clientMsgId], [turnId] and [route] are Info's; [request] is the outbox's for Edit, Remove and a retry, and
- * [editable] says its frame was never written to a socket.
+ * [editable] says its frame was never written to a socket. [reaction] is the daemon's emoji on the owner's
+ * message, and [previews] the link previews under it, at most two (design section 13.5).
  */
 data class ShownMessage(
     val sender: Sender,
@@ -38,6 +40,8 @@ data class ShownMessage(
     val route: Route? = null,
     val request: ClientEvent? = null,
     val editable: Boolean = false,
+    val reaction: String? = null,
+    val previews: List<LinkPreviewCard> = emptyList(),
 )
 
 /** An error card's sentence (design section 13.9, by `turn_error` code). */
@@ -126,6 +130,12 @@ sealed interface ChatItem {
     data class Pill(
         override val key: String,
         val text: PillText,
+    ) : ChatItem
+
+    /** An approval card, or the receipt it became (design section 13.5, "Approval poll"). */
+    data class Approval(
+        override val key: String,
+        val card: ShownApproval,
     ) : ChatItem
 }
 

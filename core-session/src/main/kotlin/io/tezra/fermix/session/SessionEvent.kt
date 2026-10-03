@@ -1,5 +1,9 @@
 package io.tezra.fermix.session
 
+import io.tezra.fermix.protocol.ApprovalOutcome
+import io.tezra.fermix.protocol.LinkPreviewCard
+import io.tezra.fermix.protocol.ModelEntry
+import io.tezra.fermix.protocol.ModelSource
 import io.tezra.fermix.protocol.RequestOutcome
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.transport.Candidate
@@ -41,6 +45,35 @@ sealed interface SessionEvent {
         val outcome: RequestOutcome,
     ) : SessionEvent
 
+    /**
+     * An approval card (design section 8.4), new, or replayed in place by its id after a reconnect with the
+     * seconds it has left. Its token and its routes stay in the session, which sends the one the owner picks
+     * (Session.answerApproval): nothing here can render the token.
+     */
+    data class Approval(
+        val approvalId: String,
+        val kind: String,
+        val text: String,
+        val detail: String?,
+        val ttlS: Int,
+    ) : SessionEvent
+
+    /** The daemon withdrew [approvalId]'s card: approved, denied or expired (`approval_resolved`). */
+    data class ApprovalResolved(
+        val approvalId: String,
+        val outcome: ApprovalOutcome,
+    ) : SessionEvent
+
+    /**
+     * The owner answered [approvalId]'s card: its route is in the outbox as [clientMsgId], whose refusal makes
+     * the card answerable again ([RequestFailed]).
+     */
+    data class ApprovalAnswered(
+        val approvalId: String,
+        val approve: Boolean,
+        val clientMsgId: String,
+    ) : SessionEvent
+
     /** A card shown before the reconnect that the daemon no longer holds: "Closed while this phone was away". */
     data class ApprovalClosedWhileAway(
         val approvalId: String,
@@ -72,6 +105,47 @@ sealed interface SessionEvent {
         val candidates: List<Candidate>,
     ) : SessionEvent
 
+    /**
+     * The daemon reacted to the owner's message [inReplyTo] with [emoji]; [stored] says the cached row took it
+     * into its metadata's `reaction`, as the mutation feed will (design section 7, `reaction` durability).
+     */
+    data class Reaction(
+        val inReplyTo: String,
+        val emoji: String,
+        val stored: Boolean,
+    ) : SessionEvent
+
+    /**
+     * A preview of row [serverSeq]'s link (`link_preview`); [stored] says the cached row keeps it with its link
+     * previews, as its history carries it from then on.
+     */
+    data class LinkPreview(
+        val serverSeq: ULong,
+        val card: LinkPreviewCard,
+        val stored: Boolean,
+    ) : SessionEvent
+
+    /**
+     * The chat's model changed, on every device (`model_changed`): to an override, or back to the config's
+     * default, with the daemon's [note] when it sent one.
+     */
+    data class ModelChanged(
+        val provider: String,
+        val model: String,
+        val label: String,
+        val source: ModelSource,
+        val note: String?,
+    ) : SessionEvent
+
+    /**
+     * A `models` page no pull of this session's asked for: the daemon's answer to a `/model` sent as a command
+     * (design section 7, the `models` row). A pull's own pages are its answer (Session.pullModels).
+     */
+    data class Models(
+        val entries: List<ModelEntry>,
+        val next: Boolean,
+    ) : SessionEvent
+
     /** An `error` that names no request of the outbox, such as `request_backlog_full`. */
     data class Refused(
         val error: ServerEvent.Error,
@@ -79,8 +153,8 @@ sealed interface SessionEvent {
 
     /**
      * A server event the session does not own, passed on as it came: `hello_ack` (caps, instance,
-     * profiles), approvals, reactions, link previews, media, model changes, transcripts, models and
-     * search results.
+     * profiles), notices, transcripts, attachment statuses, and a blob's frames no fetch of this session's
+     * asked for.
      */
     data class Server(
         val event: ServerEvent.Known,

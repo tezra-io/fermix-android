@@ -120,14 +120,16 @@ private val LITERAL_HTML: MarkdownAnnotator =
  * still open in a [streaming] answer; a nested table is a table card; an HTML block is its text, as written;
  * any other element no component names (a link's definition) shows nothing. While [streaming], the last
  * paragraph carries the beam cursor after its last words (CursorParagraph), and an open fence after its chip.
+ * A paragraph washes each of [marks], the words search marks in the bubble it steps to.
  */
 @Composable
 private fun componentsOf(
     streaming: Boolean,
     actions: TextActions,
+    marks: List<String>,
 ): MarkdownComponents =
     markdownComponents(
-        paragraph = { model -> CursorParagraph(model, streaming && lastBlock(model)) },
+        paragraph = { model -> CursorParagraph(model, streaming && lastBlock(model), marks) },
         codeFence = { model -> NestedFence(model, streaming, actions) },
         table = { model -> TableCard(tableOf(model.node, model.content), FermixShapes.card) },
         image = { model -> Literal(model) },
@@ -138,16 +140,19 @@ private fun componentsOf(
 private fun lastBlock(model: MarkdownComponentModel): Boolean = model.content.substring(model.node.endOffset).isBlank()
 
 /**
- * A paragraph as the renderer draws one, its style pushed over its annotated words; with [cursor], the beam
- * cursor is placed after its last glyph as inline content (cursorContent), so it follows the text as it grows.
+ * A paragraph as the renderer draws one, its style pushed over its annotated words, each of [marks] washed as the
+ * canon's `.b mark`; with [cursor], the beam cursor is placed after its last glyph as inline content
+ * (cursorContent), so it follows the text as it grows.
  */
 @Composable
 private fun CursorParagraph(
     model: MarkdownComponentModel,
     cursor: Boolean,
+    marks: List<String>,
 ) {
     val style = model.typography.paragraph
     val settings = annotatorSettings()
+    val wash = SpanStyle(background = LocalFermixColors.current.accentInk.copy(alpha = MARK_ALPHA))
     val words =
         buildAnnotatedString {
             pushStyle(style.toSpanStyle())
@@ -155,7 +160,8 @@ private fun CursorParagraph(
             pop()
             if (cursor) appendInlineContent(CURSOR_ID, CURSOR_ALTERNATE)
         }
-    MarkdownText(content = words, node = model.node, style = style, sourceContent = model.content)
+    val shown = if (marks.isEmpty()) words else withMarks(words, marks, wash)
+    MarkdownText(content = shown, node = model.node, style = style, sourceContent = model.content)
 }
 
 @Composable
@@ -204,7 +210,7 @@ internal fun CodePlaceholder(cursor: Boolean) {
  * replaced by one that does not extend it ([resets]), or when the part itself no longer extends what the state
  * holds, as when a card was cut out of it; or as it was sealed, parsed at once. A streaming one carries the beam
  * cursor where its text ends (CursorParagraph, CodePlaceholder). Its lines grow by animateContentSize, at once
- * under reduce-motion.
+ * under reduce-motion. Its paragraphs wash [marks], the words search marks while it steps to this bubble.
  */
 @Composable
 internal fun Prose(
@@ -212,12 +218,13 @@ internal fun Prose(
     streaming: Boolean,
     resets: Int,
     actions: TextActions,
+    marks: List<String> = emptyList(),
 ) {
     val colors = LocalFermixColors.current
     val look = colorsOf(colors)
     val padding = padding()
     val typography = typographyOf(colors)
-    val components = componentsOf(streaming, actions)
+    val components = componentsOf(streaming, actions, marks)
     val reduced = LocalReducedMotion.current
     val animations = markdownAnimations(animateTextSize = { if (reduced) this else animateContentSize() })
     if (!streaming) {

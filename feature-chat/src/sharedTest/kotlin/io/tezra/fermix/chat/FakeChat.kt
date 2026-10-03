@@ -3,7 +3,14 @@ package io.tezra.fermix.chat
 import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.ModelEntry
+import io.tezra.fermix.protocol.ServerEvent
+import io.tezra.fermix.session.APPROVAL_ANSWER_PREFIX
+import io.tezra.fermix.session.ApprovalAnswer
 import io.tezra.fermix.session.Diagnostic
+import io.tezra.fermix.session.FetchedMedia
+import io.tezra.fermix.session.MAX_QUERY_SCALARS
+import io.tezra.fermix.session.OneShot
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.SessionState
 import io.tezra.fermix.session.TimelineRow
@@ -14,6 +21,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Connected over the tailnet and caught up: the chat's subtitle reads "Tailscale · 38 ms". */
@@ -24,7 +32,8 @@ internal val ONLINE = NetworkFacts(defaultNetwork = 1L, false, false, false)
 
 /**
  * A chat's cache as the profile's database keeps it: its rows newest first, its outbox, its read frontier and
- * its own row, each a flow the test moves, and every draft kept, in order ([drafts]).
+ * its own row, each a flow the test moves, and every draft kept, in order ([drafts]); its media cache by
+ * SHA-256 ([media]), and the local search, a row holding every word of the query, ignoring case.
  */
 class FakeChatStore(
     rows: List<TimelineRow> = emptyList(),
@@ -45,17 +54,48 @@ class FakeChatStore(
 
     override fun chat(): Flow<ChatState> = state
 
+    val media = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
+
     override suspend fun setDraft(text: String?): Boolean {
         val kept = text?.takeIf { it.isNotBlank() }
         drafts.update { it + kept }
         state.update { it.copy(draft = kept) }
         return true
     }
+
+    override suspend fun search(
+        query: String,
+        limit: Int,
+    ): List<TimelineRow> {
+        val words = query.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        return rows.value.filter { row -> words.all { rowText(row).contains(it, ignoreCase = true) } }.take(limit)
+    }
+
+    override suspend fun countFrom(serverSeq: ULong): Int = rows.value.count { it.serverSeq >= serverSeq }
+
+    override suspend fun row(serverSeq: ULong): TimelineRow? = rows.value.find { it.serverSeq == serverSeq }
+
+    override suspend fun oldest(): ULong? = rows.value.minOfOrNull { it.serverSeq }
+
+    override suspend fun media(sha256: String): ByteArray? = media.value[sha256]
+
+    override suspend fun keepMedia(
+        fetched: File,
+        sha256: String,
+    ): Boolean {
+        val kept = fetched.readBytes()
+        media.update { it + (sha256 to kept) }
+        return true
+    }
 }
 
 /**
  * A session as the chat uses it, over [store]: a request it takes goes to the outbox, as Session.send's does;
- * [remove] takes an item out while it was never written or was refused. Every call is recorded, in order.
+ * [remove] takes an item out while it was never written or was refused. Every call is recorded, in order. The
+ * one-shots answer only while [connected], as Session's never queue: a search, its query at most
+ * [MAX_QUERY_SCALARS] as Session's, with [searchPage] or as [searchFails] says, a pull with [models], a fetch
+ * with [blobs]' bytes; an older page's pull runs [onOlder]; an approval's answer goes to the outbox as
+ * Session's does, recorded in [answers], its route never seen here.
  */
 class FakeChatSession(
     private val store: FakeChatStore,
@@ -73,6 +113,24 @@ class FakeChatSession(
 
     /** Whether a connection is up for what is sent once and never queued: Stop and an older page's pull. */
     val connected = MutableStateFlow(true)
+
+    val answers = MutableStateFlow<List<Pair<String, Boolean>>>(emptyList())
+    val searches = MutableStateFlow<List<Pair<String, ULong?>>>(emptyList())
+    val pulls = MutableStateFlow(0)
+    val fetched = MutableStateFlow<List<String>>(emptyList())
+
+    /** The daemon's page for a query and its before_seq. */
+    var searchPage: (String, ULong?) -> ServerEvent.SearchResults = { query, _ ->
+        ServerEvent.SearchResults(PROFILE, query, emptyList())
+    }
+    var models: OneShot<List<ModelEntry>> = OneShot.Answered(emptyList())
+    var blobs: Map<String, ByteArray> = emptyMap()
+
+    /** How a search ends instead of with [searchPage]'s page: none while the daemon answers. */
+    var searchFails: OneShot<Nothing>? = null
+
+    /** What the daemon does as an older page is asked for before a seq: a test that needs its rows sets it. */
+    var onOlder: (ULong) -> Unit = {}
 
     override suspend fun send(request: ClientEvent): Boolean {
         sent.update { it + request }
@@ -94,13 +152,50 @@ class FakeChatSession(
     }
 
     override suspend fun loadOlder(beforeSeq: ULong): Boolean {
-        if (connected.value) older.update { it + beforeSeq }
-        return connected.value
+        if (!connected.value) return false
+        older.update { it + beforeSeq }
+        onOlder(beforeSeq)
+        return true
     }
 
     override suspend fun markRead(upToSeq: ULong): Boolean {
         read.update { it + upToSeq }
         return true
+    }
+
+    override suspend fun answerApproval(
+        approvalId: String,
+        approve: Boolean,
+    ): ApprovalAnswer {
+        answers.update { it + (approvalId to approve) }
+        return ApprovalAnswer.Sent("$APPROVAL_ANSWER_PREFIX$approvalId:fake")
+    }
+
+    override suspend fun search(
+        query: String,
+        beforeSeq: ULong?,
+    ): OneShot<ServerEvent.SearchResults> {
+        require(query.codePointCount(0, query.length) <= MAX_QUERY_SCALARS) { "a query past $MAX_QUERY_SCALARS" }
+        if (!connected.value) return OneShot.Offline
+        searches.update { it + (query to beforeSeq) }
+        return searchFails ?: OneShot.Answered(searchPage(query, beforeSeq))
+    }
+
+    override suspend fun pullModels(): OneShot<List<ModelEntry>> {
+        if (!connected.value) return OneShot.Offline
+        pulls.update { it + 1 }
+        return models
+    }
+
+    override suspend fun fetchMedia(
+        ref: String,
+        into: File,
+    ): OneShot<FetchedMedia> {
+        val gone: OneShot<FetchedMedia> = if (connected.value) OneShot.Refused("media_gone") else OneShot.Offline
+        val bytes = blobs[ref]?.takeIf { connected.value } ?: return gone
+        fetched.update { it + ref }
+        into.writeBytes(bytes)
+        return OneShot.Answered(FetchedMedia("image", "image/png", bytes.size.toLong(), ref, null))
     }
 
     override suspend fun remove(clientMsgId: String): Boolean {

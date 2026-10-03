@@ -50,14 +50,16 @@ private val NAME_STYLE = FermixType.title.copy(lineHeight = 22.sp)
 private val SUBTITLE_STYLE = FermixType.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp)
 
 /**
- * The chat's app bar (design section 13.5): back, the 32 dp avatar with its dot, the title and the subtitle;
- * a tap on the title opens the Instance screen. Under it, the tint's line.
+ * The chat's app bar (design section 13.5): back, the 32 dp avatar with its dot, the title and the subtitle,
+ * and search at its end (design section 13.7); a tap on the title opens the Instance screen. Under it, the
+ * tint's line.
  */
 @Composable
 internal fun ChatBar(
     header: ChatHeader,
     onBack: () -> Unit,
     onTitle: () -> Unit,
+    onSearch: () -> Unit,
 ) {
     val colors = LocalFermixColors.current
     Column(modifier = Modifier.background(colors.tonal)) {
@@ -85,6 +87,13 @@ internal fun ChatBar(
                     )
                     Subtitle(subtitle(header))
                 }
+            }
+            IconButton(onClick = onSearch) {
+                Icon(
+                    painterResource(R.drawable.ic_chat_search),
+                    stringResource(R.string.chat_search),
+                    tint = colors.ink,
+                )
             }
         }
         Spacer(modifier = Modifier.fillMaxWidth().height(FermixSpacing.hairline).background(colors.hairline))

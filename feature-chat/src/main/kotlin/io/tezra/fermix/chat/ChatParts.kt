@@ -4,16 +4,29 @@ import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
+import io.tezra.fermix.data.countFrom
+import io.tezra.fermix.data.oldest
+import io.tezra.fermix.data.row
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.ModelEntry
+import io.tezra.fermix.protocol.ServerEvent
+import io.tezra.fermix.session.ApprovalAnswer
 import io.tezra.fermix.session.Diagnostic
+import io.tezra.fermix.session.FetchedMedia
+import io.tezra.fermix.session.OneShot
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionState
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.answerApproval
+import io.tezra.fermix.session.fetchMedia
+import io.tezra.fermix.session.pullModels
+import io.tezra.fermix.session.search
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
 import java.time.ZoneId
 
 /**
@@ -21,7 +34,7 @@ import java.time.ZoneId
  * tests. A request it takes is in the outbox when the call returns; one it cannot take, since the session
  * ended, returns false and leaves the field as it was.
  */
-interface ChatSession {
+interface ChatSession : ChatCalls {
     val state: StateFlow<SessionState>
     val diagnostics: StateFlow<List<Diagnostic>>
 
@@ -42,52 +55,113 @@ interface ChatSession {
     suspend fun remove(clientMsgId: String): Boolean
 }
 
+/** What the chat's cards and controls ask of its session (Session's one-shots and approval answers). */
+interface ChatCalls {
+    /** The owner's answer to an approval card, its route sent by the session (Session.answerApproval). */
+    suspend fun answerApproval(
+        approvalId: String,
+        approve: Boolean,
+    ): ApprovalAnswer
+
+    /** The daemon's full-text search, a page of hits before [beforeSeq] when given (Session.search). */
+    suspend fun search(
+        query: String,
+        beforeSeq: ULong?,
+    ): OneShot<ServerEvent.SearchResults>
+
+    /** Every `models` page of one pull (Session.pullModels). */
+    suspend fun pullModels(): OneShot<List<ModelEntry>>
+
+    /** The blob [ref] into [into], through the daemon alone (Session.fetchMedia). */
+    suspend fun fetchMedia(
+        ref: String,
+        into: File,
+    ): OneShot<FetchedMedia>
+}
+
 /**
  * The app's [ChatSession]: [session]'s calls, of which one that comes as the session ends is refused
  * (SessionCore.requireOpen); that refusal is told to [log] and returned as false, since the next session takes
- * the chat's requests and the screen keeps what the owner typed. Any other failure is thrown.
+ * the chat's requests and the screen keeps what the owner typed. Any other failure is thrown. Its calls are
+ * [SessionCalls].
  */
 class SessionChat(
     private val session: Session,
     private val log: (String, Throwable?) -> Unit,
-) : ChatSession {
+) : ChatSession,
+    ChatCalls by SessionCalls(session, log) {
     override val state: StateFlow<SessionState> get() = session.state
     override val diagnostics: StateFlow<List<Diagnostic>> get() = session.diagnostics
 
-    override suspend fun send(request: ClientEvent): Boolean = unlessEnded("send") { session.send(request) } != null
+    override suspend fun send(request: ClientEvent): Boolean =
+        session.unlessEnded("send", log) { session.send(request) } != null
 
     override suspend fun retry(
         failed: ClientEvent,
         newClientMsgId: String,
-    ): Boolean = unlessEnded("retry") { session.retry(failed, newClientMsgId) } != null
+    ): Boolean = session.unlessEnded("retry", log) { session.retry(failed, newClientMsgId) } != null
 
-    override suspend fun stop(clientMsgId: String): Boolean = unlessEnded("stop") { session.stop(clientMsgId) } == true
+    override suspend fun stop(clientMsgId: String): Boolean =
+        session.unlessEnded("stop", log) { session.stop(clientMsgId) } == true
 
     override suspend fun loadOlder(beforeSeq: ULong): Boolean = session.loadOlder(beforeSeq)
 
     override suspend fun markRead(upToSeq: ULong): Boolean =
-        unlessEnded("markRead") { session.markRead(upToSeq) } != null
+        session.unlessEnded("markRead", log) { session.markRead(upToSeq) } != null
 
     override suspend fun remove(clientMsgId: String): Boolean =
-        unlessEnded("remove") { session.remove(clientMsgId) } == true
-
-    private suspend fun <T : Any> unlessEnded(
-        call: String,
-        block: suspend () -> T,
-    ): T? {
-        if (session.state.value is SessionState.Ended) return null
-        return try {
-            block()
-        } catch (refused: IllegalStateException) {
-            if (session.state.value !is SessionState.Ended) throw refused
-            log("$call came as the session ended", refused)
-            null
-        }
-    }
+        session.unlessEnded("remove", log) { session.remove(clientMsgId) } == true
 
     override fun equals(other: Any?): Boolean = other is SessionChat && other.session === session
 
     override fun hashCode(): Int = System.identityHashCode(session)
+}
+
+/** [session]'s one-shots and approval answers, each refused as the session ends as SessionChat's calls are. */
+internal class SessionCalls(
+    private val session: Session,
+    private val log: (String, Throwable?) -> Unit,
+) : ChatCalls {
+    override suspend fun answerApproval(
+        approvalId: String,
+        approve: Boolean,
+    ): ApprovalAnswer =
+        session.unlessEnded("answerApproval", log) { session.answerApproval(approvalId, approve) }
+            ?: ApprovalAnswer.NotShown
+
+    override suspend fun search(
+        query: String,
+        beforeSeq: ULong?,
+    ): OneShot<ServerEvent.SearchResults> =
+        session.unlessEnded("search", log) { session.search(query, beforeSeq) } ?: OneShot.Offline
+
+    override suspend fun pullModels(): OneShot<List<ModelEntry>> =
+        session.unlessEnded("pullModels", log) { session.pullModels() } ?: OneShot.Offline
+
+    override suspend fun fetchMedia(
+        ref: String,
+        into: File,
+    ): OneShot<FetchedMedia> =
+        session.unlessEnded("fetchMedia", log) { session.fetchMedia(ref, into) } ?: OneShot.Offline
+}
+
+/**
+ * [block], a call of this session, unless it ended: a call that comes as it ends is refused
+ * (SessionCore.requireOpen), which is told to [log] as [call]'s and is none; any other failure is thrown.
+ */
+private suspend fun <T : Any> Session.unlessEnded(
+    call: String,
+    log: (String, Throwable?) -> Unit,
+    block: suspend () -> T,
+): T? {
+    if (state.value is SessionState.Ended) return null
+    return try {
+        block()
+    } catch (refused: IllegalStateException) {
+        if (state.value !is SessionState.Ended) throw refused
+        log("$call came as the session ended", refused)
+        null
+    }
 }
 
 /** A chat's cached rows, outbox, read frontier and draft: the profile's database for the app, a fake for the tests. */
@@ -106,6 +180,36 @@ interface ChatStore {
 
     /** Keeps [text] as the chat's draft, none for a blank one; false when the chat is gone, its draft with it. */
     suspend fun setDraft(text: String?): Boolean
+
+    /**
+     * The local full-text search (design section 13.7): the cached rows holding every word of [query], newest
+     * first, at most [limit]; none once the chat is gone.
+     */
+    suspend fun search(
+        query: String,
+        limit: Int,
+    ): List<TimelineRow>
+
+    /** How many cached rows are at [serverSeq] or after it: how far back the list reaches to hold it. */
+    suspend fun countFrom(serverSeq: ULong): Int
+
+    /** The cached row [serverSeq], none when the cache does not hold it. */
+    suspend fun row(serverSeq: ULong): TimelineRow?
+
+    /** The oldest row the cache holds, none when it holds none or the chat is gone. */
+    suspend fun oldest(): ULong?
+
+    /**
+     * The bytes of the blob [sha256] in the media cache, read while the cache is in use, never its file, which
+     * a removal or an eviction may take once that use ends; none when it does not hold it.
+     */
+    suspend fun media(sha256: String): ByteArray?
+
+    /** Keeps [fetched], the blob [sha256], in the media cache, which checks its digest: whether it was kept. */
+    suspend fun keepMedia(
+        fetched: File,
+        sha256: String,
+    ): Boolean
 }
 
 /**
@@ -128,6 +232,41 @@ class RoomChatStore(
 
     override suspend fun setDraft(text: String?): Boolean =
         profiles.withDatabase(instanceId, profileId) { it.chat().setDraft(text) } is Use.Ran
+
+    override suspend fun search(
+        query: String,
+        limit: Int,
+    ): List<TimelineRow> =
+        (
+            profiles.withDatabase(
+                instanceId,
+                profileId,
+            ) { it.timeline().search(query, limit) } as? Use.Ran
+        )?.value.orEmpty()
+
+    override suspend fun countFrom(serverSeq: ULong): Int =
+        (profiles.withDatabase(instanceId, profileId) { it.timeline().countFrom(serverSeq) } as? Use.Ran)?.value ?: 0
+
+    override suspend fun row(serverSeq: ULong): TimelineRow? =
+        (profiles.withDatabase(instanceId, profileId) { it.timeline().row(serverSeq) } as? Use.Ran)?.value
+
+    override suspend fun oldest(): ULong? =
+        (profiles.withDatabase(instanceId, profileId) { it.timeline().oldest() } as? Use.Ran)?.value
+
+    // ProfileDatabases runs a media cache's block on its queries dispatcher, off the caller's thread.
+    override suspend fun media(sha256: String): ByteArray? =
+        (profiles.withMediaCache(instanceId, profileId) { it.get(sha256)?.readBytes() } as? Use.Ran)?.value
+
+    override suspend fun keepMedia(
+        fetched: File,
+        sha256: String,
+    ): Boolean {
+        val kept =
+            profiles.withMediaCache(instanceId, profileId) { cache ->
+                fetched.inputStream().use { cache.put(it, sha256) }
+            }
+        return kept is Use.Ran
+    }
 }
 
 /**
@@ -154,7 +293,8 @@ fun interface ChatPresence {
  * What a chat runs on, all of it the app's: the [records], [instanceId]'s session while it has one, the app's
  * fold of its events ([live]), its [store], the phone's [network], the [presence] it reports, its [clock],
  * the [background] scope its draft is kept on as it leaves, new client_msg_ids, where it tells what the owner
- * asked and could not have ([log]), and the owner's zone.
+ * asked and could not have ([log]), the owner's zone, and where a blob is fetched to before the media cache
+ * takes it ([scratch]).
  */
 data class ChatParts(
     val instanceId: String,
@@ -170,4 +310,5 @@ data class ChatParts(
     val newId: () -> String,
     val log: (String, Throwable?) -> Unit,
     val zone: () -> ZoneId = ZoneId::systemDefault,
+    val scratch: () -> File = { File.createTempFile("fetch", null) },
 )

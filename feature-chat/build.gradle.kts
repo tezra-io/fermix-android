@@ -34,6 +34,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     // Back puts down a lifted message, the selection and the palette before it leaves the chat.
     implementation(libs.androidx.activity.compose)
+    // A link preview's tap opens its page in a Custom Tab, tinted with the instance's colour.
+    implementation(libs.androidx.browser)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

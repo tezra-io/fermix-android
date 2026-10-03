@@ -115,3 +115,9 @@ whose version matches `version.properties`.
   ticks and is read aloud once; a new bubble rises in, the date shows while scrolling, and older messages
   load under a skeleton. The Chats list's last message is the plain words of its markdown, and the next
   launch reaches a Fermix first over the route that worked last.
+- **Cards and controls in the chat.** Approval polls count down and answer with Approve or Deny, as
+  buttons or TalkBack actions, then become their receipt, an expired one at once; a reaction shows on the
+  owner's message, and up to two link previews under their row, their thumbnails fetched from the
+  computer only, opening in a Custom Tab. The model chip and its "Model" sheet switch the chat's model,
+  `/model` too. Search finds messages through the computer's index, or the phone's while offline, from
+  the bar or Ctrl+F, says when the computer's search fails, and jumps to each hit with its words marked.

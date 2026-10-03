@@ -32,6 +32,7 @@ import io.tezra.fermix.onboarding.deviceNameRefusal
 import io.tezra.fermix.onboarding.handleStarter
 import io.tezra.fermix.session.PhoneIdentity
 import io.tezra.fermix.session.Session
+import io.tezra.fermix.session.SessionEvent
 import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.session.deviceModel
 import io.tezra.fermix.transport.NetworkWatcher
@@ -110,7 +111,12 @@ class AppServices(
         SessionSupervisor(
             instances.instances,
             sessionsMade,
-            SessionEvents(instances, databases, folds),
+            SessionEvents(
+                instances,
+                databases,
+                folds,
+                ApprovalAlerts(onScreen, ApprovalsToCome, System::currentTimeMillis),
+            ),
             sessionScope,
             ::logFault,
             sendUnpair,
@@ -207,8 +213,9 @@ class AppServices(
 
     /**
      * A chat's parts: [instanceId]'s session while the supervisor holds one, the app's fold of its events, its
-     * [profileId]'s cache, the network, where it reports itself on screen, the clocks, and the app's scope,
-     * which keeps its draft as it leaves.
+     * [profileId]'s cache, the network, where it reports itself on screen, the clocks, the app's scope, which
+     * keeps its draft as it leaves, and the cache directory a fetched thumbnail lands in before the media cache
+     * takes it.
      */
     fun chatParts(
         instanceId: String,
@@ -230,6 +237,7 @@ class AppServices(
             background = scope,
             newId = { UUID.randomUUID().toString() },
             log = ::logFault,
+            scratch = { File.createTempFile("fetch", null, context.cacheDir) },
         )
 
     /** The newest row [instanceId]'s main profile keeps, 0 when none or once it is removed. */
@@ -267,6 +275,16 @@ private object AppClock : ChatClock {
     override fun monoMs(): Long = SystemClock.elapsedRealtime()
 
     override fun wallMs(): Long = System.currentTimeMillis()
+}
+
+/** The approvals' notifier until the notifications change (A4) brings the app's: it can post none. */
+private object ApprovalsToCome : ApprovalNotifier {
+    override fun canNotify(instanceId: String): Boolean = false
+
+    override fun notify(
+        instanceId: String,
+        approval: SessionEvent.Approval,
+    ): Unit = error("no notification is posted before the notifications change")
 }
 
 /**

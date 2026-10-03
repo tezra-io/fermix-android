@@ -130,7 +130,7 @@ class AppSessionsTest {
             val store = InstanceStore(instanceDataStore(file, process), databases)
             val paired = record(1).copy(candidates = listOf(TAILNET, LAN))
             store.upsert(paired)
-            SessionEvents(store, databases, ChatFolds(TestClock) { 0uL }).reached(paired.id, LAN)
+            SessionEvents(store, databases, ChatFolds(TestClock) { 0uL }, NoAlerts).reached(paired.id, LAN)
             // The process ends, and the next one reads the records from their file.
             checkNotNull(process.coroutineContext[Job]).cancelAndJoin()
             val kept = InstanceStore(instanceDataStore(file, backgroundScope), databases).instances.first().single()

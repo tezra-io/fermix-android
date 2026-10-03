@@ -11,6 +11,7 @@ import io.tezra.fermix.protocol.MessageKind
 import io.tezra.fermix.protocol.MutationRow
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.keptMessage
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.serializer
@@ -21,7 +22,8 @@ import kotlinx.serialization.serializer
  * so a later protocol that widens the row needs no migration to keep what it carries. The other columns are
  * the same message's fields, kept for queries: the search, and the chips that filter cached media, files and
  * links (design section 13.7). A row that is not whole is a reply's text as `text_done` sealed it, with its
- * turn and route and no role, time or metadata, until the history page brings the row whole.
+ * turn and route, the link previews that came for it, and no role, time or metadata, until the history page
+ * brings the row whole.
  */
 @Entity(tableName = "timeline")
 internal data class TimelineEntity(
@@ -90,7 +92,7 @@ private fun TimelineRow.Reply.toEntity(): TimelineEntity =
         inReplyTo = null,
         mediaRefs = null,
         metadata = null,
-        linkPreviews = null,
+        linkPreviews = linkPreviews?.let { STORED_JSON.encodeToString(serializer<List<LinkPreviewCard>>(), it) },
         truncated = truncated,
         turnId = turnId,
         route = route?.let { STORED_JSON.encodeToString(serializer<Route>(), it) },
@@ -112,24 +114,26 @@ private fun TimelineEntity.toReply(): TimelineRow.Reply =
         text = content,
         truncated = checkNotNull(truncated) { "reply $serverSeq does not say whether it was cut" },
         route = route?.let { STORED_JSON.decodeFromString(serializer<Route>(), it) },
+        linkPreviews = linkPreviews?.let { STORED_JSON.decodeFromString(serializer<List<LinkPreviewCard>>(), it) },
     )
 
 /**
  * [mutation] applied to the row it names: each field it carries replaces the row's (design section 7, the
- * `mutation_seq` row). A reply takes the new content as its text; it has no metadata or media of its own,
- * and the history page that brings the row whole brings the row as it stands.
+ * `mutation_seq` row), and the row is kept as core-session keeps every row, an approval's answer without its
+ * words (keptMessage). A reply takes the new content as its text; it has no metadata or media of its own, and
+ * the history page that brings the row whole brings the row as it stands.
  */
 internal fun TimelineRow.mutated(mutation: MutationRow): TimelineRow {
     require(mutation.serverSeq == serverSeq) { "mutation of row ${mutation.serverSeq} applied to row $serverSeq" }
     return when (this) {
         is TimelineRow.Message -> {
-            TimelineRow.Message(
+            val changed =
                 message.copy(
                     content = mutation.content ?: message.content,
                     metadata = mutation.metadata ?: message.metadata,
                     mediaRefs = mutation.mediaRefs ?: message.mediaRefs,
-                ),
-            )
+                )
+            TimelineRow.Message(keptMessage(changed))
         }
 
         is TimelineRow.Reply -> {

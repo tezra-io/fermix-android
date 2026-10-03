@@ -7,6 +7,7 @@ import io.tezra.fermix.transport.MAX_CANDIDATES
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +47,8 @@ class PairedInstance(
 /**
  * What a session runs on, all of it the app's: the phone's Keystore key, the dialer, the store and
  * the announcer of the data layer, the network facts core-transport's watcher reads, a monotonic
- * clock and the backoff's jitter. A test passes fakes and the virtual clock.
+ * clock, the backoff's jitter and the answers' ids, and the dispatcher a fetched blob is written on. A
+ * test passes fakes and the virtual clock.
  */
 data class SessionParts(
     val appVersion: String,
@@ -57,6 +59,7 @@ data class SessionParts(
     val network: StateFlow<NetworkFacts>,
     val clock: TimeSource = TimeSource.Monotonic,
     val random: Random = Random.Default,
+    val io: CoroutineDispatcher = Dispatchers.IO,
 )
 
 /**
@@ -64,7 +67,8 @@ data class SessionParts(
  * the outbox, the cursors, keepalive, reconnect reconciliation, the ack and read rules, and the turn
  * machines (design sections 5, 7, 8 and 10). It reconnects by itself for as long as the close codes
  * allow, and says how its link stands in [state]. Its coroutines run one at a time on its scope's
- * dispatcher, and every call here joins them there.
+ * dispatcher, and every call here joins them there. What it asks of the daemon once and waits for, a search,
+ * the models, a blob, and an approval's answer, are its [calls] (OneShot.kt).
  */
 class Session private constructor(
     private val core: SessionCore,
@@ -72,6 +76,8 @@ class Session private constructor(
     private val runner: Runner,
     private val confined: CoroutineDispatcher,
 ) {
+    internal val calls = OneShotCalls(core, requests, runner, confined)
+
     val state: StateFlow<SessionState> get() = core.state
 
     /**

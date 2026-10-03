@@ -99,6 +99,23 @@ class TimelineDaoTest {
         }
 
     @Test
+    fun `the rows at a seq or after it are counted, so the list knows how far back it reaches`() =
+        runTest {
+            listOf(2uL, 5uL, 9uL, 12uL).forEach { persist(it, "row $it") }
+            assertEquals(3, timeline.countFrom(5uL))
+            assertEquals(1, timeline.countFrom(10uL))
+            assertEquals(0, timeline.countFrom(13uL))
+        }
+
+    @Test
+    fun `the oldest row held is where the next older page starts, none in an empty cache`() =
+        runTest {
+            assertNull(timeline.oldest())
+            listOf(9uL, 5uL, 12uL).forEach { persist(it, "row $it") }
+            assertEquals(5uL, timeline.oldest())
+        }
+
+    @Test
     fun `search finds the cached rows by word or by the start of one, newest first and at most the limit`() =
         runTest {
             persist(1uL, "The café on Main Street opens at nine")

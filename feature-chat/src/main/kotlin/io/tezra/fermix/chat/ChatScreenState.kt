@@ -16,8 +16,9 @@ import java.time.ZoneId
  * holds (what the screen reports to the announcer and reads up to at the bottom), the scroll pill's count of
  * the agent's rows past what the owner has seen, whether older rows may be loaded above, and the model the
  * owner chose for the chat, which a `model_unavailable` card names; the owner's zone and today, which the
- * day headers and the times are read in; and the answers that [arrived] whole, which the screen plays and
- * reads once each.
+ * day headers and the times are read in; the answers that [arrived] whole, which the screen plays and
+ * reads once each; the model chip, none when the daemon says no model; and whether a model picked during the
+ * running turn waits for it ("Switches after this reply").
  */
 data class ChatScreenState(
     val header: ChatHeader,
@@ -33,6 +34,8 @@ data class ChatScreenState(
     val zone: ZoneId,
     val today: LocalDate,
     val arrived: List<Arrival>,
+    val model: ModelChip? = null,
+    val switchPending: Boolean = false,
 )
 
 /** The chat's facts besides its list: the bar and the banner. */
@@ -57,6 +60,8 @@ fun chatScreenState(
     val newest = inputs.rows.maxOfOrNull { it.serverSeq }
     val oldest = inputs.rows.minOfOrNull { it.serverSeq }
     val more = inputs.rows.size >= limit || (inputs.live.older != Older.None && oldest != null && oldest > 1uL)
+    val caps = facts.header.record.caps
+    val chip = modelChipOf(inputs.live.model, caps?.modelState, inputs.connected)
     return ChatScreenState(
         header = facts.header,
         banner = facts.banner,
@@ -70,14 +75,11 @@ fun chatScreenState(
         newestSeq = newest,
         unseen = unseen(items, seenUpTo),
         older = more,
-        chosenModel =
-            facts.header.record.caps
-                ?.modelState
-                ?.overrideModel
-                ?.label,
+        chosenModel = chip?.takeIf { it.overridden }?.label,
         zone = inputs.zone,
         today = Instant.ofEpochMilli(inputs.nowWall).atZone(inputs.zone).toLocalDate(),
         arrived = arrivals(inputs.live, inputs.rows),
+        model = chip,
     )
 }
 

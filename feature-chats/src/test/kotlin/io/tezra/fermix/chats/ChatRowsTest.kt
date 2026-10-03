@@ -1,6 +1,8 @@
 package io.tezra.fermix.chats
 
 import io.tezra.fermix.instance.Link
+import io.tezra.fermix.protocol.HistoryMessage
+import io.tezra.fermix.session.APPROVAL_ANSWER_PREFIX
 import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.transport.Candidate
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -89,6 +91,28 @@ class ChatRowsTest {
             )
         assertTrue(dev.dev)
         assertFalse(row().dev)
+    }
+
+    @Test
+    fun `an approval's answer or a model pick is never the last message, nor its time, the row before them is`() {
+        val answerId = "${APPROVAL_ANSWER_PREFIX}a:0"
+        val answeredAt = "2026-09-27T11:00:00Z"
+        val answer = TimelineRow.Message(HistoryMessage(9u, "user", "", answeredAt, listOf(), clientMsgId = answerId))
+        val pick =
+            TimelineRow.Message(
+                HistoryMessage(
+                    8u,
+                    "user",
+                    "/model codex/gpt-6-luna",
+                    "2026-09-27T10:00:00Z",
+                    emptyList(),
+                    // feature-chat's MODEL_PICK_PREFIX, which it keeps internal.
+                    clientMsgId = "model-pick:m3",
+                ),
+            )
+        val shown = row(newest = listOf(answer, pick, message(7, "Raised the export timeout.")))
+        assertEquals(RowLine.Message("Raised the export timeout."), shown.line)
+        assertEquals("9:41\u202FAM", shown.time)
     }
 
     @Test

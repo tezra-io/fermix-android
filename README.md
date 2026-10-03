@@ -230,6 +230,44 @@ announcer that throws ends the session as `Failed`, and cancelling its scope as 
 other client events, `push_register` and `push_unregister` first (design section 10,
 "Registration"), have no path through the session yet; the push module adds one.
 
+Beside the outbox, a session asks and waits for four answers, each once over the connection that is up and
+reconciled and never queued: `Session.search` (`history_search`, 20 hits a page before a `before_seq`, its
+query at most 256 scalars, quoted in no diagnostic), `Session.pullModels` (`models_pull`, every page of one
+answer in order, 64 at most), and `Session.fetchMedia` (`media_fetch`, the blob's chunks written to the
+caller's file as they come, its size and SHA-256 checked against `media_begin` and `media_end`, a mismatch
+thrown as `MediaMismatchException` and the file deleted on every way it ends unanswered). Each ends as a
+typed `OneShot`: `Answered`, `Offline` without a connection, `Busy` past 8 waiting of its kind, `Refused`
+with the daemon's code, `TimedOut` after 30 s without its answer or its next part, and `Interrupted` when
+the connection ends first; a caller that is cancelled gives it up. Answers are matched as the daemon gives
+them: a `search_results` goes to the oldest search waiting for the `query` it echoes (design section 7), and
+one no search waits for is dropped, said in a diagnostic that never quotes it; a `models` page goes to the
+oldest pull until the page with no `next`; a blob's frames go to the fetch of their ref, from `media_begin`
+to `media_end` or `error{ref}`, whatever other blob's frames come between them, since the engine pushes a
+message's media between a fetch's chunks. An `error` naming neither a request nor a ref is the app's to hear
+(`SessionEvent.Refused`): no code tells a refused search or pull from the connection's other refusals
+(`request_backlog_full`, `unsupported_event`), so none is taken for one, and a search or a pull the daemon
+refused that way ends as `TimedOut`. A caller that gave up keeps its place for the 30 s an answer takes, so
+an answer on its way is not taken for a later search's or pull's; past them it is let go, as one the daemon
+refused gets no answer at all, so a "Try again" of the same query gets its own page and refused ones never
+leave the connection `Busy`. A fetch holds at most 65 replies its reader has not taken; one that falls
+further behind throws `MediaMismatchException`. The fourth, `Session.answerApproval`, is an outbox `command`
+like any other, at least once, under an id that starts with `approval-answer:`: the session keeps each
+card's approve and deny routes and its token, the app hears the card (`SessionEvent.Approval`,
+`ApprovalResolved`, `ApprovalClosedWhileAway`, `ApprovalAnswered`) without them, and a card it does not
+show, one answered already or one past its `ttl_s` is not answered. An answer that fails, before or after a
+reconnect, ends no turn and gives the card back. The daemon writes the answer as the owner's row, its route
+and token as the words: the session keeps that row without its words, live or paged, and so does the store's
+mutation of it, so the token is never kept, announced or in the phone's index; and `Session.search` drops a
+daemon hit on an answer, an owner's excerpt that is one of the daemon's routes or a route a card named and
+then one token-shaped word, as the answer's row is no more than that, while the owner's own "confirm the
+booking…" is found. The outbox item carries the token until the daemon accepts it, and the chat never draws
+it. A reaction and a link preview are kept on the row they name in the store (`RowEdits`), then told as
+`SessionEvent.Reaction` and `LinkPreview`; `model_changed` is `SessionEvent.ModelChanged`, and a `models`
+answer none asked for, a `/model` command's, is `SessionEvent.Models`. The tests run each against the fake
+daemon and the vendored fixtures: the order, the bounds, a refusal and the same search or pull asked again,
+the timeout, a cancelled caller and one cancelled as its file opens, a mismatched blob, nothing sent or kept
+for later while offline, and a card's token never in what the app hears, keeps or finds.
+
 `Pairing.start(link, keys, identity, parts, scope)` runs the pairing ceremony (design section 6.3,
 PROTOCOL.md "Noise modes and pairing") as a `PairingHandle` whose `StateFlow<PairingState>` is the
 onboarding screens' (section 13.3); a scope that ended already is refused. In order: the link is
@@ -418,7 +456,8 @@ row written when the database is created, so a cursor write that changes no row 
 the cached rows they name and skip the rest; a rebuild drops the cache, its index and the server cursor
 and keeps the ack and read frontiers and the outbox; the outbox is keyed by `client_msg_id` in the order
 it was enqueued, each request as its model's JSON. `MediaCache` keeps one profile's blobs by the
-lowercase hex of their SHA-256, checks the digest while it writes and keeps nothing that does not match,
+lowercase hex of their SHA-256 (`isMediaName` tells a name it takes, as its reads and puts refuse any
+other), checks the digest while it writes and keeps nothing that does not match,
 nor any part of a stream that fails, whatever it throws, and making one deletes the partial files of
 puts a process death cut short, so a process makes one per directory; it evicts the least recently used
 first, a read counting as a use, never the blob a put is keeping, and holds at most
@@ -746,6 +785,64 @@ the indicator's phrase through a rotation and a fold, and check the long-press m
 announcements (the card's, and an arrived answer's plain words once), the hardware keys and Copy's
 clipboard.
 
+The chat's cards and controls answer the daemon (sections 8.4, 8.6, 13.5 and 13.7). An approval card stands
+after the newest row as it came: its kind's icon and word, its text, its detail in mono, Deny and Approve,
+and "Expires in {s} s · approving resumes the paused turn" over a bar, in the warning colour from 10 s. Its
+seconds are read from the monotonic clock, never counted down, so a rotation or a fold keeps them, and a
+card whose time ran out before it was drawn is its receipt from the first frame (gotcha 18). An answer goes
+through core-session's `answerApproval`, which alone holds the card's routes and token; the card takes no
+second answer while one is on its way, and takes one again when the daemon refuses it. It becomes its
+receipt line in 350 ms, at once under reduce-motion: approved, denied, expired, or closed while this phone
+was away. TalkBack reads the card as one group and one stop, Approve and Deny a touch's alone and the
+group's custom actions, and hears the countdown from one polite live region as it crosses 30 s and 10 s,
+with the seconds it then has; a card first drawn under 30 s says its own seconds once. The countdown's line
+keeps the height of the most seconds it can show, so the card never changes height as it counts down and the
+bottom-anchored list never moves its buttons, and each button's word stays on one line at 200 % type. An
+answer's own row and outbox item never show, the Chats row's last message passes the row by, and neither
+search finds it. A card that comes while its chat is off screen goes to the app's `ApprovalAlerts`, which
+puts it in the notified set and hands it to an `ApprovalNotifier` once, never its replays; the notification
+itself is A4's, and until then the notifier posts nothing and the set is left as it was. A reaction is a 24
+dp pill over the owner's bubble's bottom-left, read from the row's metadata, overlapping the bubble's bottom
+10 dp at every type size, so one that grows with the type grows down, never over the words, popping in on
+the expressive spring (not under reduce-motion); a turn whose answer is only a reaction shows no card and no
+empty bubble. Up to two link previews, `http` and `https` only, stand under their row: the site, the title,
+two lines of description, and a 16:9 thumbnail that comes only through `Session.fetchMedia` into the media
+cache (`ChatThumbnails`), never from its URL, its bytes read while the cache is in use, never its file held
+past it; a tap opens the page in a Custom Tab in the instance's tint (androidx.browser), which needs no
+`<queries>` and no permission, so `policy/permissions.txt` is unchanged. A preview that lands above or below
+the row the owner reads moves nothing. The model chip in the composer's second row is seeded by
+`caps.model_state`, then by each `model_changed`: at 70 % on the config's default, tonal with the accent's
+dot on the chat's own model, and disabled with no connection, "Connect to change the model" above the
+composer. The chip, `/model` on the palette and `/model` typed alone open the "Model" sheet, and none of
+them does while the chip is disabled. The sheet pulls the models and lists the default, each provider's
+models but the one the daemon marks default, with "no live typing" for one that does not stream, and a
+provider the daemon could not list; a pick sends `command{model}` and says "Switches after this reply" while
+a turn runs, and the `model_unavailable` card's action is "Reset to default". A pick and a reset go under an
+id that starts with `model-pick:`, so neither their outbox item, but for one refused, nor the owner's row
+the daemon writes of them is drawn: the daemon's "Switched to" line tells of them, as the canon draws.
+Search opens from the bar's icon or Ctrl+F: 300 ms after the typing stops, the daemon's index while the link
+is up and the daemon has `caps.search`, 20 hits a page and the next as the list nears its end; otherwise the
+phone's own index, under "Cached messages only — connect to search everything", with nothing queued for
+later. A daemon's page that does not come while the link is up is logged by how it ended and says "Couldn't
+search {host}" with "Try again". The chips (All, Media, Files, Links) filter cached rows. A hit opens the
+chat at its row, loading the pages down to it first when the cache lacks it, each the one before the oldest
+row held, so no gap is left, or waiting up to 10 s for the catch-up to bring a row newer than the cache;
+with a 1.5 s ring round the bubble's own corners and the query's words washed in the row, in the owner's
+bubble in its own ink, ▲ ▼ step through the hits there from a bar in the 640 dp column. The query, cut to
+the 256 scalars a search takes, goes to the daemon or the cache and nowhere else, never into a log. The JVM
+tests cover the cards' fold and countdown (an expired card answerable never, the announcement's crossings),
+the thumbnail through the session alone (a scan of the module's sources and build script, and of its
+compiled classes, for an HTTP client, a socket, a URL fetch or a web view), the chip's seeding and the
+sheet's rows, a pick's quiet id, the search's debounce, pages, failures, bound, offline index and steps, and
+the jumps that fill every page between; on Robolectric the card's custom actions and live region, its one
+TalkBack stop, its height through the countdown at widths from 240 to 412 dp and its one-line buttons at 200
+% type, an expired card with nothing to press, a preview's tap, its Custom Tab's address and tint, a
+reaction's description and its chip growing down at 200 % type, a late preview that moves no row, Ctrl+F and
+the search field's caret, and the chip, the sheet, a pick, the palette's and the typed `/model` through
+`ChatRoute`. The instrumented tests keep the countdown and the buttons through a rotation and a fold, read
+the card's custom actions, its one stop and its two announcements from the window's accessibility tree, pick
+a model from the chip's sheet, and open search with Ctrl+F through the system's input.
+
 Where the code departs from sections 8.3 and 13.5 to 13.7, or reads them where they are silent, for the
 owner to settle:
 
@@ -785,6 +882,39 @@ owner to settle:
 - The date pill shows while the owner drags or flings the list, not while the list follows what lands, and
   not while a day header is the topmost item, which names its day itself. A panned table's columns are as
   wide as their words, 64 to 220 dp and never narrower than their longest word (up to 320 dp).
+- A card the phone showed and `hello_ack`'s `pending_approvals` no longer holds ends as "Closed while this
+  phone was away", design section 8.2's line, where the task named only the approved, denied and expired
+  receipts. The reaction's pop-in is expressive, as section 13.5 draws it, although the motion section keeps
+  the expressive scheme to three places. The chip's glyph is the provider's first letter, and a provider's
+  group in the sheet is its id, capitalised: the wire carries no provider name. A preview whose address is
+  not `http` or `https` is never shown or opened; with nothing on the phone to open a web page the tap is
+  logged and does nothing. A thumbnail is looked up in the media cache by its `image_ref`, taken as the
+  blob's SHA-256, which is the daemon's content address; one the wire allows that is no lowercase SHA-256
+  has no thumbnail, and the log says so. A hit past the 3,000 rows the list holds is logged
+  and not jumped to. A late preview on the row the owner reads, or between it and the list's anchor, grows
+  upward.
+- Search's failure line, "Couldn't search {host}" with "Try again", is not the design's, which is silent on
+  a daemon search that fails while the link is up: it is the model sheet's "Couldn't list models on {host}"
+  read for search, with section 13.6's "Try again".
+- The Media, Files and Links chips filter the phone's cached rows, even while the daemon searches; the
+  pinned line ("… connect to search everything") does not fit a connected chat, and the design is silent on
+  chips while connected, so their results carry no line saying they are the cache's.
+- "Expired — no answer in {ttl} s" names the `ttl_s` of the card's first sighting in this process. For a card
+  first seen as a replay, after a reconnect or a process death, that is the time it had left then, not the
+  card's whole time.
+- The chip's glyph is the first letter of the provider's id: codex's GPT-6 Astra is "C" in its ring, which
+  reads as "©", where the canon draws "O". The wire carries no provider mark to follow.
+- The countdown's 1 dp live region stays a TalkBack stop holding the words it last said, until it says the
+  next: Compose has no way to keep a live region announcing while it is out of the traversal order.
+- For the engine: an approval's answer is written as the owner's row, its route and token as the words, and
+  indexed for search (`mobile_timeline`, FTS). The phone keeps the row without its words, and drops a hit on
+  a row it holds as an answer and an owner's hit whose excerpt is a route it knows (the daemon's four and
+  those its cards named) and one token-shaped word; an owner's own two words of that shape ("deny
+  everything") are dropped too, so the answers belong out of the engine's index. A `history_search` or
+  `models_pull` the daemon refuses gets an `error` that names no request, which the phone cannot tell from
+  the connection's other refusals: it waits out its 30 s, and "Try again" works only after them. Naming the
+  request in such an `error` would end it at once. PROTOCOL.md says two blobs' frames never mix, while the
+  engine's fanout pushes a message's media between a fetch's chunks; the phone takes either.
 - Multi-select starts from a tap on a lifted message; the empty chat greets the instance's title ("Say
   hello to {title}."); after a reconnect the card starts again at "Thinking", from the reconciliation's
   active turns; a daemon of protocol v1, which sends no `turn_done`, holds a queued message until the
@@ -962,12 +1092,16 @@ over fixed state, two rows and one connected Fermix, with a `ChatsTestRig` kept 
 the activity's creations and picks the screen; its tests long-press a row for Move to top · Rename · Details · Unpair…, and keep a rename
 dialog's half-typed name, on the list and on the Instance screen, through a rotation and a fold.
 `ChatTestActivity` shows the Chat screen through `ChatRoute`, its `ChatViewModel` over a fake session and
-cache (`FakeChatSession`, `FakeChatStore`, from `feature-chat/src/sharedTest`) holding forty rows, kept with
-the app's fold of the events and a fake monotonic clock in a `ChatTestRig`; its tests keep a half-typed
-draft, the row scrolled to and the working indicator's phrase through a rotation and a fold, read the
-long-press menu as Copy · Select text · Copy code · Share · Info with no Reply or Forward, find one polite
-live region saying "Fermix is thinking" that stays the same node with the same words as the phrase
-changes, send on Enter and put a newline on Shift+Enter, and find Copy's words on the clipboard. A test
+cache (`FakeChatSession`, `FakeChatStore`, from `feature-chat/src/sharedTest`) holding forty rows and the
+daemon's model, kept with the app's fold of the events and a fake monotonic clock in a `ChatTestRig`; its
+tests keep a half-typed draft, the row scrolled to, the working indicator's phrase and an approval card's
+countdown and buttons through a rotation and a fold, read the long-press menu as Copy · Select text · Copy
+code · Share · Info with no Reply or Forward, find one polite live region saying "Fermix is thinking" that
+stays the same node with the same words as the phrase changes, find the approval card in the window's
+accessibility tree as one node whose custom actions Approve and Deny answer it and its countdown's live
+region saying 30 s, then 10 s, and nothing between, pick a model from the chip's sheet, send on Enter and
+put a newline on Shift+Enter, open search with Ctrl+F sent through the system's input
+(`input keycombination`), and find Copy's words on the clipboard. A test
 that needs the window's focus, Espresso's back and the clipboard's read, waits for it
 (`awaitWindowFocus`) and fails naming the window that holds it.
 

@@ -109,6 +109,19 @@ class ChatViewModel(
     private var readUpTo = 0uL
 
     val requests = ChatRequests(session, viewModelScope, parts.profileId, parts.newId, parts.log)
+    val approvals = ChatApprovals(session, viewModelScope, parts.log)
+    val models = ChatModels(requests, session, viewModelScope, parts.profileId, parts.newId, parts.log)
+    val thumbnails = ChatThumbnails(session, parts.store, parts.scratch, parts.log)
+    val jumps = ChatJumps(parts.store, session, limit, viewModelScope, parts.log)
+    val search =
+        ChatSearch(
+            session,
+            parts.store,
+            viewModelScope,
+            { daemonSearches(link.value, record.value) },
+            jumps::to,
+            parts.log,
+        )
     val composer =
         ChatComposer(
             requests,
@@ -129,10 +142,12 @@ class ChatViewModel(
             combine(rows, outbox, bridged, live, opened, ::heldOf),
             link,
             combine(requests.sent, seenUpTo, olderAsked, ::Triple),
-        ) { facts, held, link, (sent, seen, asked) ->
+            models.switchPending,
+        ) { facts, held, link, (sent, seen, asked), switching ->
             if (facts == null || held == null) return@combine null
             val inputs = inputsOf(parts, held, link is Link.Up, sent)
-            chatScreenState(facts, inputs, seen, limit.value, loadingOlder = asked != null)
+            val state = chatScreenState(facts, inputs, seen, limit.value, loadingOlder = asked != null)
+            state.copy(switchPending = switching && state.turnRuns)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
@@ -151,6 +166,8 @@ class ChatViewModel(
                 if (olderLanded(it)) olderAsked.value = null
             }
         }
+        // A model picked during a turn has switched once no turn runs (design section 8.6, released by turn_done).
+        viewModelScope.launch { live.collect { if (it.turns.none { turn -> turn.live }) models.turnsEnded() } }
     }
 
     /**
@@ -274,6 +291,12 @@ private fun olderLanded(facts: OlderFacts): Boolean {
     val held = facts.rows.any { it.serverSeq < asked.beforeSeq }
     return held || facts.live.older != asked.older || facts.link !is Link.Up
 }
+
+/** Whether the daemon's index answers a search now: a connection is up, and the daemon has `caps.search`. */
+private fun daemonSearches(
+    link: Link,
+    record: Instance?,
+): Boolean = link is Link.Up && record?.caps?.search == true
 
 private fun linkFlowOf(chat: ChatSession?): Flow<Link> =
     if (chat == null) flowOf(Link.NotOpen) else combine(chat.state, chat.diagnostics, ::linkOf)

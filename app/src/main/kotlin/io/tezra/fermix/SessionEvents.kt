@@ -15,14 +15,16 @@ import io.tezra.fermix.transport.Candidate
  * daemon's label, host and profile, its caps and push platforms) and the host-owned agent's name on the
  * chat; the daemon's later routes, and the one the last `hello` went over; an older page's rows, for the
  * chat's cache; the read frontier, which takes the rows it covers from the notified set (section 10); and
- * every event folded into what its chat shows besides its rows ([folds]), whose turns end with the session.
- * The profile's database is written through [ProfileDatabases.withDatabase], which a removal waits for; an
- * event that comes after its Fermix's removal keeps nothing there, and says so.
+ * every event folded into what its chat shows besides its rows ([folds]), whose turns end with the session;
+ * and an approval card that comes while its chat is off screen, handed to its notification ([alerts]). The
+ * profile's database is written through [ProfileDatabases.withDatabase], which a removal waits for; an event
+ * that comes after its Fermix's removal keeps nothing there, and says so.
  */
 internal class SessionEvents(
     private val instances: InstanceStore,
     private val databases: ProfileDatabases,
     private val folds: ChatFolds,
+    private val alerts: ApprovalAlerts,
 ) : EventSink {
     override suspend fun take(
         instanceId: String,
@@ -57,6 +59,12 @@ internal class SessionEvents(
 
             is SessionEvent.Server -> {
                 (event.event as? ServerEvent.HelloAck)?.let { helloAck(instanceId, it) } ?: true
+            }
+
+            is SessionEvent.Approval -> {
+                onProfile(instanceId) { profile ->
+                    alerts.arrived(instanceId, event) { entry, at -> profile.notified().put(entry, at) }
+                }
             }
 
             else -> {
