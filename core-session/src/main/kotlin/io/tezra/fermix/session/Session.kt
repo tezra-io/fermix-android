@@ -77,6 +77,12 @@ class Session private constructor(
      */
     val events: Flow<SessionEvent> = core.events.receiveAsFlow()
 
+    /**
+     * The candidate the last completed `hello` went over, none before the first: the live one while [state]
+     * is [SessionState.Connected] (the Instance screen's candidates), and the first one the next race tries.
+     */
+    val lastSuccessful: StateFlow<Candidate?> get() = core.lastSuccessful
+
     /** The last 200 notable things, for the Instance screen's Diagnostics. */
     val diagnostics: StateFlow<List<Diagnostic>> get() = core.diagnostics.entries
 
@@ -91,7 +97,7 @@ class Session private constructor(
      * it if a connection is up and reconciled; otherwise the next one's outbox drain sends it. A request
      * its version's rules refuse throws before anything is stored.
      */
-    suspend fun send(request: ClientEvent): Unit = withContext(confined) { requests.submit(request) }
+    suspend fun send(request: ClientEvent): Unit = withContext(confined) { runner.request { requests.submit(request) } }
 
     /**
      * "Run again" (design section 13.5): runs [failed], the `msg` or `command` whose run failed or which
@@ -102,7 +108,7 @@ class Session private constructor(
     suspend fun retry(
         failed: ClientEvent,
         newClientMsgId: String,
-    ): Unit = withContext(confined) { requests.retry(failed, newClientMsgId) }
+    ): Unit = withContext(confined) { runner.request { requests.retry(failed, newClientMsgId) } }
 
     /** Asks the daemon to stop [clientMsgId]'s turn: sent once if connected, never queued, never answered. */
     suspend fun cancel(clientMsgId: String): Boolean =
@@ -129,22 +135,43 @@ class Session private constructor(
      */
     suspend fun markRead(upToSeq: ULong): Unit =
         withContext(confined) {
-            core.requireOpen()
-            if (core.timeline().read(upToSeq, fromDaemon = false)) core.live?.report()
+            runner.request {
+                core.requireOpen()
+                if (core.timeline().read(upToSeq, fromDaemon = false)) core.live?.report()
+            }
         }
 
     /**
      * "Remove from outbox" (design section 13.6): [clientMsgId]'s request, which the daemon refused, leaves
      * the outbox. One the outbox still sends is never removed, since it may have reached the daemon.
      */
-    suspend fun remove(clientMsgId: String): Unit = withContext(confined) { requests.remove(clientMsgId) }
+    suspend fun remove(clientMsgId: String): Unit =
+        withContext(confined) { runner.request { requests.remove(clientMsgId) } }
+
+    /**
+     * "Unpair from {host}…" (design section 13.7): asks the daemon to forget this phone with `unpair`, sent
+     * once if a connection is up and never queued for a later one. The daemon answers with close `4003`,
+     * which ends the session as [SessionState.Revoked]. False when no connection is up, and then the daemon
+     * keeps listing the phone until the owner removes it there. An ended session refuses it.
+     */
+    suspend fun unpair(): Boolean =
+        withContext(confined) {
+            core.requireOpen()
+            val live = core.live ?: return@withContext false
+            live.post(ClientEvent.Unpair)
+            true
+        }
 
     /** Closes the socket and races no more until [resume] (design section 12.5). */
     suspend fun suspend(): Unit = withContext(confined) { runner.pause() }
 
     suspend fun resume(): Unit = withContext(confined) { runner.resume() }
 
-    /** Ends the session for good: [SessionState.Closed]. */
+    /**
+     * Ends the session for good: [SessionState.Closed]. It returns once the run has stopped and each of [send],
+     * [retry], [markRead] and [remove] called before it has returned, so nothing of this session's touches its
+     * store after it.
+     */
     suspend fun close(): Unit = withContext(confined) { runner.close() }
 
     companion object {

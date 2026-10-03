@@ -24,8 +24,10 @@ import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.net.URLEncoder
 import java.util.Base64
@@ -33,6 +35,9 @@ import java.util.HexFormat
 
 internal const val HOST = "suj-mbp"
 internal const val PHONE = "Pixel 9 Pro"
+
+/** When the tests' pairings are approved: 27 September 2026, 09:41 UTC. */
+internal const val PAIRED_AT = 1_790_502_060_000L
 internal val TAILNET = Candidate("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
 internal val LAN = Candidate("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
 
@@ -88,7 +93,7 @@ internal fun record(
     gateway: Int,
     tint: String = "Slate",
     nickname: String? = null,
-): Instance = instanceOf(facts(gateway), tint).copy(nickname = nickname)
+): Instance = instanceOf(facts(gateway), tint, PHONE, PAIRED_AT).copy(nickname = nickname)
 
 /** The Context ProfileDatabases holds and never asks anything of until a database opens, which these tests never do. */
 private object NoContext : ContextWrapper(null)
@@ -127,6 +132,31 @@ internal class FakeControl : PairingControl {
     override suspend fun commit(store: suspend (InstanceFacts) -> String?) {
         val approved = state.value as PairingState.Approved
         replaced += store(approved.facts)
+    }
+}
+
+/**
+ * The keeper of sessions the tests hand onboarding: it stores the record, then keeps the session by instance.
+ * The approved record must come into [records] inside the handover, new or in place of the one a pairing
+ * replaces: a record stored before it would let the app's keeper open a second session for the instance
+ * (design section 6.3).
+ */
+internal class FakeHandover(
+    private val records: Flow<List<Instance>>,
+) : SessionHandover {
+    val adopted = mutableListOf<Pair<String, Session>>()
+
+    override suspend fun adopt(
+        instanceId: String,
+        session: Session,
+        record: suspend () -> String?,
+    ): String? {
+        val before = records.first().find { it.id == instanceId }
+        val replaced = record()
+        val after = records.first().find { it.id == instanceId }
+        check(after != null && after != before) { "$instanceId's record was not stored inside the handover" }
+        adopted += instanceId to session
+        return replaced
     }
 }
 

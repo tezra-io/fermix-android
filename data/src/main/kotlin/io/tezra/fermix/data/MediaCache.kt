@@ -54,9 +54,10 @@ internal fun evictionOrder(
  * section 13.7). A blob's last use is its file's modification time, set from [clock] on every put and read.
  * The methods do file I/O, so they run off the main thread, and so does making one: it deletes the partial
  * files of puts that a process death cut short, which nothing else counts or evicts. A put in flight writes
- * such a file too, so a process makes one MediaCache per directory.
+ * such a file too, so a process makes one MediaCache per directory, and only ProfileDatabases makes one, which
+ * orders its uses against the instance's removal (ProfileDatabases.withMediaCache).
  */
-class MediaCache(
+class MediaCache internal constructor(
     private val directory: File,
     private val clock: () -> Long,
     private val ceilingBytes: Long = MAX_MEDIA_CACHE_BYTES,

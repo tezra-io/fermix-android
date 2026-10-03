@@ -11,7 +11,9 @@ import kotlinx.coroutines.withContext
 /**
  * This phone's paired daemons (design section 9.1), in the Chats list's order, with each one's files in
  * [databases]. Every change is one DataStore write; the files of a record that left go after it, on [io],
- * so a removal cut short leaves files no record names, which [launchCheck] deletes.
+ * once [databases] has ended every reader of them (ProfileDatabases.delete), so a removal cut short leaves
+ * files no record names, which [launchCheck] deletes. A pairing's write lets its daemon's files be opened
+ * again first (ProfileDatabases.admit), as an earlier removal of the same daemon in this process refuses them.
  */
 class InstanceStore(
     private val records: DataStore<Instances>,
@@ -20,8 +22,11 @@ class InstanceStore(
 ) {
     val instances: Flow<List<Instance>> = records.data.map { it.instances }
 
-    /** The titles [launchCheck] dropped, which the app shows as "Re-pair this Fermix" until dismissed. */
-    val repairNotices: Flow<List<String>> = records.data.map { it.repairNotices }
+    /**
+     * The instances [launchCheck] dropped, which the app shows as "Re-pair this Fermix" until a pairing brings
+     * the same daemon back ([upsert], [merge]) or the owner removes the notice ([dismissRepairNotice]).
+     */
+    val repairNotices: Flow<List<RepairNotice>> = records.data.map { it.repairNotices }
 
     /**
      * Records [paired] on `pair_approved` (design section 6.1). The same daemon paired again replaces its
@@ -30,14 +35,16 @@ class InstanceStore(
      * brings a new alias, and one that does not is refused (InstanceRules.kt's planUpsert), so the alias
      * handed back is never the live one. A nickname [paired] brings is held to [rename]'s rule, which the
      * Paired screen asks [nicknameRefusal] beforehand; a refusal of either kind writes nothing. A change to a
-     * record is [update].
+     * record is [update]. The daemon's "Re-pair this Fermix" notice, if a launch dropped it, goes in the same
+     * write.
      */
     suspend fun upsert(paired: Instance): Instance? {
+        databases.admit(paired.id)
         var replaced: Instance? = null
         records.updateData { current ->
             val plan = planUpsert(current.instances, paired)
             replaced = plan.replaced
-            current.copy(instances = plan.instances)
+            current.copy(instances = plan.instances, repairNotices = current.repairNotices.without(paired.id))
         }
         return replaced
     }
@@ -61,17 +68,19 @@ class InstanceStore(
      * row's profile, takes the row's place, nickname and tint, and the old daemon's databases and media are
      * deleted. Returns the old record, whose key alias the caller then deletes, so [paired] under that alias
      * is refused, as is a nickname it brings for a row that had none when another row is titled with it; a
-     * refusal writes and deletes nothing.
+     * refusal writes and deletes nothing. A "Re-pair this Fermix" notice of [paired]'s daemon goes in the same
+     * write.
      */
     suspend fun merge(
         oldId: String,
         paired: Instance,
     ): Instance {
+        databases.admit(paired.id)
         var replaced: Instance? = null
         records.updateData { current ->
             val plan = planMerge(current.instances, oldId, paired)
             replaced = plan.replaced
-            current.copy(instances = plan.instances)
+            current.copy(instances = plan.instances, repairNotices = current.repairNotices.without(paired.id))
         }
         val old = checkNotNull(replaced) { "the merge replaced no record" }
         if (old.id != paired.id) deleteFiles(old.id)
@@ -118,16 +127,25 @@ class InstanceStore(
         records.updateData { current -> current.copy(repairNotices = emptyList()) }
     }
 
+    /** The owner removed the "Re-pair this Fermix" row of the dropped instance [id]: its notice goes. */
+    suspend fun dismissRepairNotice(id: String) {
+        records.updateData { current ->
+            require(current.repairNotices.any { it.id == id }) { "no repair notice names $id" }
+            current.copy(repairNotices = current.repairNotices.without(id))
+        }
+    }
+
     /**
-     * Removes every record whose key alias is in [missingAliases] and notes each one's title among the repair
-     * notices, in one write; then deletes their files, and returns them.
+     * Removes every record whose key alias is in [missingAliases] and notes each one, by its id and its title,
+     * among the repair notices, in one write; then deletes their files, and returns them.
      */
     internal suspend fun dropForRepair(missingAliases: Set<String>): List<Instance> {
         var dropped = emptyList<Instance>()
         records.updateData { current ->
             val (gone, kept) = current.instances.partition { it.keyAlias in missingAliases }
             dropped = gone
-            current.copy(instances = kept, repairNotices = current.repairNotices + gone.map { it.title })
+            val noticed = gone.map { RepairNotice(it.id, it.title) }
+            current.copy(instances = kept, repairNotices = current.repairNotices + noticed)
         }
         dropped.forEach { deleteFiles(it.id) }
         return dropped
@@ -146,3 +164,6 @@ class InstanceStore(
 
     private suspend fun deleteFiles(id: String) = withContext(io) { databases.delete(id) }
 }
+
+/** The notices without [id]'s. */
+private fun List<RepairNotice>.without(id: String): List<RepairNotice> = filter { it.id != id }

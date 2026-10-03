@@ -47,8 +47,11 @@ class AndroidRoomLibraryConventionPlugin : Plugin<Project> {
     }
 }
 
-/** [ExtractSqliteNative] over sqlite-bundled-jvm, which Gradle resolves and checks against its sha256. */
-private fun Project.registerSqliteNative(libs: VersionCatalog): TaskProvider<ExtractSqliteNative> {
+/**
+ * [ExtractSqliteNative] over sqlite-bundled-jvm, which Gradle resolves and checks against its sha256: a Room
+ * module's, and the app's, whose Robolectric tests draw the Chats list over the data module's databases.
+ */
+internal fun Project.registerSqliteNative(libs: VersionCatalog): TaskProvider<ExtractSqliteNative> {
     val desktopSqlite =
         configurations.detachedConfiguration(dependencies.create(libs.library("androidx-sqlite-bundled-jvm").get()))
     desktopSqlite.isTransitive = false
@@ -66,7 +69,7 @@ private fun Project.registerSqliteNative(libs: VersionCatalog): TaskProvider<Ext
 }
 
 /** A JVM test task loads the bundled driver's library from what [extract] wrote. */
-private fun loadSqliteNative(
+internal fun loadSqliteNative(
     test: Test,
     extract: TaskProvider<ExtractSqliteNative>,
 ) {

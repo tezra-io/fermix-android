@@ -20,7 +20,6 @@ import io.tezra.fermix.transport.RaceResult
 import io.tezra.fermix.transport.TransportException
 import io.tezra.fermix.transport.candidateOrder
 import io.tezra.fermix.transport.linkCandidate
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -63,13 +62,13 @@ internal class Ceremony(
     private var alias: String? = null
     private var won: Handshaken? = null
 
-    /** The ceremony to its end, which it publishes and returns; the session it hands over runs in [sessionScope]. */
-    suspend fun run(sessionScope: CoroutineScope): PairingState {
+    /** The ceremony to its end, which it publishes and returns; its session runs in the parts' session scope. */
+    suspend fun run(): PairingState {
         var outcome: PairingState? = null
         try {
             outcome =
                 try {
-                    steps(sessionScope)
+                    steps()
                 } catch (ended: CeremonyEnded) {
                     ended.state
                 }
@@ -87,7 +86,7 @@ internal class Ceremony(
      * then sends `hello`; the wire contract wins, and the docs' order is the owner's to correct. The old
      * alias is deleted at the handle's commit, once the record is stored, as design section 6.1 requires.
      */
-    private suspend fun steps(sessionScope: CoroutineScope): PairingState.Approved {
+    private suspend fun steps(): PairingState.Approved {
         linkRefusal(link)?.let { throw CeremonyEnded(it) }
         val candidates = link.candidates.map { checkNotNull(linkCandidate(it)) }
         val dialer = parts.dialerFor(link.port, link.tlsFingerprint.copyOf())
@@ -103,7 +102,7 @@ internal class Ceremony(
         val facts = factsOf(approval, routes, attempt)
         val instance = PairedInstance(approval.deviceId, parts.profileId, link.gatewayPublicKey)
         val adopted = Adopted(race.candidate, race.value, channel)
-        val session = Session.adopt(instance, routes, sessionParts(staticKey, dialer), sessionScope, adopted)
+        val session = Session.adopt(instance, routes, sessionParts(staticKey, dialer), parts.sessionScope, adopted)
         won = null
         return PairingState.Approved(facts, session)
     }

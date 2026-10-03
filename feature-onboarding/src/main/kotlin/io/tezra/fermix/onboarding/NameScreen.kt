@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.data.nicknameRefusal
+import io.tezra.fermix.data.showsDevTag
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType

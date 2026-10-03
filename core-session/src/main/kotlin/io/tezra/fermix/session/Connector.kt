@@ -49,7 +49,7 @@ internal class Connector(
         if (adopted != null) return adopted.won.use { connection(adopted.candidate, it, adopted.channel) }
         val parts = core.parts
         val gatewayKey = core.instance.gatewayPublicKey
-        val order = candidateOrder(core.candidates, core.lastSuccessful)
+        val order = candidateOrder(core.candidates, core.lastSuccessful.value)
         return when (
             val race =
                 CandidateRacer.race(
@@ -67,6 +67,9 @@ internal class Connector(
 
             is RaceResult.AllFailed -> {
                 core.log(DiagnosticKind.RACE_FAILED, race.failures.values.joinToString { it.toString() })
+                race.failures.values
+                    .firstOrNull(::isProtocolErrorClose)
+                    ?.let { core.logProtocolError(it) }
                 Attempt(nextAfterRace(race.failures.values))
             }
         }
@@ -103,7 +106,7 @@ internal class Connector(
         channel: SecureChannel,
         accepted: HelloOutcome.Accepted,
     ): Attempt {
-        core.lastSuccessful = candidate
+        core.lastSuccessful.value = candidate
         // A reconnect after the hourly close finds the link still shown up and caught up, and stays silent.
         val caughtUp = (core.state.value as? SessionState.Connected)?.caughtUp == true
         val connected = SessionState.Connected(candidate.scope, accepted.latencyMs, caughtUp)
@@ -140,16 +143,35 @@ internal class Connector(
         ending: Ending,
         upMs: Long?,
     ): Attempt {
-        if (ending is Ending.ProtocolError) {
-            link.close(PROTOCOL_ERROR, "mobile protocol error")
-            core.log(DiagnosticKind.PROTOCOL_ERROR, ending.detail)
-        } else {
-            core.log(DiagnosticKind.CLOSED, ending.toString())
+        val daemonClose = (ending as? Ending.Transport)?.failure
+        when {
+            ending is Ending.ProtocolError -> {
+                link.close(PROTOCOL_ERROR, "mobile protocol error")
+                core.log(DiagnosticKind.PROTOCOL_ERROR, ending.detail)
+            }
+
+            daemonClose != null && isProtocolErrorClose(daemonClose) -> {
+                core.logProtocolError(daemonClose)
+            }
+
+            else -> {
+                core.log(DiagnosticKind.CLOSED, ending.toString())
+            }
         }
         val next = nextAfterConnection(ending, upMs)
         return Attempt(next, candidate, upMs != null, silent = next == Next.ReconnectNow && ending.isLifetimeClose())
     }
 }
+
+/**
+ * The daemon's `1002`, a protocol error on its side (PROTOCOL.md "Close codes"), which a protocol v1 daemon
+ * also sends to a phone key it no longer holds. It is logged as a protocol error, so the app shows it as one
+ * and never as a revocation (design section 9.4); the session races again after the backoff all the same.
+ */
+private fun isProtocolErrorClose(failure: Exception): Boolean =
+    failure is TransportException.Closed && failure.byDaemon && failure.code == PROTOCOL_ERROR
+
+private fun SessionCore.logProtocolError(close: Exception) = log(DiagnosticKind.PROTOCOL_ERROR, close.toString())
 
 /**
  * The daemon's hourly close, `1000 "Noise session lifetime reached"` (design section 5.1), which alone

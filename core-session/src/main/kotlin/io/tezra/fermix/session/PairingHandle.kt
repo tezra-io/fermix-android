@@ -154,7 +154,7 @@ class PairingHandle internal constructor(
     private suspend fun ceremony() {
         var ending: PairingState? = null
         try {
-            ending = Ceremony(link, keys, identity, parts, board).run(scope)
+            ending = Ceremony(link, keys, identity, parts, board).run()
         } catch (cancellation: CancellationException) {
             board.publish(PairingState.Cancelled)
             throw cancellation

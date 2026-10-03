@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -75,6 +76,7 @@ class OnboardingViewModelTest {
         val network = MutableStateFlow(ONLINE)
         val wait = MutableStateFlow<PairingWait?>(null)
         val store = instanceStore(File(directory, "rig${rigs++}"), scope.backgroundScope)
+        val handover = FakeHandover(store.instances)
         private val parts =
             OnboardingParts(
                 gate = { gate },
@@ -84,6 +86,8 @@ class OnboardingViewModelTest {
                 network = network,
                 pairingDispatcher = main,
                 pairingWait = wait,
+                handover = handover,
+                now = { PAIRED_AT },
             )
 
         /** The activity's store of ViewModels, whose clear is the activity's end. */
@@ -409,6 +413,8 @@ class OnboardingViewModelTest {
                     .single()
             assertEquals(facts(gateway = 1).id, stored.id)
             assertEquals("Slate", stored.tint)
+            assertEquals(PHONE, stored.deviceName)
+            assertEquals(PAIRED_AT, stored.pairedAt)
             assertEquals(listOf<String?>(null), rig.control.replaced)
             val paired = checkNotNull(rig.model.ui.value.paired)
             assertEquals(stored, paired.record)
@@ -586,12 +592,58 @@ class OnboardingViewModelTest {
         }
 
     @Test
-    fun `pairing a Fermix again hands the commit the key of the record it replaced`() =
+    fun `a daemon paired already is asked about first, and no pairs nothing and goes back to Pair`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.store.upsert(record(gateway = 1, nickname = "Studio"))
+            runCurrent()
+            rig.model.getStarted()
+            rig.model.scan()
+            rig.model.ceremony.onLink(readLink(linkText()))
+            assertEquals("Studio", rig.model.ui.value.alreadyPaired)
+            assertEquals(listOf(PAIR, SCAN), rig.model.stack.value)
+            assertTrue(rig.starter.started.isEmpty())
+            // The camera reads the code again while the question waits: nothing more happens.
+            rig.model.ceremony.onLink(readLink(linkText()))
+            assertTrue(rig.starter.started.isEmpty())
+            rig.model.ceremony.pairAgain
+                .answer(yes = false)
+            assertNull(rig.model.ui.value.alreadyPaired)
+            assertEquals(listOf(PAIR), rig.model.stack.value)
+            assertTrue(rig.starter.started.isEmpty())
+            assertThrows<IllegalStateException> {
+                rig.model.ceremony.pairAgain
+                    .answer(yes = true)
+            }
+        }
+
+    @Test
+    fun `Pair again on a revoked row asks nothing more, as the owner chose it there`() =
+        runTest(main) {
+            val rig = Rig(this)
+            val revoked = record(gateway = 1)
+            rig.store.upsert(revoked)
+            runCurrent()
+            rig.model.getStarted(mergeInto = revoked.id)
+            rig.model.ceremony.onLink(readLink(linkText()))
+            assertNull(rig.model.ui.value.alreadyPaired)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), rig.model.stack.value)
+        }
+
+    @Test
+    fun `pairing a Fermix again is asked about, and yes hands the commit the key of the record it replaced`() =
         runTest(main) {
             val rig = Rig(this)
             val old = record(gateway = 1).copy(keyAlias = "fermix.device.1.0807060504030201")
             rig.store.upsert(old)
+            runCurrent()
             rig.pasted()
+            assertEquals(HOST, rig.model.ui.value.alreadyPaired)
+            assertEquals(listOf(PAIR), rig.model.stack.value)
+            rig.model.ceremony.pairAgain
+                .answer(yes = true)
+            assertNull(rig.model.ui.value.alreadyPaired)
+            assertEquals(listOf(PAIR, SCAN, OnboardingKey.Connecting), rig.model.stack.value)
             runCurrent()
             rig.control.state.value = PairingState.Approved(facts(gateway = 1), idleSession(backgroundScope))
             rig.shows(OnboardingKey.Paired)
@@ -604,7 +656,7 @@ class OnboardingViewModelTest {
         }
 
     @Test
-    fun `the paired session the approval hands over is closed once the record is stored`() =
+    fun `the paired session goes to the keeper of sessions with the record, and stays open`() =
         runTest(main) {
             val rig = Rig(this)
             rig.pasted()
@@ -612,12 +664,71 @@ class OnboardingViewModelTest {
             val session = idleSession(backgroundScope)
             rig.control.state.value = PairingState.Approved(facts(gateway = 1), session)
             rig.shows(OnboardingKey.Paired)
-            assertEquals(SessionState.Closed, session.state.value)
+            assertEquals(listOf(facts(gateway = 1).id to session), rig.handover.adopted)
+            assertNotEquals(SessionState.Closed, session.state.value)
             assertEquals(
                 1,
                 rig.store.instances
                     .first()
                     .size,
             )
+        }
+
+    @Test
+    fun `Pair again on a reinstalled daemon's row merges the new pairing into it, nickname and tint kept`() =
+        runTest(main) {
+            val rig = Rig(this)
+            val old = record(gateway = 5, tint = "Plum", nickname = "Studio")
+            rig.store.upsert(old)
+            rig.model.getStarted(mergeInto = old.id)
+            assertEquals(listOf(PAIR), rig.model.stack.value)
+            rig.model.ceremony.onLink(readLink(linkText()))
+            runCurrent()
+            rig.control.state.value = PairingState.Approved(facts(gateway = 1), idleSession(backgroundScope))
+            rig.shows(OnboardingKey.Paired)
+            val merged =
+                rig.store.instances
+                    .first()
+                    .single()
+            assertEquals(facts(gateway = 1).id, merged.id)
+            assertEquals("Studio", merged.nickname)
+            assertEquals("Plum", merged.tint)
+            assertEquals(listOf<String?>(old.keyAlias), rig.control.replaced)
+        }
+
+    @Test
+    fun `Pair again that pairs another profile adds a row, and leaving onboarding forgets the row`() =
+        runTest(main) {
+            val rig = Rig(this)
+            // Named, so the new row's title is its own and Paired asks for no name.
+            val old = record(gateway = 5, nickname = "Studio")
+            rig.store.upsert(old)
+            rig.model.getStarted(mergeInto = old.id)
+            assertEquals(old.id, rig.model.ui.value.mergeInto)
+            rig.model.ceremony.onLink(readLink(linkText()))
+            runCurrent()
+            val other = facts(gateway = 1, profile = "fermix-dev", push = emptyList())
+            rig.control.state.value = PairingState.Approved(other, idleSession(backgroundScope))
+            rig.shows(OnboardingKey.Paired)
+            assertEquals(
+                listOf(old.id, other.id),
+                rig.store.instances
+                    .first()
+                    .map { it.id },
+            )
+            rig.model.continueFromPaired()
+            rig.shows()
+            assertNull(rig.model.ui.value.mergeInto)
+        }
+
+    @Test
+    fun `a pairing starts from the root alone, and Pair again names a row`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.model.getStarted()
+            assertEquals(listOf(PAIR), rig.model.stack.value)
+            assertNull(rig.model.ui.value.mergeInto)
+            assertThrows<IllegalArgumentException> { rig.model.getStarted() }
+            assertThrows<IllegalArgumentException> { Rig(this).model.getStarted(mergeInto = " ") }
         }
 }

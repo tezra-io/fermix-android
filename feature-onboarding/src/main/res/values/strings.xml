@@ -102,6 +102,14 @@
     <string name="onboarding_failure_no_secure_hardware_body">Fermix needs Android 15 or newer with hardware Curve25519 support.</string>
     <string name="onboarding_failure_lost_title">Lost the connection while waiting</string>
     <string name="onboarding_failure_lost_body">Your approval didn\'t reach this phone. Start pairing again.</string>
+    <!--
+      Section 9.2's question for a daemon this phone is paired with already, capitalised to stand alone; the
+      dialog's title is the row's. Its buttons are not the design's: the trust screens' "Pair again", and Cancel.
+    -->
+    <string name="onboarding_already_paired">Already paired; pair again to replace this phone\'s key?</string>
+    <string name="onboarding_already_paired_yes">Pair again</string>
+    <string name="onboarding_already_paired_no">Cancel</string>
+
     <!-- Not in the table: a daemon that answers what the ceremony does not take. Section 13.9's generic title. -->
     <string name="onboarding_failure_protocol_title">Something went wrong on %1$s</string>
 

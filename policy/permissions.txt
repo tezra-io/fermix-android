@@ -13,3 +13,5 @@ android.permission.FOREGROUND_SERVICE
 android.permission.INTERNET
 # Onboarding's step 7 asks for it (design section 13.3), and the pairing wait posts with it.
 android.permission.POST_NOTIFICATIONS
+# The app lock's prompt, BIOMETRIC_STRONG | DEVICE_CREDENTIAL (design section 13.7).
+android.permission.USE_BIOMETRIC

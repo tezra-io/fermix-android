@@ -422,16 +422,18 @@ class OnboardingScreensTest {
 
     /** A ViewModel on Pair, past the gate, its ceremonies [starter]'s fakes. */
     private fun pairingModel(starter: FakeStarter): OnboardingViewModel {
+        val store = instanceStore(folder.root, CoroutineScope(main))
         val model =
             OnboardingViewModel(
                 OnboardingParts(
                     gate = { GateResult.Ok },
                     pairings = starter,
                     identity = PhoneIdentity(PHONE, "Google Pixel 9 Pro", "0.1.0"),
-                    instances = instanceStore(folder.root, CoroutineScope(main)),
+                    instances = store,
                     network = MutableStateFlow(NetworkFacts.NONE),
                     pairingDispatcher = main,
                     pairingWait = MutableStateFlow(null),
+                    handover = FakeHandover(store.instances),
                 ),
             )
         model.getStarted()

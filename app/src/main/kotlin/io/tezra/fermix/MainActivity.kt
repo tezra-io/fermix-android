@@ -1,66 +1,96 @@
 package io.tezra.fermix
 
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.Window
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.withResumed
 import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.ui.NavDisplay
+import io.tezra.fermix.chats.ChatsViewModel
 import io.tezra.fermix.design.FermixTheme
-import io.tezra.fermix.design.FermixType
-import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.onboarding.OnboardingViewModel
-import io.tezra.fermix.onboarding.appBackStack
-import io.tezra.fermix.onboarding.clipboardClip
 import io.tezra.fermix.onboarding.darkUnderBars
-import io.tezra.fermix.onboarding.onboardingEntries
-import io.tezra.fermix.onboarding.phoneCamera
 import io.tezra.fermix.onboarding.securesWindow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
-/** The Chats list (design section 13.4), the root once a Fermix is paired; a placeholder until it is built. */
-data object ChatsKey : NavKey
+/** What an intent asks of the app: a chat from a notification or a shortcut, or "Add Fermix". */
+sealed interface AppIntent {
+    data class OpenChat(
+        val chat: ChatKey,
+    ) : AppIntent
+
+    data object AddFermix : AppIntent
+}
+
+/** What [intent] asks, none for the launcher's plain start or anything the app does not take. */
+fun appIntentOf(intent: Intent?): AppIntent? {
+    if (intent?.action == ACTION_ADD_FERMIX) return AppIntent.AddFermix
+    return chatOfLink(intent?.dataString)?.let(AppIntent::OpenChat)
+}
+
+/** The explicit intent that opens a chat: the deep link, to this app's activity alone. */
+fun chatIntent(
+    context: Context,
+    instanceId: String,
+    profileId: String,
+): Intent = Intent(Intent.ACTION_VIEW, chatLink(instanceId, profileId).toUri(), context, MainActivity::class.java)
 
 /**
  * The one activity: the design's theme, the back stack in Navigation 3's NavDisplay with its predictive
- * back, `FLAG_SECURE` while an onboarding screen shows (design section 13.3), white system bars over the
- * scan's camera, and the pairing-wait notification when the owner leaves Verify for another app (section
- * 12.5).
+ * back, `FLAG_SECURE` while an onboarding screen (design section 13.3) or the Instance screen shows or the
+ * app is locked, white
+ * system bars over the scan's camera, the recents preview hidden while the app lock is on, and the
+ * pairing-wait notification when the owner leaves Verify for another app (section 12.5). The app lock's
+ * gate hears when the app comes into and goes out of sight, and the system's prompt asks for the unlock as
+ * the lock comes, once per time the app is in sight; "Unlock" asks again after a prompt the owner closed.
  */
 class MainActivity : ComponentActivity() {
     private val services: AppServices get() = (application as FermixApplication).services
 
+    /** The intent not yet acted on: the one the activity started with, or a later one. */
+    private val intents = MutableStateFlow<AppIntent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // A recreated activity's intent was acted on before.
+        if (savedInstanceState == null) intents.value = appIntentOf(intent)
+        val hooks =
+            ActivityHooks(
+                fit = { top, locked -> fitWindow(this, top, locked) },
+                intents = intents,
+                unlock = ::unlock,
+                recents = ::setRecentsScreenshotEnabled,
+                leave = { moveTaskToBack(true) },
+            )
         setContent {
-            FermixTheme { FermixApp(services, ::fit) }
+            FermixTheme { FermixApp(services, hooks) }
         }
+        lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { promptWhenLocked() } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intents.value = appIntentOf(intent)
     }
 
     override fun onStart() {
         super.onStart()
         services.inBackground.value = false
+        services.lockGate.cameIntoSight(SystemClock.elapsedRealtime())
     }
 
     /**
@@ -71,31 +101,65 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         if (isChangingConfigurations) return
         services.inBackground.value = true
+        services.lockGate.wentOutOfSight(SystemClock.elapsedRealtime())
         val shown = pairingWaitShown(services.pairingWait.value, services.inBackground.value)
         if (shown != null) PairingWaitService.start(this)
     }
 
-    private fun fit(top: NavKey) = fitWindow(this, top)
+    /** The system's prompt each time the lock comes while the activity is in sight, once it is resumed. */
+    private suspend fun promptWhenLocked() {
+        services.lockGate.locked.collect { locked ->
+            if (locked) withResumed { unlock() }
+        }
+    }
+
+    private fun unlock() {
+        promptUnlock(this, getString(io.tezra.fermix.chats.R.string.chats_locked)) { services.lockGate.unlocked() }
+    }
 }
 
-/** [activity]'s window as [top] needs it: kept out of screenshots or not, and its system bars. */
+/** The activity's three ViewModels: onboarding's, the app's own screens' and the Chats list's. */
+internal class AppModels(
+    val onboarding: OnboardingViewModel,
+    val navigator: AppNavigator,
+    val chats: ChatsViewModel,
+)
+
+/** What the composition asks of its activity. */
+internal class ActivityHooks(
+    val fit: (NavKey, Boolean) -> Unit,
+    val intents: MutableStateFlow<AppIntent?>,
+    val unlock: () -> Unit,
+    val recents: (Boolean) -> Unit,
+    val leave: () -> Unit,
+)
+
+/** Whether this is a debuggable build, which a release never is (the application convention). */
+internal fun debuggable(context: Context): Boolean =
+    context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+
+/** [activity]'s window as [top] needs it, and as the lock does: kept out of screenshots or not, and its bars. */
 internal fun fitWindow(
     activity: ComponentActivity,
     top: NavKey,
+    locked: Boolean,
 ) {
-    secureWindow(activity.window, top)
+    secureWindow(activity.window, top, locked)
     barsOver(activity, top)
 }
 
 /**
  * Keeps [window] out of screenshots and the recents while [top] is an onboarding screen (design sections
- * 12.4 and 13.3), and lets it be seen again once the screen is the app's own.
+ * 12.4 and 13.3) or the Instance screen, which shows the daemon's key fingerprint (section 12.4: "Screens
+ * showing the SAS, fingerprints or QR set FLAG_SECURE"), or the app is [locked] (section 13.7), and lets it
+ * be seen again once none holds.
  */
 internal fun secureWindow(
     window: Window,
     top: NavKey,
+    locked: Boolean,
 ) {
-    if (securesWindow(top)) {
+    if (securesWindow(top) || top is InstanceKey || locked) {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
     } else {
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -116,59 +180,5 @@ private fun barsOver(
         activity.enableEdgeToEdge(statusBarStyle = white, navigationBarStyle = white)
     } else {
         activity.enableEdgeToEdge()
-    }
-}
-
-/**
- * The back stack: the root, Welcome or the Chats list once a record exists, under onboarding's screens.
- * Nothing shows until the records are read, so the root never flickers from Welcome to Chats.
- */
-@Composable
-private fun FermixApp(
-    services: AppServices,
-    fit: (NavKey) -> Unit,
-) {
-    val model = viewModel { OnboardingViewModel(services.onboardingParts()) }
-    val pairedFlow = remember(services) { services.instances.instances.map { it.isNotEmpty() } }
-    val paired by pairedFlow.collectAsState(initial = null)
-    val onboarding by model.stack.collectAsState()
-    val canvas = LocalFermixColors.current.canvas
-    val known = paired
-    Box(modifier = Modifier.fillMaxSize().background(canvas)) {
-        if (known != null) Screens(appBackStack(known, ChatsKey, onboarding), model, fit)
-    }
-}
-
-@Composable
-private fun Screens(
-    stack: List<NavKey>,
-    model: OnboardingViewModel,
-    fit: (NavKey) -> Unit,
-) {
-    val top = stack.last()
-    val context = LocalContext.current
-    val camera = remember { phoneCamera() }
-    val clip = remember(context) { clipboardClip(context) }
-    LaunchedEffect(top) { fit(top) }
-    NavDisplay(
-        backStack = stack,
-        onBack = model::back,
-        entryProvider =
-            entryProvider {
-                onboardingEntries(this, model, camera, clip)
-                entry<ChatsKey> { ChatsPlaceholder() }
-            },
-    )
-}
-
-/** Until the Chats list is built, the root says the app's name. */
-@Composable
-private fun ChatsPlaceholder() {
-    Box(modifier = Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.Center) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = FermixType.display,
-            color = LocalFermixColors.current.ink,
-        )
     }
 }

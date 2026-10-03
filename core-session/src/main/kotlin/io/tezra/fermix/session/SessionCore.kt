@@ -28,7 +28,7 @@ internal class SessionCore(
     val diagnostics = DiagnosticsLog()
     val acks = DiagnosticsLog()
     val approvals = ShownApprovals()
-    var lastSuccessful: Candidate? = null
+    val lastSuccessful = MutableStateFlow<Candidate?>(null)
     var live: Live? = null
 
     /** The watch on the session's scope, which ends the session with it; let go once the session ends. */

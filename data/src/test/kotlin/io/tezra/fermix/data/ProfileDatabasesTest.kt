@@ -8,8 +8,9 @@ import io.tezra.fermix.session.TimelineRow
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotEquals
-import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -45,6 +46,26 @@ class ProfileDatabasesTest {
         }
 
     @Test
+    fun `each profile's media cache is one for the process, and a deleted instance's is empty once paired again`() =
+        runTest {
+            val databases = ProfileDatabases(TestContext, directory, mediaClock = { 0L })
+            val blob = "a blob".encodeToByteArray()
+            databases.withMediaCache(instanceId, "main") { it.put(blob, idOf(blob)) }
+            assertEquals(blob.size.toLong(), databases.withMediaCache(instanceId, "main") { it.size() })
+            assertEquals(0L, databases.withMediaCache(instanceId, "work") { it.size() })
+
+            // A use hands its cache out only to be compared at once, never to be used outside it.
+            suspend fun cacheOf(profileId: String) = databases.withMediaCache(instanceId, profileId) { it }
+            assertSame(cacheOf("main"), cacheOf("main"))
+            assertNotSame(cacheOf("main"), cacheOf("work"))
+            databases.delete(instanceId)
+            val refused = runCatching { databases.withMediaCache(instanceId, "main") { it.size() } }.exceptionOrNull()
+            assertInstanceOf(InstanceGone::class.java, refused)
+            databases.admit(instanceId)
+            assertEquals(0L, databases.withMediaCache(instanceId, "main") { it.size() })
+        }
+
+    @Test
     fun `deleting an instance closes and deletes every profile's database and media, and no other's`() =
         runTest {
             val databases = ProfileDatabases(TestContext, directory)
@@ -54,8 +75,19 @@ class ProfileDatabasesTest {
             assertTrue(media.mkdirs())
             databases.delete(instanceId)
             assertFalse(File(directory, instanceId).exists(), "the instance's files are still there")
-            assertNull(databases.open(instanceId, "main").timeline().row(1uL))
+            assertThrows<InstanceGone> { databases.open(instanceId, "main") }
+            assertFalse(File(directory, instanceId).exists(), "a refused open made the instance's files again")
             assertEquals(row("kept"), databases.open(otherId, "main").timeline().row(1uL))
+        }
+
+    @Test
+    fun `a store given its database to open makes no file until its first call`() =
+        runTest {
+            val databases = ProfileDatabases(TestContext, directory)
+            val store = RoomSessionStore(lazy { databases.open(instanceId, "main") })
+            assertFalse(File(directory, instanceId).exists(), "the store made the instance's folder")
+            assertEquals(StoredCursors(0uL, 0uL, 0uL, 0uL, 0uL), store.cursors())
+            assertTrue(File(directory, instanceId).isDirectory)
         }
 
     @Test
@@ -81,12 +113,15 @@ class ProfileDatabasesTest {
         }
 
     @Test
-    fun `an instance id that is not a sha256, or an empty profile, is refused`() {
-        val databases = ProfileDatabases(TestContext, directory)
-        assertThrows<IllegalArgumentException> { databases.open("../$instanceId", "main") }
-        assertThrows<IllegalArgumentException> { databases.open(instanceId, "") }
-        assertThrows<IllegalArgumentException> { databases.delete("main") }
-    }
+    fun `an instance id that is not a sha256, or an empty profile, is refused`() =
+        runTest {
+            val databases = ProfileDatabases(TestContext, directory)
+            assertThrows<IllegalArgumentException> { databases.open("../$instanceId", "main") }
+            assertThrows<IllegalArgumentException> { databases.open(instanceId, "") }
+            assertThrows<IllegalArgumentException> { databases.admit("main") }
+            val refusal = runCatching { databases.delete("main") }.exceptionOrNull()
+            assertInstanceOf(IllegalArgumentException::class.java, refusal)
+        }
 
     private companion object {
         const val TS = "2026-10-01T09:00:00Z"

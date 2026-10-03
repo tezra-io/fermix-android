@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Chats list's words, its trust states' and the app lock's (design sections 9.2, 9.4, 13.4, 13.7 and the
+  copy deck, 13.9) verbatim unless a comment names another source; the host is always a format argument.
+-->
+<resources>
+    <!-- The top bar, its "+" and its overflow's one entry (section 13.4). -->
+    <string name="chats_title" translatable="false">Fermix</string>
+    <string name="chats_add">Add Fermix</string>
+    <string name="chats_app_lock">App lock</string>
+    <!-- Labels the design does not give (section 13.8): the overflow and back buttons. -->
+    <string name="chats_more">More options</string>
+    <string name="chats_back">Back</string>
+
+    <!-- A row (section 9.4). The DEV tag is section 9.2's. -->
+    <string name="chats_thinking">thinking…</string>
+    <string name="chats_draft">Draft: %1$s</string>
+    <string name="chats_dev_tag">DEV</string>
+    <!-- Not the design's: how a row's title carries the host-owned agent's name (section 9.2), which it does not draw. -->
+    <string name="chats_title_with_agent">%1$s · %2$s</string>
+    <!-- Not the design's: how a conversation's name, a shortcut's and a channel's, carries the DEV tag, %2$s, which
+         a row draws beside its title (section 9.2). -->
+    <string name="chats_conversation_dev">%1$s (%2$s)</string>
+    <!-- Section 6.6's row for a Fermix whose key a restore left behind. -->
+    <string name="chats_repair">Re-pair this Fermix</string>
+
+    <!-- The long-press menu (section 13.4). -->
+    <string name="chats_move_to_top">Move to top</string>
+    <string name="chats_rename">Rename</string>
+    <string name="chats_details">Details</string>
+    <string name="chats_unpair">Unpair…</string>
+
+    <!-- The trust states' full screens (sections 9.2, 9.4 and 13.9). -->
+    <string name="chats_revoked_title">This phone was unpaired from %1$s</string>
+    <string name="chats_identity_changed_title">%1$s\'s identity changed (reinstalled?)</string>
+    <string name="chats_pair_again">Pair again</string>
+    <string name="chats_remove">Remove</string>
+
+    <!-- The app lock (sections 13.7 and 13.9). -->
+    <string name="chats_locked">Fermix is locked</string>
+    <string name="chats_unlock">Unlock</string>
+    <string name="chats_lock_with_biometrics">Lock with biometrics</string>
+    <!-- Not the design's: why the switch is off on a phone with no screen lock, which the lock needs. -->
+    <string name="chats_lock_needs_screen_lock">Set a screen lock on this phone to use it.</string>
+</resources>

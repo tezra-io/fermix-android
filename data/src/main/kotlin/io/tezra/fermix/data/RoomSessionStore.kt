@@ -9,16 +9,19 @@ import io.tezra.fermix.session.StoredCursors
 import kotlinx.serialization.serializer
 
 /**
- * core-session's SessionStore over one (instance, profile)'s [database]. Each call is one statement or one
- * transaction, so it is written whole or not at all; a write that finds the cursors row missing fails. The
- * rows a session announces are persisted by the app's Announcer through [ProfileDatabase.timeline], the
- * cache this store's mutations and rebuild act on.
+ * core-session's SessionStore over one (instance, profile)'s database, [opened] at the store's first call:
+ * opening one makes its folder, which the main thread a pairing starts on never does. Each call is one
+ * statement or one transaction, so it is written whole or not at all; a write that finds the cursors row
+ * missing fails. The rows a session announces are persisted by the app's Announcer through
+ * [ProfileDatabase.timeline], the cache this store's mutations and rebuild act on.
  */
 class RoomSessionStore(
-    database: ProfileDatabase,
+    opened: Lazy<ProfileDatabase>,
 ) : SessionStore {
-    private val cache = database.cache()
-    private val outbox = database.outbox()
+    constructor(database: ProfileDatabase) : this(lazyOf(database))
+
+    private val cache by lazy { opened.value.cache() }
+    private val outbox by lazy { opened.value.outbox() }
 
     override suspend fun cursors(): StoredCursors {
         val row = checkNotNull(cache.cursors()) { "the cursors row is missing" }

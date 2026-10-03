@@ -186,8 +186,11 @@ not held against the link. The hourly `1000 "Noise session lifetime reached"` cl
 without a word to the UI unless no link is up again within 2 s; any `1000` within 5 s of `hello_ack`
 waits the backoff. 4001 is `Replaced`, 4003 and 4004 are `Revoked`, a certificate that is not pinned
 or a Noise key that does not authenticate is `IdentityChanged`, and every other close reconnects
-after core-transport's backoff; after 2,880 races in one run the session is `Suspended` until
-`resume()`. The outbox lives in the app's `SessionStore`, which one session at a time owns: a
+after core-transport's backoff, the state no longer `Connected` through the wait (a live `1002` among
+them); after 2,880 races in one run the session is `Suspended` until
+`resume()`. `close()` ends it for good and returns only once its run has stopped and every request made
+before it, `send`, `retry`, `markRead` and `remove`, which run in their caller's coroutine, has returned;
+one made after it is refused, so a closed session touches its store no more. The outbox lives in the app's `SessionStore`, which one session at a time owns: a
 request is persisted, then sent; `accepted` clears it and `error{client_msg_id}` keeps it, failed,
 until `remove()` takes it out; one persisted while the drain reads the store is sent after what the
 drain read, and none goes twice on one connection, accepted or not. "Run again" is a new request
@@ -215,7 +218,8 @@ as a pure reducer, whose table, every state against every event, is a test that 
 cell; a reconnect that finds a turn over leaves its machine idle, so a request that was only queued
 opens again. `indicatorLine` is the working indicator's phrase (onboarding gotcha 19). `state` is a
 `StateFlow<SessionState>`, `events` everything else the app is told, in order, `diagnostics` the
-last 200 notable things, and `acks` the last 200 acks sent, with how long each waited. A store or
+last 200 notable things, `acks` the last 200 acks sent, with how long each waited, and
+`lastSuccessful` the candidate the last `hello` went over, the one the next race tries first. A store or
 announcer that throws ends the session as `Failed`, and cancelling its scope as `Closed`. The app's
 other client events, `push_register` and `push_unregister` first (design section 10,
 "Registration"), have no path through the session yet; the push module adds one.
@@ -356,13 +360,30 @@ until the first `hello_ack`. `rename` takes 1 to 40 characters (code points), tr
 another row is titled the same in any case, and null resets the name to the daemon's; `remove` deletes
 a record with its files; `reorder` is "Move to top" and the list's manual order. `launchCheck` runs at
 launch: an instance whose key alias the injected `aliasExists` does not find, as on an app restored
-without its Keystore keys, is dropped with its files (design sections 6.4 and 6.6), and its title is
-kept among `repairNotices` in the same write, so the app shows "Re-pair this Fermix" with its name even
-after a process death, until `dismissRepairNotices`. The Keystore is asked before that write, never
-inside it. Files no record names, left by a removal cut short, are deleted. `ProfileDatabases` opens one Room
+without its Keystore keys, is dropped with its files (design sections 6.4 and 6.6), and it is kept
+among `repairNotices` by its id, with its title, in the same write, so the app shows "Re-pair this
+Fermix" with its name even after a process death, until a pairing brings that daemon back (`upsert` and
+`merge` take its notice in their own write) or the owner removes the notice (`dismissRepairNotice`); a
+notice is keyed by the id, never by the title, which two daemons on one computer share, and never names a
+record that is there. The Keystore is asked before that write, never inside it. Files no record names, left by a removal cut short, are deleted. `ProfileDatabases` opens one Room
 database per (instance, profile), keyed by both from day one, at
 `<root>/<instance id>/<sha256 of the profile id>/profile.db` beside its `media/` directory; the root
-belongs under `noBackupFilesDir`. A `ProfileDatabase` holds the timeline cache, its full-text index, the
+belongs under `noBackupFilesDir`. `ProfileDatabases` orders its readers against a removal; a session,
+which holds its database outside them, is ordered by the app's supervisor (below). Room 2.8.5 ends
+no flow as its database closes: one reading hangs on, one whose query comes after fails with
+`IllegalStateException`, and a suspend call after it throws a `CancellationException`, which cancels its
+caller's coroutine with nothing reported, as a test holds. So a database or a media cache is read through
+`observe`, a flow, or `withDatabase` and `withMediaCache`, one use each, a use being whatever block its
+caller passes, and every reader is counted from its start to its end, a cancelled flow until its last query
+has ended; `delete`, which `remove`, `merge` and the launch check run once the record is gone, first marks the
+instance gone, which ends its flows and refuses every reader after it, `open` included, with the typed
+`InstanceGone`, then waits for the count to reach zero, and only then closes the databases and deletes the
+files. It waits at most `RELEASE_WAIT_MILLIS`, 10 s, which is all that bounds a use, and past it fails loud,
+the files left for the next launch's check. Gone means deleted in this process: no record is looked up, so
+after a restart an id no record names opens as any other, and the launch check deletes the files of such an
+id. A removed daemon paired again is admitted back (`admit`): `upsert` and `merge` admit it
+before they write its record, and so does a pairing's session, which reads its store before that write. A
+`ProfileDatabase` holds the timeline cache, its full-text index, the
 notified set, the outbox and the cursors, and its schema is exported to `data/schemas`. A whole row is
 stored as its `HistoryMessage` JSON through core-protocol's model, which is what is read back, so a wider
 row needs no migration, and its fields again as columns for queries; a `text_done` reply stands in for
@@ -409,7 +430,13 @@ all among them, proven by a trigger that fails the cursor write; and they cover 
 codec against the vendored pairing link, a corrupt records file, every vendored fixture row read back
 equal with its query columns, an older page that fails partway, the search, the notified set, the
 outbox's flow, a restart that finds everything as it was, the media cache's digest, eviction and failed
-streams, and the launch check with its notices. The app's backup posture, `allowBackup="false"` with data extraction rules and
+streams, and the launch check with its notices; and the readers against a removal, on a dispatcher of their
+own that the test advances by hand: a reader that holds a database ends as its instance is removed or
+dropped and the files go only then, a reading the removal cancels holds it until its last query has ended,
+one that has not read yet ends with no value and makes no file, a use holds the removal until it returns
+its value, the files of an instance removed in this process are refused until a pairing admits them again,
+a reader that never lets go fails the removal after the wait, and Room's own close, of a flow and of a
+suspend call. The app's backup posture, `allowBackup="false"` with data extraction rules and
 full-backup rules that exclude every domain, is checked in the release APK itself by the `policy` job.
 
 `feature-onboarding` (`io.tezra.fermix.onboarding`) is design section 13.3, Welcome to Notifications, as
@@ -428,16 +455,21 @@ refusals, which play `REJECT`: the `pair_denied` rows, another pairing in progre
 and the two version refusals, as does a link the scan refuses. Every page keeps clear of the system
 bars, as the app draws edge to edge. Their words are strings.xml's, the design's verbatim, with the host
 as a format argument. `OnboardingViewModel` holds onboarding's part of the back stack (`stack`, above
-the app's root) and what the screens show (`ui`): "Get started" runs attest's hardware gate, a scanned
+the app's root) and what the screens show (`ui`): "Get started", and the Chats list's "Add Fermix" and a
+trust screen's "Pair again" through the same `getStarted(mergeInto)`, runs attest's hardware gate, a scanned
 or pasted text is read by `readLink` into a `LinkOutcome` (a link, not a Fermix code, an older or a
 newer Fermix, or one field missing or out of range, its candidates' ranges among them), and a link
-starts core-session's pairing through `PairingControl` (the handle, or a test's fake),
-and `CeremonyDriver` shows each `PairingState`'s screen as the pure `screenFor` maps it: Connecting's
+starts core-session's pairing through `PairingControl` (the handle, or a test's fake), once section 9.2's
+"Already paired; pair again to replace this phone's key?" has its yes when a row holds the link's daemon
+(the row "Pair again" named aside; `PairAgainQuestion`), a no zeroing the link's secret and going back
+to Pair, and `CeremonyDriver` shows each `PairingState`'s screen as the pure `screenFor` maps it: Connecting's
 three lines, with "Trying Tailscale…" after 4 s of reaching a tailnet candidate and "Securing the line…"
 paced for 600 ms, as no state holds it; Verify with its code, its end and the name `pair_request`
-carried; `pair_approved` stored through data's `InstanceStore` with an auto-picked tint before Paired
-shows, the replaced record's key handed to the commit to delete, and the paired session the approval
-hands over closed once the record is stored, until the Chats list takes sessions on; and every ending
+carried; `pair_approved` stored through data's `InstanceStore` with an auto-picked tint, the phone's
+name and the time before Paired shows, merged into the row "Pair again" named when it is the same
+profile's and no other row holds the new daemon (`mergeTarget`), the replaced record's key handed to the
+commit to delete, and the paired session the approval hands over given, as the record is stored, to the
+app's `SessionHandover`, which keeps it as the instance's one session; and every ending
 one failure screen, "Can't reach" read through section 5.2's reachability, "Try again" retrying only the
 link "Can't reach" holds, a wrong machine never retried. Leaving the ceremony's screens cancels an
 attempt not yet approved. The pure rules are `stackOf`, `topOf`, `screenFor`, `keyAfter`, `stepAfter`,
@@ -470,7 +502,8 @@ is still drawn, and hit, as it leaves, and the ViewModel holds each call to the 
 The JVM tests cover the route rules, `screenFor` over the ceremony's twenty-one states among them, the
 failure table verbatim with suj-mbp as the host, the record's tint and name rules, the ViewModel over a
 fake ceremony and real records (the pairing-wait facts cleared on every outcome and on the ViewModel's
-end, the replaced key handed to the commit, the session closed), every `LinkOutcome`, the paste sheet
+end, the replaced key handed to the commit, the session handed over with its record stored only then,
+"Pair again" merging into its row or adding one, a daemon paired already asked about first), every `LinkOutcome`, the paste sheet
 clearing a clip with a pairing link in it whatever the link's outcome, `fermix pair`'s labelled line
 among them, and no other clip, a link with blank or that label around it taken, the reader's options
 (QR codes of Model 2 alone, inverted too), a code read frame after frame handed on once, and on
@@ -535,18 +568,172 @@ owner to settle:
   both. Dropping the top margins on a short window, or a fade above the actions, would bring them in;
   the canon draws no window that short.
 
-The app wires it: `FermixApplication` makes `AppServices` once (the records, the network watcher, the
-device keys, the connector), `MainActivity` shows `appBackStack` in `NavDisplay` under `FermixTheme`,
-Welcome until a Fermix is paired and a placeholder for the Chats list after, fits the window to the top
-screen (`fitWindow`): `FLAG_SECURE` while an onboarding screen shows (`secureWindow`), and white system
-bars with no contrast scrim over the scan's camera, which is dark in both modes as the canon's
-`.phone.bleed` draws it, the theme's bars everywhere else; and on leaving Verify for another app it
-starts `PairingWaitService`, the short foreground service of section 12.5, "Waiting for approval on
-suj-mbp · 1:42", which ends itself when the wait ends or the app comes back (`pairingWaitShown` decides
-both). The app's tests run on Robolectric through the application convention, over the app's own
-services: the window's flag on Welcome and its clearing on the Chats list, the bars over the scan in
-light mode and back after it, a second tap on a failure screen as it leaves dropped, the service started
-as the app leaves Verify and not otherwise, and the service ending itself.
+`feature-instance` (`io.tezra.fermix.instance`) is design section 13.7's Instance screen and what the
+Chats list shares with it, a Compose library on core-session and data. `Link` is how a Fermix's link
+reads, from its session's state and diagnostics (`linkOf`): up over a scope with its latency, not yet
+caught up ("Updating…"), connecting, waiting for the network, can't reach, a protocol error, each way a
+session ends, or no session. A session backs off from a `1002` as from any failed connection and never
+ends on it, so the newest of the diagnostics that say how a connection ended decides it: a protocol
+error while it was the last, cleared by a connection or a later ending, and never shown as revoked.
+`Link.dot` is section 13.5's dot, never optimistic: ok only for a completed handshake, warn while
+connecting and for a changed identity, err for a revoked phone, the tertiary ink otherwise.
+`InstanceAvatar` draws the mark on a row's tint with that dot at the canon's three sizes, and
+`FermixMark` the large two-dot mark the empty list and the lock show. `InstanceScreen(ui, actions)` is the
+canon's page: the header (the name to tap and rename, "Fermix on {host}", "Reset to gateway name" under a
+nickname); Connection (the state, the live path, each candidate with its scope, the protocol, and "Test
+connection" with its result in place, one race over the record's candidates whose socket closes at once;
+a candidate's dot is lit only by what answered for it: the live connection went over it, or the last
+test reached it, a candidate the winner cancelled lit by neither; section 5.2's network facts never light
+a dot, as only a handshake confirms a tailnet, and only put out a test's word that no longer holds, every
+candidate's with no network and a tailnet one's while Tailscale is off or kept from the app:
+`reachableCandidates`); This phone (the name it paired as, since when, the gateway key's fingerprint, and
+the hardware and build); Notifications (the two switches, or "Notifications aren't set up on {host} yet"
+when the daemon has no FCM); Storage (the media cache's size and "Clear media cache"); Diagnostics (the
+session's log, `+h:mm:ss  kind  detail`, panning sideways inside the card's inset); "Unpair from {host}…" with its dialog; and the
+footer. The name and "Reset to gateway name" are 48 dp targets. The rename dialog says which of data's
+rules refuses a name, and it and the unpair dialog survive a rotation and a fold. `InstanceViewModel`
+reads one instance's record, session (its state, diagnostics and live candidate), chat settings, cache
+and the network facts into `instanceUiOf`, pure, and does what the controls ask; each visit (`entered`)
+drops the last visit's test and measures the cache again. Its JVM tests cover the link over every
+session state and diagnostic, a session put aside reading "Connecting…" unless it ran out of races, the
+dot, the fingerprint, "Paired since" in a given zone, the candidates' dots and the screen's state; the screen
+is a preview at the twelve windows, at its head and at its foot, with references under
+`feature-instance/src/test/screenshots`.
+
+`feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
+screens, section 13.7's app lock screens and the phone's conversations. `ChatsScreen(ui, actions)` is the
+bar ("Fermix", "+", and the overflow's "App lock") over a row per (instance, profile), or, given no row,
+the mark and "Add Fermix", which the app does not reach today (below). A row (`rowOf`, pure) is the avatar with its dot, the title (the
+nickname or the label, with the host-owned agent's name when it is not "Fermix", and the DEV tag), and a
+second line in the canon's order: a link that speaks (a trust state, a protocol error, a connection taken
+over, a daemon too old or too new), "thinking…", "Draft: …", then the newest row's words; with the time
+of the newest message (the hour today, the weekday for the six days before, the date before that, in the
+phone's own form) and the unread count, the notified set's size. A row offline or connecting keeps its
+last message. A long-press, felt, opens Move to top · Rename · Details · Unpair…, each with the canon's icon, the
+row held in the agent's tone while it is open; Rename is the Instance
+screen's dialog and Unpair… its confirmation. A "Re-pair this Fermix" row stands for each Fermix the
+launch check dropped, by its instance id, and goes once that daemon is paired again, in the pairing's own
+write, or on its long-press's "Remove". `TrustScreen` is "This phone was unpaired from {host}" or "{host}'s identity changed
+(reinstalled?)" with "Pair again" and "Remove", in place of the chat. `LockScreen` is "Fermix is locked"
+with "Unlock", and `AppLockScreen` the "Lock with biometrics" switch, off and explained on a phone with no
+screen lock. `ChatPlaceholder` is the Chat screen until it is built: its app bar, live, with section
+13.5's subtitle (`chatLine`), which cross-fades as it changes (a cut under reduced motion), and the
+title opening the Instance screen. `ChatsViewModel` reads the
+records, the sessions, the turns and each instance's main profile, and moves, renames, unpairs and
+removes. `ConversationSync` keeps one long-lived conversation shortcut and one notification channel per
+(instance, profile), id `{instance}:{profile}`, named as its row reads (`conversationName`: the title,
+the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row, through
+`ConversationSurface`: `PlatformConversations` on the phone, a fake in the JVM tests. Each row's
+conversation is made with it, published again when it is renamed or its agent is, and removed with it, and
+the first sync after a start removes what a removal cut short. The JVM tests cover the row rules, a row's
+time in the locale it is handed, the subtitle order, the sync, and on Robolectric a conversation's name, a
+`1002` row reading "Protocol error" and nothing of being unpaired, a revoked row naming who unpaired it,
+the long-press menu, its place over the held row and the tap, and the empty state. Every
+screen is a preview at the twelve windows, with references under `feature-chats/src/test/screenshots`.
+Its instrumented tests (below) long-press a row on a device and keep a rename dialog's half-typed name
+through a rotation and a fold, on the list and on the Instance screen.
+
+Where the code departs from sections 9.4, 13.4 and 13.7, or reads them where they are silent, for the
+owner to settle:
+
+- A row whose session last ended on `1002` reads "Protocol error": section 9.4 names the state and the
+  deck gives it no sentence. "Secure hardware ✓ · debug build" is the release line's twin for a debug
+  build, "More options" and "Back" label the bar's icons, "Set a screen lock on this phone to use it."
+  explains the switch that cannot turn on, and "{title} · {agent}" is how a title carries the agent's
+  name; the design gives none of them.
+- The candidate a session last reached is kept for the process alone (`Session.lastSuccessful`), not on
+  the record, so a new process races in the record's order. "Test connection"'s result reuses the deck's
+  words: "Connecting…", the path, the banner's "Can't reach {host} — is it on and awake?" and the
+  identity-changed line.
+- The Diagnostics log gives each line's time after the session opened, and its kind in lower case.
+- The empty list is the mark and "Add Fermix", with no sentence; the canon gives none. The app never shows
+  it: the root is Welcome until a Fermix is paired and the Chats list while one is, or while one the launch
+  check dropped waits, so the last unpair returns to Welcome. Design D10 says the Chats list is always the
+  root; whether it should stay the root after the last unpair, with this empty state, is the owner's call.
+- A session that failed on the phone's own fault, its store or its announcer, reads "Something went wrong
+  on this phone". Section 13.9's "Something went wrong on {host}" is a daemon's `turn_error`, and would put
+  the fault on the computer.
+- A conversation's name carries the DEV tag as "{name} (DEV)", as a row draws the tag beside its title.
+- A row's last message is the daemon's text as it came, its markdown unrendered (`**`, backticks, links),
+  until the Chat screen's markdown (stage A3) gives the row its plain words.
+- A "Re-pair this Fermix" row is drawn in the Slate tint with no dot, and its long-press offers only
+  "Remove".
+- The Notifications switch sets the record's flag and hands it to `NotificationsPolicy`, which does
+  nothing yet; its channel and `push_register` come with the notifications change.
+- A refused nickname says why in one line ("A name needs at least one character.", "A name has at most
+  40 characters.", "Another Fermix on this phone has this name."); the design gives no words.
+- The lock uses the platform's `BiometricPrompt`, a strong biometric or the screen lock, not
+  `androidx.biometric`, which would add a dependency for what API 35 gives.
+
+The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
+the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the
+process comes into and goes out of sight. `AppServices.start` runs the launch check off the main thread
+before anything shows or any session opens, then starts the supervisor, the conversation sync, and the
+settings feeding the lock. The Chats list's ViewModel is made at the first composition all the same, and
+its rows' readers may run while the check drops a Fermix, which orders them as any removal does. `SessionSupervisor` is the one keeper of sessions (section 12.5): one
+`Session` per paired instance, keyed by its id, opened from the records while the app is in sight
+(`AppSessions`, on the I/O dispatcher, a missing Keystore key logged and left without a session), each with
+one collector that keeps `hello_ack`'s facts on the record, the agent's name on the chat, the daemon's
+later routes, and the read frontier against the notified set (`SessionEvents`), and the turns running
+per instance for the rows' "thinking…", which lasts while any of them runs. Each session's announcer
+(`RowAnnouncer`) keeps every row in the profile's timeline, then answers: the owner's own message is
+known already; a row of the chat on screen (`ChatOnScreen`) is shown there; any other is put into the
+notified set and posted (`RowNotifier`), or known already when the set held it. Until the Chat screen
+and the notifications change come, no chat is on screen and nothing can be posted, so another's row is
+not announced and never acked, its push still to come (tla/specs/mobile_push, PUSH-2), and the unread
+count stays 0. Out of sight for 5 s every session is suspended, by one timer that a return within
+them cancels; back in sight each resumes, and one that ended reconnects, unless it was revoked or its
+identity changed, which wait for the owner. A pairing's approved session is taken over as its record is
+stored (`adopt`), so no second socket opens; unpairing sends `unpair`, waits up to 5 s for the daemon to
+close, and removes the instance, its files and its key. The Chats rows, the Instance screen, the
+conversations' agent names and the session events read each profile through data's `ProfileDatabases`
+(`observe`, `withDatabase`, `withMediaCache`), so a removal ends them before the files go, and what comes
+after it, a late event or an action of a screen leaving, finds the instance gone and does nothing. A
+session, its store and its announcer, holds its database for its life, outside that count: the supervisor
+closes each session it keeps before the removal runs, and `Session.close` returns only once the run has
+stopped and every request made before it, `send` and the others the app makes in its own coroutine, has
+returned, so nothing of the session touches the files after; a removed instance gets no session. A
+pairing's session is the supervisor's only from its handover (`adopt`, which waits while a removal runs):
+before it, nothing orders that session against a removal of the same daemon, a window reached only by
+pairing that daemon again while it is being removed. "Pair again" merges only into a row in a trust state, revoked or
+its identity changed, whose session's run ended with that state and which takes no request, so the merge
+deletes that row's files with nothing touching them, and the next reconcile drops its session. `MainActivity` shows `appBackStack` in
+`NavDisplay` under `FermixTheme`: the Chats list while a Fermix is paired or one the launch check dropped
+waits to be paired again, Welcome otherwise, the app's
+screens above it (`AppNavigator`: a chat, the Instance screen, a trust state in place of its chat, the
+App lock setting), and onboarding's on top. A screen whose instance is gone leaves; the chat on top is
+kept and restored when the app starts again, unless an intent names another. The intents it acts on
+are a chat's deep link, `fermix://chat/{instanceId}/{profileId}`, which notifications and conversation
+shortcuts send, and the static shortcut's "Add Fermix". No filter declares the link, but the activity is
+exported for the launcher, so any app can send it one in an explicit intent; all it can do is open the
+chat of a Fermix already paired. It fits the window to the
+top screen (`fitWindow`): `FLAG_SECURE` while an onboarding screen shows, or the Instance screen with the
+daemon's key fingerprint (section 12.4), or the app is locked (`secureWindow`), and white system bars with no contrast scrim over the scan's camera, which is dark in
+both modes as the canon's `.phone.bleed` draws it, the theme's bars everywhere else. With the app lock
+on (`LockGate`), the app locks when it comes into sight after the process starts or after 5 s away (a
+rotation or a fold is no return), and nothing shows before the gate has read the setting. While locked
+the lock screen stands in place of the app's screens, none of which is composed, the system's prompt
+comes at once and "Unlock" asks again; back leaves the app; the recents preview is hidden while the lock
+is on. A phone with no strong biometric and no screen lock is never locked, as nothing could open it. On leaving Verify for another app it starts `PairingWaitService`,
+the short foreground service of section 12.5, "Waiting for approval on suj-mbp · 1:42", which ends itself
+when the wait ends or the app comes back (`pairingWaitShown` decides both). The app's tests run on
+Robolectric through the application convention, over the app's own services and the bundled SQLite: the
+supervisor's one session per instance, its grace and its timer, a return within the grace never
+suspending a session, nothing opened out of sight, a removal with the session closed before it runs and
+run only once the store call the session's run was making has returned, "Unpair" sending `unpair` and waiting for
+the daemon's close where "Remove" asks nothing, from the list and the Instance screen alike, an opener
+that fails, its guards, its scope's end closing every session and overlapping turns; the opener's key
+alias and its refusals without a key, a route or the files a removal deleted, and the connection test's race, a candidate named only
+for its own failure; the announcer's answers, about its own chat alone, each row kept; the session events
+kept, and one after a removal writing nothing, the Instance screen of a removed Fermix doing nothing, a row's unread count, each dropped Fermix's "Re-pair this Fermix" row kept by its id whatever its
+title, and the Notifications switch's policy; the lock's gate, a rotation and a phone that cannot lock
+among them; the trust screens' keys; the navigator's restore, its deep links and its pruning; the window's
+flag on Welcome and on the Instance screen, its clearing on the Chats list and its return when the lock
+holds, with the list gone and the prompt up; a dropped Fermix's "Re-pair this Fermix" row as the root; a
+paired Fermix as a row with its long-press menu; the intents the activity takes, and a chat's link
+reaching the running app; the App lock switch turning on once a screen lock is set; the bars over the
+scan in light mode and back after it; a second tap on a failure screen as it leaves dropped; and the pairing-wait
+service started as the app leaves Verify and not otherwise, and ending itself.
 
 ## Build and check
 
@@ -561,6 +748,7 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 ./gradlew verifyRoborazziDebug                    # the screenshot tests against their reference images, and no stale one
 ./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true   # redraw the references (Linux), dropping stale ones
 ./gradlew :feature-onboarding:connectedDebugAndroidTest   # the instrumented tests, on the device adb sees (below)
+./gradlew :feature-chats:connectedDebugAndroidTest        # ... and the Chats list's
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
@@ -627,8 +815,8 @@ the sha256 of the jar from Google's Maven repository. The file trusts without a 
 A `fermix.android.library.compose` module's `src/androidTest` runs on an emulator or a phone, with
 AndroidX Test's runner, Compose's test rule and Espresso 3.7 (Compose's own 3.5 cannot start on API 36).
 `check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the tests to every
-gate; running them needs a device. Today `feature-onboarding` has them, and they need no daemon and no
-camera: `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
+gate; running them needs a device. Today `feature-onboarding` and `feature-chats` have them, and they
+need no daemon and no camera. `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
 activity's ViewModel store, which holds the fake pairing control (`FakeStarter`, from `src/sharedTest`,
 which the JVM tests compile too), the gate's answer, the network facts, a stub preview that reads what a
 test hands it and reports a torch, an `ActivityResultRegistry` that answers the camera prompt, and a fake
@@ -639,8 +827,12 @@ sheet's text, TalkBack reaching "Paste a pairing link" first, reduce-motion's st
 the owner sets, the scan's own reader (`qrReader()`) on real QR, inverted QR, Data Matrix and Micro QR
 images (`src/androidTest/assets/codes`), and its analysis (`qrAnalyzer`) on camera frames made of them,
 and `clipboardClip` on the phone's own clipboard. The test APK is signed with the SDK's debug key; it is
-not the app, and pairs with nothing. A test that needs the window's focus, Espresso's back and the
-clipboard's read, waits for it (`awaitWindowFocus`) and fails naming the window that holds it.
+not the app, and pairs with nothing. `ChatsTestActivity` shows the Chats list and the Instance screen
+over fixed state, two rows and one connected Fermix, with a `ChatsTestRig` kept the same way that counts
+the activity's creations and picks the screen; its tests long-press a row for Move to top · Rename · Details · Unpair…, and keep a rename
+dialog's half-typed name, on the list and on the Instance screen, through a rotation and a fold. A test
+that needs the window's focus, Espresso's back and the clipboard's read, waits for it
+(`awaitWindowFocus`) and fails naming the window that holds it.
 
 CI's four legs run Google APIs images of API 35 and 36, as `medium_phone` and as `pixel_fold`. Make the
 same AVDs with cmdline-tools 20.0 or later (12.0 knows no `pixel_fold`); a green run on another image,
@@ -678,18 +870,21 @@ done
 ANDROID_SERIAL="$serial" scripts/settle_emulator.sh || exit 3
 adb -s "$serial" shell svc power stayon true
 ANDROID_SERIAL="$serial" ./gradlew :feature-onboarding:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone || exit 1
+ANDROID_SERIAL="$serial" ./gradlew :feature-chats:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chats.FoldingPhone
 ```
 
 `ANDROID_SERIAL` names the device to use. `scripts/settle_emulator.sh` waits, 30 polls 2 s apart, for
 the home screen to have the focus, as a cold boot can leave a system dialog holding it, System UI's
 "isn't responding" among them; each poll wakes the phone, dismisses the keyguard and closes system
-dialogs, and it fails naming the window that has the focus. The fold test (`@FoldingPhone`) folds the
-phone and waits for Verify drawn again; a Pixel Fold locks as it folds, and the test activity shows over
-the lock screen (`showWhenLocked` in `src/androidTest/AndroidManifest.xml`), as the lock can come after
-the activity is made again. On a device whose `cmd device_state` cannot close it, its assumption skips
-it, and AGP's report counts that skip among the failures while the task passes, so on a phone leave it
-out with the `notAnnotation` above; on a folding AVD run it with
+dialogs, and it fails naming the window that has the focus. A fold test (each module's `@FoldingPhone`)
+folds the phone and waits for its screen drawn again; a Pixel Fold locks as it folds, and the test
+activity shows over the lock screen (`showWhenLocked` in `src/androidTest/AndroidManifest.xml`), as the
+lock can come after the activity is made again. On a device whose `cmd device_state` cannot close it,
+its assumption skips it, and AGP's report counts that skip among the failures while the task passes, so
+on a phone leave it out with the `notAnnotation` above, one module's annotation per run: of a list,
+AGP hands the runner the class before the first comma alone. On a folding AVD run them with
 `-Pandroid.testInstrumentationRunnerArguments.requireFold=true`, which turns that skip into a failure.
 Animations stay on: the reduce-motion test sets the animator scale itself and puts it back.
 

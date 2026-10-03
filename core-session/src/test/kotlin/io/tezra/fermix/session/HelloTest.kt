@@ -47,17 +47,19 @@ class HelloTest {
         }
 
     @Test
-    fun `a hello_ack whose window holds 2 connects, its round trip the first latency`() =
+    fun `a hello_ack whose window holds 2 connects over its candidate, its round trip the first latency`() =
         runTest {
             val harness = Harness(this)
             harness.open()
             val connection = harness.daemon.accept()
             connection.handshake()
             connection.receive()
+            assertEquals(null, harness.session.lastSuccessful.value)
             delay(12)
             connection.send(HELLO_ACK)
             val connected = harness.stateWhen { it is SessionState.Connected && it.caughtUp }
             assertEquals(SessionState.Connected(Candidate.Scope.TAILNET, 12, caughtUp = true), connected)
+            assertEquals(TAILNET, harness.session.lastSuccessful.value)
             harness.settle()
             assertTrue(SessionEvent.Server(HELLO_ACK) in harness.events)
         }

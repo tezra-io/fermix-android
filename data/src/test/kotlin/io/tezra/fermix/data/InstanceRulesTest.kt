@@ -3,6 +3,7 @@ package io.tezra.fermix.data
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.transport.Candidate
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -16,6 +17,13 @@ class InstanceRulesTest {
     private val mac = instance(gateway = 1, host = "suj-mbp", nickname = "Studio", tint = "Plum")
     private val linux = instance(gateway = 3, host = "linux-box", tint = "Sage")
     private val dev = instance(gateway = 5, host = "suj-mbp", tint = "Clay").copy(profile = "fermix-dev")
+
+    @Test
+    fun `the DEV tag marks the fermix-dev profile, or a Fermix the owner calls Dev in any case`() {
+        assertTrue(showsDevTag("fermix-dev", "suj-mbp"))
+        assertTrue(showsDevTag("fermix", " dev "))
+        assertFalse(showsDevTag("fermix", "Production"))
+    }
 
     @Test
     fun `a daemon paired for the first time is added last, and replaces nothing`() {

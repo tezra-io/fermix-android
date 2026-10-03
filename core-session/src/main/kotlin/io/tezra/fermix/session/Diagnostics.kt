@@ -11,7 +11,7 @@ enum class DiagnosticKind {
     /** A server `t` this app does not know: ignored, never a failure (design section 7). */
     UNKNOWN_EVENT,
 
-    /** A frame or an event this side refused, and closed `1002` on. */
+    /** A frame or an event this side refused, and closed `1002` on; or the daemon's own `1002`. */
     PROTOCOL_ERROR,
 
     /** How a connection ended: its close code and who sent it, or how it failed. */

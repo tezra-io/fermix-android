@@ -15,6 +15,12 @@ import kotlin.time.TestTimeSource
 /** The app's root, as the app keys its Chats list. */
 private data object Chats : NavKey
 
+/** One of the app's own screens above the Chats list, a chat, say. */
+private data object Above : NavKey
+
+/** Onboarding at Pair alone, as Add Fermix opens it. */
+private val PAIR_ONLY = listOf(OnboardingKey.Pair)
+
 /** The route rules of design section 13.3: the stacks, where each ending and each failure action lead. */
 class RoutesTest {
     @Test
@@ -205,18 +211,24 @@ class RoutesTest {
     }
 
     @Test
-    fun `the app's stack stands on Welcome until a Fermix is paired, then on the Chats list`() {
+    fun `the app's stack stands on Welcome until a Fermix is paired, then on the Chats list and the app's screens`() {
         val pairing = listOf(OnboardingKey.Pair, OnboardingKey.Scan)
         assertEquals(
             listOf(OnboardingKey.Welcome),
-            appBackStack(paired = false, chats = Chats, onboarding = emptyList()),
+            appBackStack(paired = false, chats = Chats, above = emptyList(), onboarding = emptyList()),
         )
         assertEquals(
             listOf(OnboardingKey.Welcome) + pairing,
-            appBackStack(paired = false, chats = Chats, onboarding = pairing),
+            appBackStack(paired = false, chats = Chats, above = emptyList(), onboarding = pairing),
         )
-        assertEquals(listOf(Chats, OnboardingKey.Paired), appBackStack(true, Chats, listOf(OnboardingKey.Paired)))
-        assertThrows<IllegalArgumentException> { appBackStack(true, OnboardingKey.Welcome, emptyList()) }
+        assertEquals(
+            listOf(Chats, OnboardingKey.Paired),
+            appBackStack(true, Chats, emptyList(), listOf(OnboardingKey.Paired)),
+        )
+        assertEquals(listOf(Chats, Above, OnboardingKey.Pair), appBackStack(true, Chats, listOf(Above), PAIR_ONLY))
+        assertThrows<IllegalArgumentException> { appBackStack(true, OnboardingKey.Welcome, emptyList(), emptyList()) }
+        assertThrows<IllegalArgumentException> { appBackStack(false, Chats, listOf(Above), emptyList()) }
+        assertThrows<IllegalArgumentException> { appBackStack(true, Chats, listOf(OnboardingKey.Pair), emptyList()) }
     }
 
     @Test

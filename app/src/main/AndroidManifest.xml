@@ -17,6 +17,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Onboarding's step 7 asks for it (design section 13.3), and the pairing wait posts with it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The app lock's prompt, BIOMETRIC_STRONG | DEVICE_CREDENTIAL (design section 13.7). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:name=".FermixApplication"
@@ -30,13 +32,24 @@
         android:theme="@style/Theme.Fermix"
         android:usesCleartextTraffic="false">
 
+        <!--
+          singleTop: a chat's deep link from a notification or a shortcut reaches the activity showing, as a new
+          intent. No filter declares the link, so no browser or link offers it, but the activity is exported for
+          the launcher, so any app can send it an explicit ACTION_VIEW with one; all such a link does is open
+          the chat of a Fermix already paired, and anything else is ignored (appIntentOf).
+        -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- "Add Fermix" as an app shortcut (design section 9.4). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <service

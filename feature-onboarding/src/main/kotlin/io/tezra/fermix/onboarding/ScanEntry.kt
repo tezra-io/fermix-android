@@ -48,6 +48,7 @@ internal fun ScanEntry(
         preview = { camera.preview({ text -> viewModel.scanned(text, view) }, { torch = it }) },
     )
     PasteSheet(viewModel, key, clip)
+    AlreadyPairedQuestion(viewModel, key)
 }
 
 /** What the scan may show of the camera, and the system's prompt that asks for it. */

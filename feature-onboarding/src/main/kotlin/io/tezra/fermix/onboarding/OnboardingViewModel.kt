@@ -34,11 +34,16 @@ class OnboardingViewModel(
     val paste = PasteSheetModel(stack, ceremony)
 
     /**
-     * "Get started" on Welcome (section 13.3, step 1): the hardware gate of section 6.1, then Pair, or the
-     * one screen that says why this phone cannot pair.
+     * "Get started" on Welcome (section 13.3, step 1), and as it, "Add Fermix" from the Chats list, its
+     * empty state or the app shortcut (section 9.4): the hardware gate of section 6.1, then Pair, or the one
+     * screen that says why this phone cannot pair. "Pair again" on a Revoked or Identity-changed screen
+     * (sections 9.2 and 9.4) names its row, [mergeInto], which the approved pairing merges into when
+     * [mergeTarget] allows it.
      */
-    fun getStarted() {
-        require(stackState.value.isEmpty()) { "Get started is Welcome's, the root" }
+    fun getStarted(mergeInto: String? = null) {
+        require(stackState.value.isEmpty()) { "a pairing starts from the app's root" }
+        require(mergeInto == null || mergeInto.isNotBlank()) { "Pair again names its row" }
+        uiState.update { it.copy(mergeInto = mergeInto) }
         val passed = parts.gate() == GateResult.Ok
         show(if (passed) OnboardingKey.Pair else OnboardingKey.Failure(FailureCase.NO_SECURE_HARDWARE))
     }
@@ -106,12 +111,13 @@ class OnboardingViewModel(
 
     /**
      * Shows [stack]. A pairing lives on Connecting, Verify and its failure screens: anywhere else it ends.
-     * The pairing-wait notification has something to say on Verify alone, and the paste sheet belongs to
-     * the screen that opened it.
+     * The pairing-wait notification has something to say on Verify alone, the paste sheet belongs to the
+     * screen that opened it, and the row "Pair again" began on is forgotten with onboarding.
      */
     private fun set(stack: List<OnboardingKey>) {
         val top = stack.lastOrNull()
         if (!showsCeremony(top)) ceremony.leave()
+        if (stack.isEmpty()) uiState.update { it.copy(mergeInto = null) }
         if (top != OnboardingKey.Verify) parts.pairingWait.value = null
         if (top != stackState.value.lastOrNull()) paste.close()
         stackState.value = stack

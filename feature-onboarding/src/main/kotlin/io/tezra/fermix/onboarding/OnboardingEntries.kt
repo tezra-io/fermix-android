@@ -96,6 +96,7 @@ private fun PairEntry(
         )
     PairScreen(deviceName = ui.deviceName, actions = actions)
     PasteSheet(viewModel, key, clip)
+    AlreadyPairedQuestion(viewModel, key)
 }
 
 /** The paste sheet over [key]'s screen, while it is open and the screen is on top. */
@@ -164,6 +165,7 @@ private fun FailureEntry(
         },
     )
     PasteSheet(viewModel, key, clip)
+    AlreadyPairedQuestion(viewModel, key)
 }
 
 /** [action] while [key]'s screen is on top, and nothing once it is leaving. */

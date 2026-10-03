@@ -11,7 +11,8 @@ import org.gradle.kotlin.dsl.getByType
  * The phone app: Compose, the shared Android settings, the version from version.properties,
  * signing from outside the repository, an R8-shrunk release that is never debuggable, and unit tests on
  * JUnit 5 and on Robolectric, as a Compose library's, for what only the app does: its window, its
- * activity's lifecycle and its foreground service.
+ * activity's lifecycle and its foreground service, with the bundled SQLite library its screens' databases
+ * open on.
  */
 class AndroidApplicationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -27,6 +28,9 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             val releaseKey = signingKey(SigningRole.RELEASE, signing)
             val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
             val robolectricSdk = robolectricSdk(libs)
+            // The app's tests draw the Chats list, which reads the data module's Room databases on the
+            // bundled SQLite driver, as a Room module's tests do (BundledSqliteNative.kt).
+            val sqliteNative = registerSqliteNative(libs)
 
             extensions.configure<ApplicationExtension> {
                 configureAndroidCommon()
@@ -51,6 +55,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 testOptions.unitTests.all { test ->
                     test.useJUnitPlatform()
                     configureRobolectric(test, robolectricSdk)
+                    loadSqliteNative(test, sqliteNative)
                 }
             }
             addJUnit5()

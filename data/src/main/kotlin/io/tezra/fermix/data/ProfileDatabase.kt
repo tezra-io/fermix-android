@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.map
 
 /**
  * One (instance, profile)'s Room database (design section 9.1): the timeline cache with its full-text index,
- * the notified set, the outbox and the cursors. Feature modules read [timeline], [notified] and [pending];
- * core-session's store is [RoomSessionStore] over the same database, and the outbox's one writer.
+ * the notified set, the outbox, the cursors and the chat's own state. Feature modules read [timeline],
+ * [notified], [chat] and [pending]; core-session's store is [RoomSessionStore] over the same database, and
+ * the outbox's one writer.
  */
 @Database(
     entities = [
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.map
         NotifiedEntity::class,
         CursorsEntity::class,
         OutboxEntity::class,
+        ChatStateEntity::class,
     ],
     version = 1,
     exportSchema = true,
@@ -31,6 +33,8 @@ abstract class ProfileDatabase : RoomDatabase() {
     abstract fun timeline(): TimelineDao
 
     abstract fun notified(): NotifiedDao
+
+    abstract fun chat(): ChatStateDao
 
     internal abstract fun cache(): CacheDao
 
@@ -57,24 +61,28 @@ internal const val FTS_TOKENIZER = FtsOptions.TOKENIZER_UNICODE61
  * How every profile database is built, on disk or in a test's memory. It runs on the bundled SQLite, the
  * same build on the phone and in the JVM tests, so the tests prove the engine the app ships, its full-text
  * tokenizer included; queries run on [queries]; the journal is written ahead, named rather than left to
- * Room, which would ask the platform whether the phone is short of memory. The cursors row is written
- * when the database is created, and [QUERY_TOKENS] made each time it is opened.
+ * Room, which would ask the platform whether the phone is short of memory. The cursors and chat rows are
+ * written when the database is created, and [QUERY_TOKENS] made each time it is opened.
  */
 internal fun RoomDatabase.Builder<ProfileDatabase>.buildProfileDatabase(queries: CoroutineDispatcher): ProfileDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(queries)
         .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-        .addCallback(CursorsRow())
+        .addCallback(OneRows())
         .addCallback(QueryTokens())
         .build()
 
-/** Writes the one cursors row, every cursor 0, into a database as it is created. */
-private class CursorsRow : RoomDatabase.Callback() {
+/**
+ * Writes the one cursors row, every cursor 0, and the one chat row, no draft or agent name and previews on,
+ * into a database as it is created.
+ */
+private class OneRows : RoomDatabase.Callback() {
     override fun onCreate(connection: SQLiteConnection) {
         connection.execSQL(
             "INSERT INTO cursors (id, last_server_seq, read_up_to_seq, last_mutation_seq, announced_up_to_seq, " +
                 "last_unannounced_seq) VALUES ($CURSORS_ROW, 0, 0, 0, 0, 0)",
         )
+        connection.execSQL("INSERT INTO chat_state (id, draft, agent_name, previews) VALUES ($CHAT_ROW, NULL, NULL, 1)")
     }
 }
 

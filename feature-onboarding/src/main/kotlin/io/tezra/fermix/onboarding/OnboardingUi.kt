@@ -6,6 +6,7 @@ import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.protocol.ProtocolException
 import io.tezra.fermix.protocol.requirePairRequestText
 import io.tezra.fermix.session.PhoneIdentity
+import io.tezra.fermix.session.Session
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,8 +17,9 @@ import kotlin.time.TimeMark
  * What onboarding runs on, all of it the app's: the hardware gate of design section 6.1 ([gate], attest's
  * HardwareGate on the phone), the ceremony's starter, this phone's identity with the name its owner gave
  * it, the instance records, the network facts behind section 5.2's failures, the dispatcher a ceremony
- * runs on (never the main thread), and [pairingWait], where onboarding says what the pairing-wait
- * notification of section 12.5 shows while Verify waits.
+ * runs on (never the main thread), [pairingWait], where onboarding says what the pairing-wait
+ * notification of section 12.5 shows while Verify waits, [handover], which takes the approved pairing's
+ * session as the record is stored, and [now], the wall clock a record's "Paired since" is read from.
  */
 data class OnboardingParts(
     val gate: () -> GateResult,
@@ -27,7 +29,23 @@ data class OnboardingParts(
     val network: StateFlow<NetworkFacts>,
     val pairingDispatcher: CoroutineDispatcher,
     val pairingWait: MutableStateFlow<PairingWait?>,
+    val handover: SessionHandover,
+    val now: () -> Long = System::currentTimeMillis,
 )
+
+/**
+ * Whoever keeps the instances' sessions, the app's, taking the one an approval opened: [adopt] runs
+ * [record], which stores the instance's record and returns the key alias it replaced, and keeps [session]
+ * as [instanceId]'s, in one step, so the keeper never sees the record without the session and opens a
+ * second socket to the daemon (design section 6.3: the paired session is the instance's first).
+ */
+fun interface SessionHandover {
+    suspend fun adopt(
+        instanceId: String,
+        session: Session,
+        record: suspend () -> String?,
+    ): String?
+}
 
 /**
  * The owner's decision awaited on [host] until [expiresAt]: section 13.9's "Waiting for approval on {host} ·
@@ -61,7 +79,10 @@ data class PairedFacts(
 
 /**
  * What the onboarding screens show: the phone's name, the host the link names, why a link was refused at
- * the scan, the Connecting line, Verify's facts, and the pairing approved.
+ * the scan, the Connecting line, Verify's facts, and the pairing approved; [mergeInto], the row whose
+ * "Pair again" started this pairing (design section 9.2), which mergeTarget weighs on approval; and
+ * [alreadyPaired], the title of the row a scanned or pasted link's daemon is paired as already, while
+ * section 9.2's question about it waits for the owner's answer.
  */
 data class OnboardingUi(
     val deviceName: String,
@@ -70,6 +91,8 @@ data class OnboardingUi(
     val connecting: ConnectingPhase = ConnectingPhase.REACHING,
     val verify: VerifyFacts? = null,
     val paired: PairedFacts? = null,
+    val mergeInto: String? = null,
+    val alreadyPaired: String? = null,
 )
 
 /**

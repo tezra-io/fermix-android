@@ -11,7 +11,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -45,8 +47,24 @@ internal class Runner(
     private val lifecycle = Mutex()
     private var job: Job? = null
 
+    /** How many of the app's calls that touch the store run now ([request]); [close] returns once none does. */
+    private val requestsRunning = MutableStateFlow(0)
+
     fun start() {
         job = scope.launch { run() }
+    }
+
+    /**
+     * [call], one of the app's that touches the store, which runs in its caller's coroutine, so no stop of the
+     * run reaches it: it is counted until it returns or throws, and [close] waits for it.
+     */
+    suspend fun <T> request(call: suspend () -> T): T {
+        requestsRunning.update { it + 1 }
+        try {
+            return call()
+        } finally {
+            requestsRunning.update { it - 1 }
+        }
     }
 
     suspend fun pause() {
@@ -62,10 +80,16 @@ internal class Runner(
         }
     }
 
+    /**
+     * Ends the session and returns once its run has stopped and every request that came before the end has
+     * returned, each as it would have: a request after it is refused (SessionCore.requireOpen). From then on
+     * nothing of this session's touches the store, which may be another session's, or its files gone.
+     */
     suspend fun close() {
         lifecycle.withLock {
             core.end(SessionState.Closed)
             stop()
+            requestsRunning.first { it == 0 }
         }
     }
 
@@ -113,8 +137,10 @@ private class Reconnects(
             val next = attempt.next
             if (next is Next.Stop) return core.end(next.state)
             if (attempt.connected) backoff = backoff.reset()
-            // A silent race that failed shows the link as it is before any wait, never a stale Connected.
+            // A silent race that failed, or a live connection that ended into a wait (the daemon's 1002 among
+            // them), shows the link as it is before the wait, never a stale Connected (design section 13.5).
             if (silent && !attempt.connected) publishLink()
+            if (attempt.connected && next == Next.Backoff) publishLink()
             if (next == Next.Backoff) waitBackoff()
             silent = attempt.silent
         }

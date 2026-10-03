@@ -83,7 +83,7 @@ class InstanceStoreTest {
             assertEquals(old, store.merge(old.id, reinstalled))
             assertEquals(listOf(reinstalled.copy(nickname = "Studio", tint = "Plum"), other), store.instances.first())
             assertFalse(File(root, old.id).exists(), "the old row's files are still there")
-            assertNull(databases.open(old.id, PROFILE).timeline().row(1uL))
+            assertThrows<InstanceGone> { databases.open(old.id, PROFILE) }
             assertTrue(File(databases.mediaDirectory(other.id, PROFILE), BLOB_SHA256).isFile)
             assertTrue(databases.open(other.id, PROFILE).timeline().row(1uL) != null)
         }
@@ -151,6 +151,8 @@ class InstanceStoreTest {
             assertEquals(listOf(expected, linux), store.instances.first())
             assertThrows<IllegalArgumentException> { store.update(mac.id) { it.copy(keyAlias = "fermix.device.1.x") } }
             assertThrows<IllegalArgumentException> { store.update(mac.id) { it.copy(nickname = "Box") } }
+            assertThrows<IllegalArgumentException> { store.update(mac.id) { it.copy(deviceName = "Pixel") } }
+            assertThrows<IllegalArgumentException> { store.update(mac.id) { it.copy(pairedAt = 1L) } }
             assertEquals(listOf(expected, linux), store.instances.first())
         }
 

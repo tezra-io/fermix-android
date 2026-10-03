@@ -6,6 +6,7 @@ import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import io.tezra.fermix.transport.TransportException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -214,6 +215,52 @@ class LifetimeTest {
         }
 
     @Test
+    fun `the daemon's 1002 on a live connection is a protocol error in the diagnostics, never an ending`() =
+        runTest {
+            val harness = Harness(this)
+            harness.connect().close(PROTOCOL_ERROR, "mobile protocol error")
+            harness.settle()
+
+            assertEquals(DiagnosticKind.PROTOCOL_ERROR, harness.diagnostics().last().kind)
+            assertFalse(harness.session.state.value is SessionState.Ended)
+        }
+
+    @Test
+    fun `a live connection the daemon closes with 1002 reads Connecting through the backoff's wait`() =
+        runTest {
+            val harness = Harness(this)
+            harness.connect().close(PROTOCOL_ERROR, "mobile protocol error")
+            // Inside the backoff's first wait, 500 ms at the least: no stale Connected (design section 13.5).
+            delay(100)
+
+            assertEquals(SessionState.Connecting, harness.session.state.value)
+            assertEquals(DiagnosticKind.PROTOCOL_ERROR, harness.diagnostics().last().kind)
+        }
+
+    @Test
+    fun `a handshake the daemon closes with 1002 is a protocol error in the diagnostics, after the race's failure`() =
+        runTest {
+            val harness = Harness(this)
+            harness.open()
+            harness.daemon.accept().refuseHandshake(PROTOCOL_ERROR, "mobile protocol error")
+            harness.settle()
+
+            val kinds = harness.diagnostics().map { it.kind }
+            assertEquals(listOf(DiagnosticKind.RACE_FAILED, DiagnosticKind.PROTOCOL_ERROR), kinds)
+            assertFalse(harness.session.state.value is SessionState.Ended)
+        }
+
+    @Test
+    fun `a close for any other fault is no protocol error`() =
+        runTest {
+            val harness = Harness(this)
+            harness.connect().close(1011, "")
+            harness.settle()
+
+            assertEquals(DiagnosticKind.CLOSED, harness.diagnostics().last().kind)
+        }
+
+    @Test
     fun `a connection that completes hello resets the backoff, which grew while hello never completed`() =
         runTest {
             val harness = Harness(this)
@@ -323,6 +370,26 @@ class LifetimeTest {
             delay(60_000)
             assertEquals(1, harness.daemon.dials)
             assertTrue(harness.eventsCollected.isCompleted)
+        }
+
+    @Test
+    fun `close returns only once a request writing the store has returned, in its caller's coroutine`() =
+        runTest {
+            val harness = Harness(this)
+            harness.connect()
+            val written = CompletableDeferred<Unit>()
+            harness.store.enqueueGate = written
+            val sending = launch { harness.session.send(msg("m1")) }
+            harness.settle()
+            val closing = launch { harness.session.close() }
+            harness.settle()
+            assertEquals(SessionState.Closed, harness.session.state.value)
+            assertFalse(closing.isCompleted, "close returned while a request was writing the store")
+            written.complete(Unit)
+            harness.settle()
+            assertTrue(closing.isCompleted, "close did not return once the request had")
+            assertTrue(sending.isCompleted && !sending.isCancelled, "the request did not return")
+            assertEquals(listOf("m1"), harness.store.items.map { it.clientMsgId })
         }
 
     @Test

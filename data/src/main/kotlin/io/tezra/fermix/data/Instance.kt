@@ -36,6 +36,9 @@ val TINT_NAMES: List<String> = listOf("Slate", "Sage", "Clay", "Plum", "Ocean", 
  * re-pairing (section 9.2); [tint] is one of [TINT_NAMES], the design module's `Tint` by name, which the UI
  * maps to its colour. [candidates] are the routes for the next race, [caps] the last `hello_ack`'s, none
  * before the first one. [fcmRegisteredAt] is when this phone last sent `push_register`, in Unix milliseconds.
+ * [deviceName] and [pairedAt] are the Instance screen's "This phone" (section 13.7): the name `pair_request`
+ * carried, and when the pairing was approved, in Unix milliseconds. Section 9.1 does not list them; the
+ * screen needs them, and only the pairing knows them.
  *
  * Protocol v2 (design section 7) supplies fields this record requires, so a version-1 pairing cannot make
  * one, and the app refuses a version-1 link at scan (D1). [pushSalt] is the `pair_approved.push_salt` row's,
@@ -65,6 +68,8 @@ data class Instance(
     @SerialName("caps") val caps: Caps? = null,
     @SerialName("notifications_enabled") val notificationsEnabled: Boolean,
     @SerialName("fcm_registered_at") val fcmRegisteredAt: Long? = null,
+    @SerialName("device_name") val deviceName: String? = null,
+    @SerialName("paired_at") val pairedAt: Long? = null,
 ) {
     init {
         keyBytes("gateway_pk", gatewayPk)
@@ -82,6 +87,8 @@ data class Instance(
         require(deviceId.isNotBlank()) { "a paired instance has a device id" }
         require(keyAlias.isNotBlank()) { "a paired instance has a key alias" }
         require(fcmRegisteredAt == null || fcmRegisteredAt >= 0L) { "fcm_registered_at is $fcmRegisteredAt" }
+        require(deviceName == null || deviceName.isNotBlank()) { "device_name is blank" }
+        require(pairedAt == null || pairedAt >= 0L) { "paired_at is $pairedAt" }
     }
 
     /** `sha256(gateway_pk)` in lowercase hex: the key of everything this phone keeps for the daemon. */
@@ -102,14 +109,32 @@ data class Instance(
 }
 
 /**
+ * A Fermix the launch check dropped (design section 6.6), which the Chats list offers as "Re-pair this
+ * Fermix": the dropped record's [id], which a pairing with the same daemon brings back, and its [title] as
+ * its row read. It is keyed by the id, never by the title, which two daemons on one computer can share
+ * (onboarding gotcha 8).
+ */
+@Serializable
+data class RepairNotice(
+    @SerialName("id") val id: String,
+    @SerialName("title") val title: String,
+) {
+    init {
+        require(SHA256_HEX.matches(id)) { "a repair notice's id is not an instance id" }
+        require(title.isNotBlank()) { "a repair notice names no Fermix" }
+    }
+}
+
+/**
  * This phone's instance records, in the Chats list's order: the type the DataStore holds. [repairNotices] are
- * the titles of the instances the launch check dropped, written in the same write as the drop and kept until
- * the owner has seen "Re-pair this Fermix", so a process that dies before showing them loses none.
+ * the instances the launch check dropped, written in the same write as the drop and kept until a pairing
+ * brings the same daemon back or the owner removes the notice, so a process that dies before showing them
+ * loses none. A notice never names a record that is here.
  */
 @Serializable
 data class Instances(
     @SerialName("instances") val instances: List<Instance> = emptyList(),
-    @SerialName("repair_notices") val repairNotices: List<String> = emptyList(),
+    @SerialName("repair_notices") val repairNotices: List<RepairNotice> = emptyList(),
 ) {
     init {
         val ids = instances.map { it.id }
@@ -117,7 +142,9 @@ data class Instances(
         // A record's alias is deleted when the record goes, which would cut off any other record under it.
         val aliases = instances.map { it.keyAlias }
         require(aliases.size == aliases.toSet().size) { "two records name one key alias" }
-        require(repairNotices.none { it.isBlank() }) { "a repair notice names no Fermix" }
+        val noticed = repairNotices.map { it.id }
+        require(noticed.size == noticed.toSet().size) { "two repair notices name one instance" }
+        require(noticed.none { it in ids }) { "a repair notice names a record that is here" }
     }
 }
 

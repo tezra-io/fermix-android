@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Instance screen's words and a link's (design sections 9.4, 13.5, 13.7 and the copy deck, 13.9) verbatim
+  unless a comment names another source; the host is always a format argument.
+-->
+<resources>
+    <!-- A link's words: section 13.5's subtitle, section 9.4's rows and section 13.9's deck. -->
+    <string name="instance_link_connecting">Connecting…</string>
+    <string name="instance_link_waiting">Waiting for network…</string>
+    <string name="instance_link_cannot_reach">Can\'t reach %1$s</string>
+    <string name="instance_link_updating">Updating…</string>
+    <!-- A no-break space keeps the figure with its unit when a large font wraps the line. -->
+    <string name="instance_path_tailnet">Tailscale · %1$d\u00A0ms</string>
+    <string name="instance_path_lan">Wi-Fi · %1$d\u00A0ms</string>
+    <string name="instance_link_revoked">Unpaired by %1$s</string>
+    <string name="instance_link_identity_changed">%1$s\'s identity changed (reinstalled?)</string>
+    <string name="instance_link_replaced">Another session took over this connection</string>
+    <!-- Section 13.3's version failures, which section 13.9 does not repeat. -->
+    <string name="instance_link_older">Update Fermix on %1$s</string>
+    <string name="instance_link_newer">Update Fermix on this phone</string>
+    <!-- Section 9.4 names the state and the deck has no sentence for it (the canon says so): the task's words. -->
+    <string name="instance_link_protocol_error">Protocol error</string>
+    <!-- Not the design's: a session that failed on the phone's own fault, its store or its announcer. Section
+         13.9's "Something went wrong on {host}" is a daemon's turn_error, and would put this fault on the computer. -->
+    <string name="instance_link_failed">Something went wrong on this phone</string>
+
+    <!-- The header. -->
+    <string name="instance_on_host">Fermix on %1$s</string>
+    <string name="instance_reset_name">Reset to gateway name</string>
+    <!-- Labels the design does not give (section 13.8): the back button and the name's rename action. -->
+    <string name="instance_back">Back</string>
+
+    <!-- Connection. Row labels and the value "Connected" are the visual canon's, which it lists as its own. -->
+    <string name="instance_section_connection">Connection</string>
+    <string name="instance_state">State</string>
+    <string name="instance_state_connected">Connected</string>
+    <string name="instance_path">Path</string>
+    <string name="instance_protocol">Protocol</string>
+    <string name="instance_protocol_version" translatable="false">v2</string>
+    <string name="instance_test_connection">Test connection</string>
+    <!-- A candidate as the canon draws it, its scope in the wire's words. -->
+    <string name="instance_candidate" translatable="false">%1$s:%2$d</string>
+    <string name="instance_scope_lan" translatable="false">lan</string>
+    <string name="instance_scope_tailnet" translatable="false">tailnet</string>
+    <!-- The test's result in place: section 13.5's banner line when no route answers. -->
+    <string name="instance_test_not_reached">Can\'t reach %1$s — is it on and awake?</string>
+
+    <!-- This phone. -->
+    <string name="instance_section_phone">This phone</string>
+    <string name="instance_phone_name">Name</string>
+    <string name="instance_paired_since">Paired since</string>
+    <string name="instance_key">Key</string>
+    <string name="instance_secure_release">Secure hardware ✓ · release build</string>
+    <!-- Not the design's: the line a debug build shows, which the design writes for a release build only. -->
+    <string name="instance_secure_debug">Secure hardware ✓ · debug build</string>
+
+    <!-- Notifications. -->
+    <string name="instance_section_notifications">Notifications</string>
+    <string name="instance_notifications">Notifications</string>
+    <string name="instance_previews">Previews</string>
+    <string name="instance_notifications_not_set_up">Notifications aren\'t set up on %1$s yet</string>
+
+    <!-- Storage. -->
+    <string name="instance_section_storage">Storage</string>
+    <string name="instance_cache">Cache</string>
+    <string name="instance_clear_cache">Clear media cache</string>
+
+    <!-- Diagnostics, and the way out. -->
+    <string name="instance_section_diagnostics">Diagnostics</string>
+    <string name="instance_unpair_row">Unpair from %1$s…</string>
+    <string name="instance_footer">Fermix\'s settings live on your computer.</string>
+
+    <!-- The Unpair dialog: the body is section 13.7's; the title and the buttons are the canon's. -->
+    <string name="instance_unpair_title">Unpair from %1$s</string>
+    <string name="instance_unpair_body">This removes %1$s\'s messages and keys from this phone and asks %1$s to forget it. If %1$s is offline, it will still list this phone until you remove it there.</string>
+    <string name="instance_cancel">Cancel</string>
+    <string name="instance_unpair">Unpair</string>
+
+    <!-- The rename dialog: section 9.2's question and section 13.4's word. -->
+    <string name="instance_rename_title">Name this Fermix</string>
+    <string name="instance_rename">Rename</string>
+    <!-- Not the design's: which of section 13.7's rules refused the name, under the field. -->
+    <string name="instance_rename_blank">A name needs at least one character.</string>
+    <plurals name="instance_rename_too_long">
+        <item quantity="one">A name has at most %1$d character.</item>
+        <item quantity="other">A name has at most %1$d characters.</item>
+    </plurals>
+    <string name="instance_rename_taken">Another Fermix on this phone has this name.</string>
+</resources>

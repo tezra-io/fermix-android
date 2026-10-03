@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
@@ -57,17 +58,72 @@ class LaunchCheckTest {
         }
 
     @Test
-    fun `the titles to re-pair are written with the drop, so a process that dies before showing them loses none`() =
+    fun `the Fermixes to re-pair are written with the drop, so a process that dies before showing them loses none`() =
         runTest {
             val (store, _) = open()
-            store.upsert(instance(gateway = 1, nickname = "Studio", keyAlias = "fermix.device.1.lost"))
-            store.upsert(instance(gateway = 3, host = "linux-box", keyAlias = "fermix.device.3.lost"))
+            val studio = instance(gateway = 1, nickname = "Studio", keyAlias = "fermix.device.1.lost")
+            val linux = instance(gateway = 3, host = "linux-box", keyAlias = "fermix.device.3.lost")
+            store.upsert(studio)
+            store.upsert(linux)
             launchCheck(store) { false }
-            assertEquals(listOf("Studio", "linux-box"), store.repairNotices.first())
-            assertEquals(listOf("Studio", "linux-box"), onDisk().repairNotices)
+            val notices = listOf(RepairNotice(studio.id, "Studio"), RepairNotice(linux.id, "linux-box"))
+            assertEquals(notices, store.repairNotices.first())
+            assertEquals(notices, onDisk().repairNotices)
             store.dismissRepairNotices()
-            assertEquals(emptyList<String>(), store.repairNotices.first())
-            assertEquals(emptyList<String>(), onDisk().repairNotices)
+            assertEquals(emptyList<RepairNotice>(), store.repairNotices.first())
+            assertEquals(emptyList<RepairNotice>(), onDisk().repairNotices)
+        }
+
+    @Test
+    fun `a notice the owner removes goes alone, and an instance no notice names is refused`() =
+        runTest {
+            val (store, _) = open()
+            val studio = instance(gateway = 1, nickname = "Studio", keyAlias = "fermix.device.1.lost")
+            val linux = instance(gateway = 3, host = "linux-box", keyAlias = "fermix.device.3.lost")
+            store.upsert(studio)
+            store.upsert(linux)
+            launchCheck(store) { false }
+            store.dismissRepairNotice(studio.id)
+            assertEquals(listOf(RepairNotice(linux.id, "linux-box")), store.repairNotices.first())
+            assertEquals(listOf(RepairNotice(linux.id, "linux-box")), onDisk().repairNotices)
+            assertThrows<IllegalArgumentException> { store.dismissRepairNotice(studio.id) }
+        }
+
+    @Test
+    fun `two dropped Fermixes of one title keep a notice each, and pairing one again takes its own alone`() =
+        runTest {
+            val (store, _) = open()
+            // The canon's production and dev daemons on one computer, both titled suj-mbp.
+            val production = instance(gateway = 1, keyAlias = "fermix.device.1.lost")
+            val dev = instance(gateway = 2, keyAlias = "fermix.device.2.lost")
+            store.upsert(production)
+            store.upsert(dev)
+            launchCheck(store) { false }
+            assertEquals(
+                listOf(RepairNotice(production.id, "suj-mbp"), RepairNotice(dev.id, "suj-mbp")),
+                store.repairNotices.first(),
+            )
+            store.upsert(production.copy(keyAlias = "fermix.device.1.new"))
+            assertEquals(listOf(RepairNotice(dev.id, "suj-mbp")), store.repairNotices.first())
+            assertEquals(listOf(RepairNotice(dev.id, "suj-mbp")), onDisk().repairNotices)
+        }
+
+    @Test
+    fun `a dropped Fermix titled as a kept one keeps its notice until its own daemon comes back, by a merge too`() =
+        runTest {
+            val (store, _) = open()
+            val kept = instance(gateway = 3, keyAlias = "fermix.device.3.kept")
+            val lost = instance(gateway = 1, keyAlias = "fermix.device.1.lost")
+            store.upsert(kept)
+            store.upsert(lost)
+            launchCheck(store) { it == kept.keyAlias }
+            // The kept record is paired again: the notice of the other daemon of its title stays.
+            store.upsert(kept.copy(keyAlias = "fermix.device.3.again"))
+            assertEquals(listOf(RepairNotice(lost.id, "suj-mbp")), store.repairNotices.first())
+            // "Pair again" on the kept row brings the lost daemon into it: its notice goes in the same write.
+            store.merge(kept.id, lost.copy(keyAlias = "fermix.device.1.merged"))
+            assertEquals(emptyList<RepairNotice>(), store.repairNotices.first())
+            assertEquals(listOf(lost.id), onDisk().instances.map { it.id })
         }
 
     @Test

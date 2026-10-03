@@ -144,7 +144,7 @@ class PairingTest {
             assertTrue(harness.link.secret.all { it == 0.toByte() })
             // A link pairs once.
             assertThrows<IllegalArgumentException> {
-                Pairing.start(harness.link, harness.keys, IDENTITY, harness.parts(), backgroundScope)
+                Pairing.start(harness.link, harness.keys, IDENTITY, harness.parts(backgroundScope), backgroundScope)
             }
         }
 
@@ -225,6 +225,41 @@ class PairingTest {
             assertThrows<IllegalStateException> { handle.commit { null } }
             assertFalse(handle.cancel())
             approved.session.close()
+        }
+
+    @Test
+    fun `the approved session runs in the session scope, so the pairing's scope ending after commit leaves it`() =
+        runTest {
+            val harness = PairingHarness(this)
+            val scope = harness.childScope()
+            val handle = harness.start(scope = scope, sessionScope = backgroundScope)
+            val connection = harness.paired()
+            connection.pairRequest()
+            connection.send(APPROVAL)
+            connection.next()
+            connection.send(HELLO_ACK)
+            val approved = harness.state<PairingState.Approved>()
+            handle.commit { null }
+            scope.cancel()
+            harness.settle()
+
+            assertInstanceOf<SessionState.Connected>(approved.session.state.value)
+            assertEquals(1, harness.daemon.dials)
+            approved.session.close()
+        }
+
+    @Test
+    fun `an approval the pairing's scope abandons closes its session, which ran in the session scope`() =
+        runTest {
+            val harness = PairingHarness(this)
+            val scope = harness.childScope()
+            val handle = harness.start(scope = scope, sessionScope = backgroundScope)
+            val approved = harness.approved()
+            scope.cancel()
+            harness.settle()
+
+            assertEquals(PairingState.Cancelled, handle.state.value)
+            assertEquals(SessionState.Closed, approved.session.state.value)
         }
 
     @Test

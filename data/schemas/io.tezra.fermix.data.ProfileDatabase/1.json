@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "2fedce826b8c3aece79807a835986505",
+    "identityHash": "c5457ba5dd34fb2319e297d6594fe2b2",
     "entities": [
       {
         "tableName": "timeline",
@@ -245,11 +245,45 @@
             "client_msg_id"
           ]
         }
+      },
+      {
+        "tableName": "chat_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `draft` TEXT, `agent_name` TEXT, `previews` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "draft",
+            "columnName": "draft",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "agentName",
+            "columnName": "agent_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "previews",
+            "columnName": "previews",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2fedce826b8c3aece79807a835986505')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c5457ba5dd34fb2319e297d6594fe2b2')"
     ]
   }
 }

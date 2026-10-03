@@ -49,7 +49,7 @@ class InstanceRecordTest {
         )
 
     @Test
-    fun `the record's fields are design section 9_1's, and none of them is a secret`() {
+    fun `the record's fields are design section 9_1's and section 13_7's This phone, and none is a secret`() {
         val names = serializer<Instance>().descriptor.elementNames.toList()
         val expected =
             listOf(
@@ -69,6 +69,8 @@ class InstanceRecordTest {
                 "caps",
                 "notifications_enabled",
                 "fcm_registered_at",
+                "device_name",
+                "paired_at",
             )
         assertEquals(expected, names)
         val secretName = Regex("secret|psk|private|token|password", RegexOption.IGNORE_CASE)
@@ -97,7 +99,8 @@ class InstanceRecordTest {
     @Test
     fun `a record reads back as it was written, caps, candidates and nickname included`() =
         runTest {
-            val records = Instances(listOf(paired.copy(nickname = "Mini"), instance(gateway = 3)))
+            val named = paired.copy(nickname = "Mini", deviceName = "Pixel 9 Pro", pairedAt = 1_790_000_000_000L)
+            val records = Instances(listOf(named, instance(gateway = 3)))
             val text = written(records)
             assertEquals(records, InstancesSerializer.readFrom(ByteArrayInputStream(text.encodeToByteArray())))
         }
@@ -113,6 +116,19 @@ class InstanceRecordTest {
         val sharing = instance(gateway = 3, host = "linux-box", keyAlias = instance(gateway = 1).keyAlias)
         assertThrows<IllegalArgumentException> { Instances(listOf(instance(gateway = 1), sharing)) }
     }
+
+    @Test
+    fun `a repair notice is keyed by an instance id, once, and never names a record that is here`() =
+        runTest {
+            val dropped = RepairNotice(instance(gateway = 3).id, "suj-mbp")
+            val records = Instances(listOf(instance(gateway = 1)), listOf(dropped))
+            val text = written(records)
+            assertEquals(records, InstancesSerializer.readFrom(ByteArrayInputStream(text.encodeToByteArray())))
+            assertThrows<IllegalArgumentException> { RepairNotice("suj-mbp", "suj-mbp") }
+            assertThrows<IllegalArgumentException> { Instances(repairNotices = listOf(dropped, dropped)) }
+            val here = RepairNotice(instance(gateway = 1).id, "suj-mbp")
+            assertThrows<IllegalArgumentException> { Instances(listOf(instance(gateway = 1)), listOf(here)) }
+        }
 
     private suspend fun written(records: Instances): String {
         val output = ByteArrayOutputStream()

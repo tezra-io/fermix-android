@@ -36,6 +36,18 @@ fun nicknameRefusal(
     }
 }
 
+/** The profile a `DEV` tag marks (design section 9.2). */
+private const val DEV_PROFILE = "fermix-dev"
+
+/** The nickname a `DEV` tag marks, in any case (design section 9.2). */
+private const val DEV_NICKNAME = "Dev"
+
+/** Design section 9.2's `DEV` tag: the `fermix-dev` profile, or a Fermix the owner calls Dev. */
+fun showsDevTag(
+    profile: String,
+    title: String,
+): Boolean = profile == DEV_PROFILE || title.trim().equals(DEV_NICKNAME, ignoreCase = true)
+
 /** A nickname as a record holds it: trimmed, and 1 to [MAX_NICKNAME_CHARACTERS] characters. */
 internal fun isNickname(nickname: String): Boolean =
     nickname.isNotEmpty() && nickname == nickname.trim() && characters(nickname) <= MAX_NICKNAME_CHARACTERS
@@ -92,16 +104,19 @@ internal fun planMerge(
 }
 
 /**
- * What only a pairing sets, the gateway key, the TLS pin, the device id, the key alias and the push salt,
- * and what only the owner sets, the nickname ([renamed]) and the tint: an update that changes one is refused.
+ * What only a pairing sets, the gateway key, the TLS pin, the device id, the key alias, the push salt, the
+ * phone's name as paired and when, and what only the owner sets, the nickname ([renamed]) and the tint: an
+ * update that changes one is refused.
  */
-private val SET_APART: List<Pair<String, (Instance) -> String?>> =
+private val SET_APART: List<Pair<String, (Instance) -> Any?>> =
     listOf(
         "gateway_pk" to Instance::gatewayPk,
         "tls_fp" to Instance::tlsFp,
         "device_id" to Instance::deviceId,
         "key_alias" to Instance::keyAlias,
         "push_salt" to Instance::pushSalt,
+        "device_name" to Instance::deviceName,
+        "paired_at" to Instance::pairedAt,
         "nickname" to Instance::nickname,
         "tint" to Instance::tint,
     )

@@ -86,3 +86,19 @@ whose version matches `version.properties`.
   also for the platforms before Android 12 and in every platform-specific override of the rules, each
   rule counted only where a phone reads it, exactly the permissions `policy/permissions.txt` lists, and
   no test key, vector, vector key or fixture inside, under its own name or any other.
+- **The Chats list, the Instance screen and the sessions behind them.** Each paired Fermix is a row
+  with its avatar, its connection dot, "thinking…", a draft or its last message, the time and the unread
+  count, and a long-press for Move to top, Rename, Details and Unpair…. The app keeps one session per Fermix while it is in sight and puts them aside 5 s after it
+  leaves, takes the pairing's own session over at approval, and shows a revoked phone or a changed
+  identity on its own screen with "Pair again" and "Remove", a protocol error never as revoked. The
+  Instance screen shows the connection, the candidates, each lit only by its own handshake, and a
+  connection test, this phone's name and key, kept out of screenshots, notifications, storage, the
+  diagnostics log and Unpair. A Fermix a restore left without its key is offered as "Re-pair this
+  Fermix" until that same daemon is paired again. An app lock asks for a biometric or the
+  screen lock after 5 s away, showing nothing of the app until it opens, with the window kept out of
+  screenshots while locked. A link to a Fermix this phone is paired with already asks before it pairs
+  again and replaces the phone's key. The last chat opens again at launch,
+  `fermix://chat/{instance}/{profile}` from the app's own shortcuts opens one, each Fermix has a
+  conversation shortcut and channel named as its row, and "Add Fermix" is a launcher shortcut. Until notifications come,
+  a row the owner has not seen is kept and not acknowledged, so its push still comes. The app now also
+  requests `USE_BIOMETRIC`.

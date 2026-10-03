@@ -60,10 +60,12 @@ fun deviceModel(
  * What a pairing runs on, all of it the app's, and what the session it hands over then runs on:
  * [dialerFor], which makes the dialer of a port and a `tls_fp` pin, and is given the link's own; the
  * profile the first chat opens on, `main`, with that (instance, profile)'s store and the announcer; the
- * network facts, the clock and the randomness, which picks the attempt's key alias; and [keystore], the
- * dispatcher every blocking DeviceKeyFacade call runs on, off the main thread. SessionParts without the
- * static key, which the pairing makes, and the app's version, which [PhoneIdentity] carries. A test
- * passes fakes, the virtual clock and its own dispatcher.
+ * network facts, the clock and the randomness, which picks the attempt's key alias; [keystore], the
+ * dispatcher every blocking DeviceKeyFacade call runs on, off the main thread; and [sessionScope], the
+ * scope the approved session runs in, the one the app keeps its sessions in, so that the session outlives
+ * the screens that paired it and the app takes it over as it is. SessionParts without the static key,
+ * which the pairing makes, and the app's version, which [PhoneIdentity] carries. A test passes fakes, the
+ * virtual clock and its own dispatcher.
  */
 data class PairingParts(
     val dialerFor: (port: Int, tlsFingerprint: ByteArray) -> Dialer,
@@ -72,6 +74,7 @@ data class PairingParts(
     val announcer: Announcer,
     val network: StateFlow<NetworkFacts>,
     val keystore: CoroutineDispatcher,
+    val sessionScope: CoroutineScope,
     val clock: TimeSource = TimeSource.Monotonic,
     val random: Random = Random.Default,
 )
@@ -126,7 +129,9 @@ object Pairing {
      * there, as a session's do, so that dispatcher is not the main thread's; the Keystore calls themselves
      * run on [PairingParts.keystore]. The handle owns the link's secret from here on and zeroes it, at the
      * latest when [scope] ends; a link pairs once. A link the parse refused, a newer one among them
-     * (ProtocolException.NewerLinkVersion), never gets here, and nor does a scope that ended already.
+     * (ProtocolException.NewerLinkVersion), never gets here, and nor does a scope that ended already. The
+     * session an approval hands over runs in [PairingParts.sessionScope]; one no caller commits is closed when
+     * [scope] ends, as [PairingHandle.cancel] closes it.
      */
     fun start(
         link: PairingLink,
@@ -141,6 +146,8 @@ object Pairing {
         requireNotNull(dispatcher) { "a pairing's scope names the dispatcher it runs on" }
         val job = requireNotNull(scope.coroutineContext[Job]) { "a pairing's scope has a job, whose end cancels it" }
         require(job.isActive) { "a pairing's scope is active; one that ended would never run it" }
+        val sessionJob = parts.sessionScope.coroutineContext[Job]
+        requireNotNull(sessionJob) { "the session scope has a job, whose end ends the session" }
         val handle = PairingHandle(link, keys, identity, parts, scope, dispatcher.limitedParallelism(1))
         handle.begin()
         return handle

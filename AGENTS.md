@@ -11,7 +11,9 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 
 ## Layout
 ```
-app/                  the application module, io.tezra.fermix
+app/                  the application module, io.tezra.fermix: AppServices, the SessionSupervisor (one
+                      session per instance, put aside 5 s out of sight), the RowAnnouncer, the app
+                      lock's gate, the navigator and its deep links, and the activity
 build-logic/          convention plugins: fermix.android.application (the app, with its JVM and
                       Robolectric tests), fermix.android.library,
                       fermix.android.library.compose (Compose and the Roborazzi screenshot tests),
@@ -47,6 +49,15 @@ feature-onboarding/   design section 13.3 as screens, io.tezra.fermix.onboarding
                       and zxing-cpp reader, the paste sheet, and the screenshot references in
                       feature-onboarding/src/test/screenshots; its instrumented tests in
                       src/androidTest, and the fakes both test sets compile in src/sharedTest
+feature-instance/     design section 13.7's Instance screen, io.tezra.fermix.instance (Compose library):
+                      Link (a session's state and diagnostics as a row, a bar and the screen read
+                      them, 1002 a protocol error and never revoked), the avatar and its dot,
+                      InstanceViewModel, and the screenshot references in its src/test/screenshots
+feature-chats/        design sections 13.4 and 9.4 as screens, io.tezra.fermix.chats (Compose library):
+                      the Chats list and its rows, the trust screens, the app lock's screens, the chat's
+                      bar until the Chat screen comes, ChatsViewModel, the conversation shortcuts and
+                      channels (ConversationSync); its instrumented tests in src/androidTest, the
+                      samples both test sets compile in src/sharedTest
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 policy/               permissions.txt: the permissions the release APK requests, exactly
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
@@ -118,7 +129,8 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   stands in for the camera permission, since a connected test's APK is installed with every permission
   granted; the camera's prompt is answered by `PromptRegistry`, an `ActivityResultRegistry` in
   `src/sharedTest`, and the clip is `FakeClip`. `check` builds them, so they pass every gate; run them with
-  `./gradlew :feature-onboarding:connectedDebugAndroidTest` on an emulator (`README.md`), settled first
+  `./gradlew :feature-onboarding:connectedDebugAndroidTest` and `:feature-chats:connectedDebugAndroidTest`,
+  one Gradle run each, on an emulator (`README.md`), settled first
   by `scripts/settle_emulator.sh`, and on CI's own Google APIs images when the run is evidence for CI. A
   test that needs the window's focus (a key event, the clipboard) waits for it with `awaitWindowFocus`. A
   test that changes the device (the animator scale, the rotation, a fold) puts it back however it ends.
@@ -139,6 +151,13 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
 - A Room entity change commits the schema the build exports into `data/schemas` in the same change;
   once a version has shipped, the change is a new database version with its migration, never an edit
   of a shipped version's file. CI's build job fails when the build leaves `data/schemas` changed.
+- A profile's database or media cache is read through `ProfileDatabases`' `observe`, `withDatabase` or
+  `withMediaCache`, never held across a removal: Room ends no flow as its database closes, so `delete` closes
+  it only once each such reader has ended. A session alone holds one, its store and its announcer, and the
+  supervisor orders it instead: it closes each session it keeps before a removal, and `Session.close` returns
+  only once the run and every request made before it (`send`, `retry`, `markRead`, `remove`, in the caller's
+  coroutine) have ended. A pairing's session is the supervisor's only from `adopt`, and "Pair again" merges
+  only into a row in a trust state, whose run is over.
 - A permission the app starts to request lands in `policy/permissions.txt` in the same change, with
   the design section that asks for it; CI's `policy` job fails a release APK whose permissions differ
   from that file's in either direction (`scripts/check_release_policy.sh`).

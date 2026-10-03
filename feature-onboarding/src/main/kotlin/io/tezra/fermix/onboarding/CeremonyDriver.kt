@@ -2,6 +2,7 @@ package io.tezra.fermix.onboarding
 
 import io.tezra.fermix.protocol.PairingLink
 import io.tezra.fermix.protocol.PushPlatform
+import io.tezra.fermix.session.InstanceFacts
 import io.tezra.fermix.session.PairingState
 import io.tezra.fermix.session.Retry
 import io.tezra.fermix.transport.reachability
@@ -11,11 +12,16 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import java.security.MessageDigest
+import java.util.HexFormat
 
 /**
  * How long the Connecting screen says "Securing the line…" before Verify (design section 13.3, step 4).
@@ -41,18 +47,32 @@ class CeremonyDriver internal constructor(
 ) {
     private var attempt: Attempt? = null
 
+    /** Each paired Fermix's row title by its id, as the records last said. */
+    private val pairedTitles: StateFlow<Map<String, String>> =
+        parts.instances.instances
+            .map { records -> records.associate { it.id to it.title } }
+            .stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    /** Section 9.2's question, asked about a link whose daemon this phone is paired with already. */
+    val pairAgain = PairAgainQuestion(ui, onYes = { begin(it) }, onNo = { show(OnboardingKey.Pair) })
+
     /**
      * A link the owner scanned or pasted, on Pair, Scan or a failure screen, as [readLink] read it, after
-     * ending any ceremony the owner left: a new ceremony over a link it takes, the "Older Fermix" or
-     * "Newer Fermix" screen, which the link alone tells, or the scan's "That's not a Fermix pairing code."
+     * ending any ceremony the owner left: a new ceremony over a link it takes, or first, for a daemon
+     * this phone is paired with already, section 9.2's question; the "Older Fermix" or "Newer Fermix"
+     * screen, which the link alone tells; or the scan's "That's not a Fermix pairing code." While the
+     * question waits for its answer, the camera's next reads are not taken.
      */
     fun onLink(outcome: LinkOutcome) {
         val top = stack.value.lastOrNull()
         require(top == OnboardingKey.Pair || top == OnboardingKey.Scan || top is OnboardingKey.Failure) {
             "a link arrives on Pair, Scan or a failure screen, not on $top"
         }
+        if (pairAgain.asking) return
         leave()
-        if (outcome is LinkOutcome.Link) begin(outcome.link) else refuse(outcome)
+        if (outcome !is LinkOutcome.Link) return refuse(outcome)
+        val paired = pairedTitle(outcome.link, pairedTitles.value, ui.value.mergeInto)
+        if (paired != null) pairAgain.ask(outcome.link, paired) else begin(outcome.link)
     }
 
     /** A failure screen's in-app action (design section 13.3's table): where [stepAfter] leads, or a retry. */
@@ -70,10 +90,11 @@ class CeremonyDriver internal constructor(
 
     /**
      * Ends the attempt the screens no longer show: a ceremony not yet approved is cancelled, which deletes
-     * its key and zeroes the link's secret (PairingHandle.cancel); an approved one closed its session
+     * its key and zeroes the link's secret (PairingHandle.cancel); an approved one handed its session over
      * already. Either way its scope ends, and with it anything of the attempt still running.
      */
     internal fun leave() {
+        pairAgain.forget()
         val left = attempt ?: return
         attempt = null
         left.following?.cancel()
@@ -124,7 +145,7 @@ class CeremonyDriver internal constructor(
         val context = scope.coroutineContext
         val own = CoroutineScope(context + SupervisorJob(context.job) + parts.pairingDispatcher)
         val identity = parts.identity.copy(deviceName = ui.value.deviceName)
-        val started = Attempt(parts.pairings.start(link, identity, own), own, link.name)
+        val started = Attempt(parts.pairings.start(link, identity, own), own, link.name, identity.deviceName)
         attempt = started
         ui.update { it.copy(host = link.name, scanRefusal = null, connecting = ConnectingPhase.REACHING) }
         show(OnboardingKey.Connecting)
@@ -183,9 +204,8 @@ class CeremonyDriver internal constructor(
     /**
      * `pair_approved`: the record is stored, with an auto-picked tint (design section 9.2), and only then
      * does Paired show; the commit deletes the key of a record the pairing replaced (section 6.1). The
-     * paired session the approval handed over is closed once the record is stored: nothing here shows its
-     * rows, and a session left running would reconnect in the background, against section 12.5. The Chats
-     * list (a later change) opens the instance's session itself.
+     * paired session the approval opened goes to the app's keeper of sessions with the record, in one
+     * step ([SessionHandover]): it is the instance's session from then on, and no second socket is opened.
      */
     private suspend fun approve(
         started: Attempt,
@@ -193,11 +213,10 @@ class CeremonyDriver internal constructor(
     ) {
         started.approved = true
         parts.pairingWait.value = null
+        val mergeInto = ui.value.mergeInto
         started.control.commit { facts ->
-            val tint = pickTint(parts.instances.instances.first())
-            parts.instances.upsert(instanceOf(facts, tint))?.keyAlias
+            parts.handover.adopt(facts.id, state.session) { store(parts, facts, started.deviceName, mergeInto) }
         }
-        state.session.close()
         val all = parts.instances.instances.first()
         val record = all.single { it.id == state.facts.id }
         // Step 7 is asked for each Fermix whose daemon has push; a phone that allows notifications answers at once.
@@ -230,11 +249,33 @@ class CeremonyDriver internal constructor(
     }
 }
 
-/** One ceremony as the driver follows it, with the timer behind "Trying Tailscale…". */
+/**
+ * Stores the approved [facts] as paired by [deviceName] in [parts]' records: merged into the row whose "Pair
+ * again" began the pairing when [mergeTarget] allows it, else as any pairing is. Returns the key alias the
+ * record replaced.
+ */
+private suspend fun store(
+    parts: OnboardingParts,
+    facts: InstanceFacts,
+    deviceName: String,
+    mergeInto: String?,
+): String? {
+    val records = parts.instances.instances.first()
+    val paired = instanceOf(facts, pickTint(records), deviceName, parts.now())
+    val target = mergeTarget(mergeInto, facts, records)
+    return if (target != null) {
+        parts.instances.merge(target, paired).keyAlias
+    } else {
+        parts.instances.upsert(paired)?.keyAlias
+    }
+}
+
+/** One ceremony as the driver follows it, the phone's name it began with, and the "Trying Tailscale…" timer. */
 private class Attempt(
     val control: PairingControl,
     val scope: CoroutineScope,
     val host: String,
+    val deviceName: String,
 ) {
     var following: Job? = null
     var latest: PairingState = PairingState.Validating
@@ -263,3 +304,67 @@ private class Attempt(
         reachingLong = false
     }
 }
+
+/**
+ * "Already paired; pair again to replace this phone's key?" (design section 9.2) about a link whose daemon
+ * this phone is paired with already: the link is held, and its row's title shown in [ui], until the owner
+ * answers. Yes pairs over the link ([onYes]), whose approval replaces the record and its key (section 6.1);
+ * no zeroes the link's secret ([onNo] then shows Pair); leaving the screen is no answer, and zeroes it too.
+ */
+class PairAgainQuestion internal constructor(
+    private val ui: MutableStateFlow<OnboardingUi>,
+    private val onYes: (PairingLink) -> Unit,
+    private val onNo: () -> Unit,
+) {
+    private var held: PairingLink? = null
+
+    /** Whether the question waits for its answer; the camera's reads are not taken meanwhile. */
+    internal val asking: Boolean get() = held != null
+
+    internal fun ask(
+        link: PairingLink,
+        title: String,
+    ) {
+        check(held == null) { "section 9.2's question is asked once at a time" }
+        held = link
+        ui.update { it.copy(alreadyPaired = title, scanRefusal = null) }
+    }
+
+    /** The owner's answer, "Pair again" or "Cancel". */
+    fun answer(yes: Boolean) {
+        val link = checkNotNull(held) { "no link waits for section 9.2's question" }
+        held = null
+        ui.update { it.copy(alreadyPaired = null) }
+        if (yes) {
+            onYes(link)
+        } else {
+            link.secret.fill(0)
+            onNo()
+        }
+    }
+
+    /** A question the screens no longer show is no answer: its link's secret is zeroed. */
+    internal fun forget() {
+        val link = held ?: return
+        held = null
+        link.secret.fill(0)
+        ui.update { it.copy(alreadyPaired = null) }
+    }
+}
+
+/**
+ * The title of the row [link]'s daemon is paired as among [titles] (by instance id), none for a daemon
+ * this phone is not paired with, or for the row [mergeInto] names, whose "Pair again" asked already.
+ */
+private fun pairedTitle(
+    link: PairingLink,
+    titles: Map<String, String>,
+    mergeInto: String?,
+): String? {
+    val id = instanceIdOf(link.gatewayPublicKey)
+    return titles[id]?.takeIf { id != mergeInto }
+}
+
+/** An instance's id, as data keys its record: `sha256(gateway_pk)` in lowercase hex (design section 9.1). */
+private fun instanceIdOf(gatewayPublicKey: ByteArray): String =
+    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(gatewayPublicKey))

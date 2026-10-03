@@ -6,19 +6,17 @@ import io.tezra.fermix.data.TINT_NAMES
 import io.tezra.fermix.data.nicknameRefusal
 import io.tezra.fermix.session.InstanceFacts
 
-/** The profile a `DEV` tag marks (design section 9.2). */
-private const val DEV_PROFILE = "fermix-dev"
-
-/** The nickname a `DEV` tag marks, in any case (design section 9.2). */
-private const val DEV_NICKNAME = "Dev"
-
 /**
  * The record design section 9.1 keeps for an approved pairing: [facts] as the ceremony reports them,
- * with [tint], no nickname yet, and notifications off until the owner allows them (section 13.3, step 7).
+ * with [tint], no nickname yet, and notifications off until the owner allows them (section 13.3, step 7);
+ * and what the Instance screen's "This phone" shows (section 13.7): [deviceName], the name `pair_request`
+ * carried, and [pairedAt], when the pairing was approved, in milliseconds since the epoch.
  */
 fun instanceOf(
     facts: InstanceFacts,
     tint: String,
+    deviceName: String,
+    pairedAt: Long,
 ): Instance =
     Instance(
         gatewayPk = facts.gatewayPk,
@@ -34,7 +32,25 @@ fun instanceOf(
         pushSalt = facts.pushSalt,
         pushPlatforms = facts.pushPlatforms,
         notificationsEnabled = false,
+        deviceName = deviceName,
+        pairedAt = pairedAt,
     )
+
+/**
+ * The row an approved pairing merges into after "Pair again" on [rowId] (design section 9.2): that row,
+ * while it is still on this phone, when it is of the paired daemon's profile and no row holds the daemon
+ * already. Otherwise none, and the pairing is recorded as any other is, InstanceStore.upsert's: the same
+ * daemon paired again replaces its own row in place, as a revoked phone's does, and another is a new row.
+ */
+fun mergeTarget(
+    rowId: String?,
+    facts: InstanceFacts,
+    records: List<Instance>,
+): String? {
+    val row = records.find { it.id == rowId }
+    val held = records.any { it.id == facts.id }
+    return rowId.takeIf { row != null && row.profile == facts.profile && !held }
+}
 
 /**
  * The auto-picked tint of a new pairing (design section 9.2): the first of the six, in design's order,
@@ -56,9 +72,3 @@ fun needsName(
     record: Instance,
     all: List<Instance>,
 ): Boolean = nicknameRefusal(record.title, record.id, all) == NicknameRefusal.TAKEN
-
-/** Design section 9.2's `DEV` tag: the `fermix-dev` profile, or a Fermix the owner calls Dev. */
-fun showsDevTag(
-    profile: String,
-    title: String,
-): Boolean = profile == DEV_PROFILE || title.trim().equals(DEV_NICKNAME, ignoreCase = true)

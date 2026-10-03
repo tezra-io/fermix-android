@@ -12,13 +12,15 @@ class PairedRecordTest {
     @Test
     fun `the record keeps what the pairing reported, with no nickname and notifications off`() {
         val reported = facts(gateway = 1)
-        val stored = instanceOf(reported, "Ocean")
+        val stored = instanceOf(reported, "Ocean", PHONE, PAIRED_AT)
         assertEquals(reported.id, stored.id)
         assertEquals(reported.keyAlias, stored.keyAlias)
         assertEquals(reported.candidates, stored.candidates)
         assertEquals("Ocean", stored.tint)
         assertNull(stored.nickname)
         assertFalse(stored.notificationsEnabled)
+        assertEquals(PHONE, stored.deviceName)
+        assertEquals(PAIRED_AT, stored.pairedAt)
     }
 
     @Test
@@ -40,9 +42,14 @@ class PairedRecordTest {
     }
 
     @Test
-    fun `the DEV tag marks the fermix-dev profile, or a Fermix the owner calls Dev`() {
-        assertTrue(showsDevTag("fermix-dev", "suj-mbp"))
-        assertTrue(showsDevTag("fermix", " dev "))
-        assertFalse(showsDevTag("fermix", "Production"))
+    fun `Pair again merges into its row while the row is there, of the profile, and the daemon is in no row`() {
+        val old = record(gateway = 5)
+        val paired = facts(gateway = 1)
+        assertEquals(old.id, mergeTarget(old.id, paired, listOf(old)))
+        assertNull(mergeTarget(null, paired, listOf(old)))
+        assertNull(mergeTarget(old.id, paired, emptyList()))
+        assertNull(mergeTarget(old.id, facts(gateway = 1, profile = "fermix-dev"), listOf(old)))
+        assertNull(mergeTarget(old.id, paired, listOf(old, record(gateway = 1))))
+        assertNull(mergeTarget(old.id, facts(gateway = 5), listOf(old)))
     }
 }

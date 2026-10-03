@@ -93,8 +93,11 @@ internal class PairingHarness(
         return "fermix://pair?$query"
     }
 
-    /** What a pairing runs on here: the fake daemon behind every dialer, and the test's clock and seed. */
-    fun parts(): PairingParts =
+    /**
+     * What a pairing runs on here: the fake daemon behind every dialer, the test's clock and seed, and
+     * [sessionScope] for the session an approval hands over.
+     */
+    fun parts(sessionScope: CoroutineScope): PairingParts =
         PairingParts(
             dialerFor = { port, pin -> daemon.also { dialersMade += port to pin.toHexString() } },
             profileId = PROFILE,
@@ -102,18 +105,23 @@ internal class PairingHarness(
             announcer = RecordingAnnouncer(),
             network = network,
             keystore = StandardTestDispatcher(test.testScheduler),
+            sessionScope = sessionScope,
             clock = test.testScheduler.timeSource,
             random = Random(SEED),
         )
 
-    /** Parses [text] and starts pairing over it with [keys] in [scope], the test's background scope at first. */
+    /**
+     * Parses [text] and starts pairing over it with [keys] in [scope], the test's background scope at first;
+     * the session an approval hands over runs in [sessionScope], the pairing's own scope unless a test names another.
+     */
     fun start(
         text: String = linkText(),
         keys: DeviceKeyFacade = this.keys,
         scope: CoroutineScope = test.backgroundScope,
+        sessionScope: CoroutineScope = scope,
     ): PairingHandle {
         link = PairingLink.parse(text)
-        handle = Pairing.start(link, keys, IDENTITY, parts(), scope)
+        handle = Pairing.start(link, keys, IDENTITY, parts(sessionScope), scope)
         // Unconfined, so every state the handle publishes is seen as it is set, none conflated into the next.
         test.backgroundScope.launch(collecting) { handle.state.collect { states += it } }
         return handle

@@ -85,8 +85,9 @@ private fun OnboardingHost(
     FermixTheme {
         CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
             Box(modifier = Modifier.fillMaxSize().background(LocalFermixColors.current.canvas)) {
+                val stack = appBackStack(paired = false, chats = NoChats, above = emptyList(), onboarding = onboarding)
                 NavDisplay(
-                    backStack = appBackStack(paired = false, chats = NoChats, onboarding = onboarding),
+                    backStack = stack,
                     onBack = model::back,
                     entryProvider = entryProvider { onboardingEntries(this, model, rig.camera, rig.clip) },
                 )
@@ -121,16 +122,19 @@ internal class TestRig(
 
     private var reader: ((String) -> Unit)? = null
 
+    private val store = instanceStore(directory, viewModelScope + io)
+
     val parts =
         OnboardingParts(
             gate = { gate },
             pairings = starter,
             identity = PhoneIdentity(PHONE, "Google Pixel 9 Pro", "0.1.0"),
-            instances = instanceStore(directory, viewModelScope + io),
+            instances = store,
             network = network,
             // The fake starter runs nothing in a ceremony's scope.
             pairingDispatcher = Dispatchers.Main.immediate,
             pairingWait = MutableStateFlow(null),
+            handover = FakeHandover(store.instances),
         )
 
     /** The scan's camera: allowed as [cameraAllowed] says, and a dark frame with a torch, off, for its preview. */

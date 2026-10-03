@@ -182,12 +182,13 @@ jobs:
             */build/test-results/roborazzi/
             */src/test/screenshots/
 
-  # Section 3's ui: the instrumented tests of every module that has them, today :feature-onboarding's,
-  # on an emulator at API 35 and 36, as a phone and as a folding phone. They need no daemon and no
-  # camera: a fake pairing control and a stub preview stand in (AGENTS.md). Onboarding up to Scan
-  # and on to Paired, every failure screen, a rotation and a fold that lose nothing (section 13.11,
-  # rule 3; the fold runs on the folding profile alone, where a device that cannot fold fails it),
-  # TalkBack's labels and order, reduce-motion, and the QR reader on real codes. The emulator needs
+  # Section 3's ui: the instrumented tests of every module that has them, :feature-onboarding's and
+  # :feature-chats', on an emulator at API 35 and 36, as a phone and as a folding phone. They need no
+  # daemon and no camera: a fake pairing control and a stub preview stand in (AGENTS.md). Onboarding up
+  # to Scan and on to Paired, every failure screen, the Chats list's long-press menu, a rotation and a
+  # fold that lose nothing on onboarding, the Chats list and the Instance screen (section 13.11, rule 3;
+  # the folds run on the folding profile alone, where a device that cannot fold fails them), TalkBack's
+  # labels and order, reduce-motion, and the QR reader on real codes. The emulator needs
   # KVM, which GitHub's Linux runners have once the udev rule below opens it. Animations stay on: the
   # reduce-motion test turns them off itself. The tests run once more only when the emulator never
   # booted or never settled: two markers tell that apart from a setup that failed before the emulator
@@ -202,13 +203,16 @@ jobs:
         api-level: [35, 36]
         profile: [medium_phone, pixel_fold]
         include:
-          # The fold test needs a phone that folds: the phone profile leaves it out, rather than report
-          # its skip, which AGP's report counts among the failures while the task passes; the folding
-          # profile requires the fold, so that a device that cannot fold fails the test, never skips it.
+          # The fold tests need a phone that folds: the phone profile leaves them out, rather than report
+          # their skips, which AGP's report counts among the failures while the task passes; the folding
+          # profile requires the fold, so that a device that cannot fold fails a test, never skips it.
+          # Each module names its own annotation: of a list, AGP hands the runner the first class alone.
           - profile: medium_phone
-            runner-args: -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone
+            onboarding-args: -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone
+            chats-args: -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chats.FoldingPhone
           - profile: pixel_fold
-            runner-args: -Pandroid.testInstrumentationRunnerArguments.requireFold=true
+            onboarding-args: -Pandroid.testInstrumentationRunnerArguments.requireFold=true
+            chats-args: -Pandroid.testInstrumentationRunnerArguments.requireFold=true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -258,14 +262,17 @@ jobs:
 
       # Built before the emulator starts, so a compile error is never taken for a boot that failed.
       - name: Build the app under test and its tests
-        run: ./gradlew --warning-mode fail --console=plain :feature-onboarding:assembleDebugAndroidTest
+        run: |
+          ./gradlew --warning-mode fail --console=plain \
+            :feature-onboarding:assembleDebugAndroidTest :feature-chats:assembleDebugAndroidTest
 
       # The action runs the pre-launch script once the AVD is made, before the emulator starts, and the
       # script line by line, each after the emulator booted; each marks how far it got. A cold boot can
       # leave a system dialog holding the focus a test's key event and clipboard read need, System UI's
       # "isn't responding" among them, so the script first waits for the home screen to have it
       # (scripts/settle_emulator.sh), and marks the emulator booted only once it settled: one that
-      # never settles is taken for one that never booted.
+      # never settles is taken for one that never booted. Each module's tests run in a Gradle run of their
+      # own: the build is parallel, and two modules' tests at once would turn and fold one emulator twice.
       - name: Instrumented tests
         id: first
         continue-on-error: true
@@ -282,7 +289,8 @@ jobs:
             scripts/settle_emulator.sh
             touch "$RUNNER_TEMP/emulator-booted"
             adb shell svc power stayon true
-            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.runner-args }}
+            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }}
+            ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
 
       # How far the first run got: booted and settled, made its AVD but never booted or never settled
       # (no-boot), or failed before the AVD was made (no-avd). Only no-boot runs the tests once more.
@@ -317,7 +325,8 @@ jobs:
             scripts/settle_emulator.sh
             touch "$RUNNER_TEMP/emulator-booted"
             adb shell svc power stayon true
-            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.runner-args }}
+            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }}
+            ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
 
       - name: Upload the test reports
         if: always()
