@@ -81,7 +81,13 @@ class RowAnnouncerTest {
         ProfileDatabases(ApplicationProvider.getApplicationContext(), directory).open(INSTANCE, MAIN_PROFILE)
 
     private fun announcer(database: ProfileDatabase) =
-        RowAnnouncer(INSTANCE, MAIN_PROFILE, lazyOf(database), { id, profile -> showing == id to profile }, notifier) {
+        RowAnnouncer(
+            INSTANCE,
+            MAIN_PROFILE,
+            lazyOf(database),
+            { id, profile, _ -> showing == id to profile },
+            notifier,
+        ) {
             1_000L
         }
 

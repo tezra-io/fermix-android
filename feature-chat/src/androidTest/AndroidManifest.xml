@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!--
+          The instrumented tests' host: the Chat screen over a fake session and cache, recreated by a rotation
+          or a fold as the app's activity is. A Pixel Fold locks as it folds, sometimes only after the activity
+          is made again: the host shows over the lock screen and turns the screen on, so the fold's lock cannot
+          hide it.
+        -->
+        <activity
+            android:name="io.tezra.fermix.chat.ChatTestActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+</manifest>

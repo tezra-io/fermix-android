@@ -241,6 +241,10 @@ private object NoStore : SessionStore {
 
     override suspend fun dequeue(clientMsgId: String) = error("the idle session never sends")
 
+    override suspend fun markWritten(clientMsgId: String) = error("the idle session never sends")
+
+    override suspend fun withdraw(clientMsgId: String) = error("the idle session never sends")
+
     override suspend fun markFailed(
         clientMsgId: String,
         failure: RequestFailure,

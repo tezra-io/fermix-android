@@ -102,3 +102,16 @@ whose version matches `version.properties`.
   conversation shortcut and channel named as its row, and "Add Fermix" is a launcher shortcut. Until notifications come,
   a row the owner has not seen is kept and not acknowledged, so its push still comes. The app now also
   requests `USE_BIOMETRIC`.
+- **The chat.** A Fermix's chat shows its conversation with the bar's live subtitle and a banner when the
+  phone is offline or the computer is out of reach: the working indicator with its headings and tool
+  chips while the agent works, answers streaming in as markdown with code and table cards and no raw
+  HTML, the owner's messages with their one tick, queued, pending or refused, error cards with one action
+  and no run again unless asked, notices, model changes and a job's deliveries. The composer sends and
+  stops, a typed `/stop` too, at once or not at all, queues while a reply streams and sends again once a
+  command's answer ends its turn, keeps a draft per chat, opens the slash palette, and takes Enter,
+  Shift+Enter and Ctrl+K from a keyboard; a long-press copies, selects, shares or shows a message's Info,
+  and several messages copy or share as a transcript. A row that lands on the chat on screen is
+  acknowledged only once the list holds it. The thinking card becomes the answer's bubble, which then
+  ticks and is read aloud once; a new bubble rises in, the date shows while scrolling, and older messages
+  load under a skeleton. The Chats list's last message is the plain words of its markdown, and the next
+  launch reaches a Fermix first over the route that worked last.

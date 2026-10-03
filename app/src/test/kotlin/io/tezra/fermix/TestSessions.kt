@@ -1,5 +1,6 @@
 package io.tezra.fermix
 
+import io.tezra.fermix.chat.ChatClock
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.MutationRow
@@ -10,6 +11,7 @@ import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.PairedInstance
 import io.tezra.fermix.session.RequestFailure
 import io.tezra.fermix.session.Session
+import io.tezra.fermix.session.SessionEvent
 import io.tezra.fermix.session.SessionParts
 import io.tezra.fermix.session.SessionStore
 import io.tezra.fermix.session.StoredCursors
@@ -48,14 +50,21 @@ internal fun record(gateway: Int): Instance =
         notificationsEnabled = false,
     )
 
-/** A session that never connects: its dialer waits for ever, on a phone with no network. */
+/** The one candidate an idle session races. */
+internal val IDLE_CANDIDATE = Candidate("100.101.102.9", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+
+/**
+ * A session that never connects: its dialer waits for ever, on a phone with no network. Its [lastSuccessful]
+ * names [IDLE_CANDIDATE] when asked, as a completed `hello` over it leaves it.
+ */
 internal fun idleSession(
     scope: CoroutineScope,
     store: SessionStore = NoStore,
+    lastSuccessful: Candidate? = null,
 ): Session =
     Session.open(
         PairedInstance("device-9", "main", ByteArray(KEY_BYTES) { 9 }),
-        listOf(Candidate("100.101.102.9", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
+        listOf(IDLE_CANDIDATE),
         SessionParts(
             appVersion = "0.1.0",
             staticKey = NoKey,
@@ -65,6 +74,7 @@ internal fun idleSession(
             network = MutableStateFlow(NetworkFacts.NONE),
         ),
         scope,
+        lastSuccessful,
     )
 
 private object NoKey : StaticKey {
@@ -98,6 +108,10 @@ internal object NoStore : SessionStore {
 
     override suspend fun dequeue(clientMsgId: String) = error("the idle session sends nothing")
 
+    override suspend fun markWritten(clientMsgId: String) = error("the idle session sends nothing")
+
+    override suspend fun withdraw(clientMsgId: String) = error("the idle session sends nothing")
+
     override suspend fun markFailed(
         clientMsgId: String,
         failure: RequestFailure,
@@ -126,4 +140,29 @@ internal class GatedSends(
     private val gate: CompletableDeferred<Unit>,
 ) : SessionStore by NoStore {
     override suspend fun enqueue(item: OutboxItem) = gate.await()
+}
+
+/** A sink that keeps nothing, as if every event's Fermix were kept: the supervisor's tests count sessions. */
+internal object NoSink : EventSink {
+    override suspend fun take(
+        instanceId: String,
+        session: Session,
+        event: SessionEvent,
+    ): Boolean = true
+
+    override suspend fun reached(
+        instanceId: String,
+        candidate: Candidate,
+    ) = Unit
+
+    override fun ended(instanceId: String) = Unit
+
+    override fun removed(instanceId: String) = Unit
+}
+
+/** A clock that stands still, for the folds of sessions that never connect. */
+internal object TestClock : ChatClock {
+    override fun monoMs(): Long = 0L
+
+    override fun wallMs(): Long = 0L
 }

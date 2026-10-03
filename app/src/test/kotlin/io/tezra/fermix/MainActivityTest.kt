@@ -103,7 +103,7 @@ class MainActivityTest {
     }
 
     @Test
-    fun `a chat's link that reaches the running app opens that chat over the list`() {
+    fun `a chat's link that reaches the running app opens that chat's screen over the list`() {
         welcomeShows()
         val record = paired()
         runBlocking { app.services.instances.upsert(record) }
@@ -114,6 +114,10 @@ class MainActivityTest {
         val link = chatIntent(app, record.id, "main")
         rule.runOnUiThread { InstrumentationRegistry.getInstrumentation().callActivityOnNewIntent(rule.activity, link) }
         rule.waitUntil(SETTLE_MILLIS) { navigator.above.value == listOf(ChatKey(record.id, "main")) }
+        // The Chat screen itself, its empty chat greeting the Fermix.
+        rule.waitUntil(
+            SETTLE_MILLIS,
+        ) { rule.onAllNodesWithText("Say hello to $HOST.").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

@@ -92,13 +92,10 @@ class ChatRowsTest {
     }
 
     @Test
-    fun `a chat's subtitle puts the link's trouble first, then thinking, then the path`() {
-        assertEquals(ChatLine.Of(Link.Connecting), chatLine(Link.Connecting, thinking = true))
-        val updating = up.copy(caughtUp = false)
-        assertEquals(ChatLine.Of(updating), chatLine(updating, thinking = true))
-        assertEquals(ChatLine.Thinking, chatLine(up, thinking = true))
-        assertEquals(ChatLine.Of(up), chatLine(up, thinking = false))
-        assertEquals(ChatLine.Nothing, chatLine(Link.NotOpen, thinking = false))
-        assertEquals(ChatLine.Of(Link.ProtocolError), chatLine(Link.ProtocolError, thinking = false))
+    fun `the last message is the plain words of the daemon's markdown`() {
+        val marked = message(7, "**Raised** the `export` timeout, see [the log](https://x.test/log).")
+        assertEquals(RowLine.Message("Raised the export timeout, see the log."), row(newest = listOf(marked)).line)
+        val reply = TimelineRow.Reply(8u, "turn-1", "# Done\n\n- exported", truncated = false, route = null)
+        assertEquals(RowLine.Message("Done exported"), row(newest = listOf(reply)).line)
     }
 }

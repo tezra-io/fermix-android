@@ -66,6 +66,12 @@ detekt = "2.0.0-alpha.6"
 ktlint = "1.8.0"
 ktlintGradle = "14.2.0"
 junit = "6.1.3"
+# The chat's markdown (design section 8.3): mikepenz's renderer, its Material 3 styles and its highlighted code,
+# 0.45.0, the version the design names; `-code` brings dev.snipme's highlights 1.1.0, whose lexers tint the code
+# card, and the renderer brings JetBrains' markdown parser, which the chats list's plain words read too.
+markdownRenderer = "0.45.0"
+highlights = "1.1.0"
+jetbrainsMarkdown = "0.7.9"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -86,6 +92,10 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 androidx-window-core = { module = "androidx.window:window-core", version.ref = "androidxWindow" }
+markdown-renderer-m3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
+markdown-renderer-code = { module = "com.mikepenz:multiplatform-markdown-renderer-code", version.ref = "markdownRenderer" }
+highlights = { module = "dev.snipme:highlights", version.ref = "highlights" }
+jetbrains-markdown = { module = "org.jetbrains:markdown", version.ref = "jetbrainsMarkdown" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }

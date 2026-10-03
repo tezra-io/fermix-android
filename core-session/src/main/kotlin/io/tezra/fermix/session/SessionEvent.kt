@@ -6,9 +6,14 @@ import io.tezra.fermix.transport.Candidate
 
 /** What a session tells the app, besides the rows its announcer takes. */
 sealed interface SessionEvent {
-    /** A step of a turn's machine (design section 8.2). */
+    /**
+     * A step of a turn's machine (design section 8.2). [daemonSpeaking] is the turn's machine after the step
+     * (TurnState.daemonSpeaking): a heading or a running tool on its card, when the working indicator reads
+     * plain "Thinking", so the app reads it here rather than count the card's lines and chips again.
+     */
     data class Turn(
         val effect: TurnEffect,
+        val daemonSpeaking: Boolean,
     ) : SessionEvent
 
     /** The daemon took a request: its delivery tick, and the item left the outbox. */
@@ -18,7 +23,8 @@ sealed interface SessionEvent {
     ) : SessionEvent
 
     /**
-     * The daemon refused or failed a request. With [inOutbox] it was refused before `accepted`, and its
+     * The daemon refused or failed a request, by `error{client_msg_id}` or, for one that failed while the
+     * phone was away, by `request_status_page`. With [inOutbox] it was refused before `accepted`, and its
      * outbox item stays, failed, for "Try again" or "Remove from outbox" (design section 13.6). Without,
      * it left the outbox at `accepted` and its run failed: "Run again", and earlier actions may have
      * completed (design section 13.5). Either way running it again is a new request whose `retry_of`

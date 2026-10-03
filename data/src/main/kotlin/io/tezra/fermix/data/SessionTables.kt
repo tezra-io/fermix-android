@@ -30,7 +30,7 @@ internal data class CursorsEntity(
 /**
  * core-session's OutboxItem, keyed by its `client_msg_id`, in the order it was enqueued: [position] is one
  * past the largest the outbox holds. [request] is the `msg` or `command` as core-protocol's model writes it,
- * and a failed item has its failure's code and message.
+ * a failed item has its failure's code and message, and [written] says its frame went to a socket once.
  */
 @Entity(tableName = "outbox")
 internal data class OutboxEntity(
@@ -39,6 +39,7 @@ internal data class OutboxEntity(
     @ColumnInfo(name = "request") val request: String,
     @ColumnInfo(name = "failure_code") val failureCode: String?,
     @ColumnInfo(name = "failure_message") val failureMessage: String?,
+    @ColumnInfo(name = "written") val written: Boolean,
 )
 
 /** The cursors and the writes that change the cache and a cursor together, each in one transaction. */
@@ -59,6 +60,9 @@ internal interface CacheDao {
 
     @Query("UPDATE cursors SET read_up_to_seq = :seq WHERE id = $CURSORS_ROW")
     suspend fun setReadFrontier(seq: Long): Int
+
+    @Query("SELECT read_up_to_seq FROM cursors WHERE id = $CURSORS_ROW")
+    fun readFrontier(): Flow<Long?>
 
     /** The cached rows [rows] name, updated in place, and [lastMutationSeq]; a row not cached is skipped. */
     @Transaction
@@ -106,18 +110,26 @@ internal interface OutboxDao {
     fun observed(): Flow<List<OutboxEntity>>
 
     @Query(
-        "INSERT INTO outbox (client_msg_id, position, request, failure_code, failure_message) " +
-            "SELECT :clientMsgId, COALESCE(MAX(position), 0) + 1, :request, :failureCode, :failureMessage FROM outbox",
+        "INSERT INTO outbox (client_msg_id, position, request, failure_code, failure_message, written) " +
+            "SELECT :clientMsgId, COALESCE(MAX(position), 0) + 1, :request, :failureCode, :failureMessage, :written " +
+            "FROM outbox",
     )
     suspend fun enqueue(
         clientMsgId: String,
         request: String,
         failureCode: String?,
         failureMessage: String?,
+        written: Boolean,
     )
 
     @Query("DELETE FROM outbox WHERE client_msg_id = :clientMsgId")
     suspend fun dequeue(clientMsgId: String)
+
+    @Query("UPDATE outbox SET written = 1 WHERE client_msg_id = :clientMsgId")
+    suspend fun markWritten(clientMsgId: String): Int
+
+    @Query("DELETE FROM outbox WHERE client_msg_id = :clientMsgId AND (written = 0 OR failure_code IS NOT NULL)")
+    suspend fun withdraw(clientMsgId: String): Int
 
     @Query("UPDATE outbox SET failure_code = :code, failure_message = :message WHERE client_msg_id = :clientMsgId")
     suspend fun markFailed(

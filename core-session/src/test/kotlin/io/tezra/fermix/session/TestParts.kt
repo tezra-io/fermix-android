@@ -47,6 +47,9 @@ internal class MemoryStore(
     /** The next enqueue writes, then waits for this; it is used once. */
     var enqueueGate: CompletableDeferred<Unit>? = null
 
+    /** The next mark of an item written waits for this, then writes; it is used once. */
+    var writtenGate: CompletableDeferred<Unit>? = null
+
     /** How long each cursor write takes. */
     var cursorWriteMs = 0L
 
@@ -102,6 +105,16 @@ internal class MemoryStore(
         items.removeAll { it.clientMsgId == clientMsgId }
     }
 
+    override suspend fun markWritten(clientMsgId: String): Boolean {
+        writtenGate?.also { writtenGate = null }?.await()
+        val held = items.any { it.clientMsgId == clientMsgId }
+        items.replaceAll { if (it.clientMsgId == clientMsgId) it.copy(written = true) else it }
+        return held
+    }
+
+    override suspend fun withdraw(clientMsgId: String): Boolean =
+        items.removeAll { it.clientMsgId == clientMsgId && (it.failure != null || !it.written) }
+
     override suspend fun markFailed(
         clientMsgId: String,
         failure: RequestFailure,
@@ -156,10 +169,14 @@ internal class Harness(
         announcer.clock = { now }
     }
 
-    /** Opens the session in [scope], the test's background scope unless a test ends its own. */
+    /**
+     * Opens the session in [scope], the test's background scope unless a test ends its own, with
+     * [lastSuccessful] as the candidate an earlier session last reached.
+     */
     fun open(
         candidates: List<Candidate> = listOf(TAILNET),
         scope: CoroutineScope = test.backgroundScope,
+        lastSuccessful: Candidate? = null,
     ): Session {
         val parts =
             SessionParts(
@@ -173,7 +190,7 @@ internal class Harness(
                 random = Random(SEED),
             )
         val instance = PairedInstance("device-1", PROFILE, daemon.gatewayKey.publicKey)
-        session = Session.open(instance, candidates, parts, scope)
+        session = Session.open(instance, candidates, parts, scope, lastSuccessful)
         eventsCollected = test.backgroundScope.launch { session.events.collect { events += it } }
         test.backgroundScope.launch { session.state.collect { states += it } }
         return session

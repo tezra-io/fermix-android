@@ -11,8 +11,9 @@ private const val EVENT_BUFFER = 256
 
 /**
  * What one session keeps across its connections: its state and events, its diagnostics and the acks it
- * sent, the timeline's cursors, the turns and approval cards it shows, the candidates it races, and the
- * connection that is up, if one is. Touched only from the session's dispatcher, one coroutine at a time.
+ * sent, the timeline's cursors, the turns and approval cards it shows, the commands it wrote, the candidates
+ * it races, and the connection that is up, if one is. Touched only from the session's dispatcher, one
+ * coroutine at a time.
  */
 internal class SessionCore(
     val instance: PairedInstance,
@@ -28,6 +29,7 @@ internal class SessionCore(
     val diagnostics = DiagnosticsLog()
     val acks = DiagnosticsLog()
     val approvals = ShownApprovals()
+    val commands = WrittenCommands()
     val lastSuccessful = MutableStateFlow<Candidate?>(null)
     var live: Live? = null
 
@@ -78,12 +80,31 @@ internal class SessionCore(
         diagnostics.add(Diagnostic(now(), kind, detail))
     }
 
-    /** Moves the turn book by [step] and shows what it says to. */
+    /**
+     * Moves the turn book by [step] and shows what it says to. Once the last turn ends, the messages made
+     * while it ran go (design section 8.2, `turn_done` → "queue drains").
+     */
     suspend fun turns(step: (TurnBook) -> TurnBookStep) {
+        val wasLive = book.anyLive
         val next = step(book)
         book = next.book
-        next.effects.forEach { emit(SessionEvent.Turn(it)) }
+        next.effects.forEach { emit(SessionEvent.Turn(it, book.stateOf(it.turnId).daemonSpeaking)) }
+        // Every outbox item is offered again, in order, to the connection that is up: those that waited go.
+        val connection = live
+        if (wasLive && !book.anyLive && connection != null) {
+            for (item in parts.store.outbox()) connection.offer(item)
+        }
     }
 
+    /** Whether a turn shows, so a `msg` made now waits for it (Live.offer). */
+    val turnsLive: Boolean get() = book.anyLive
+
     fun turnRequests(): List<String> = book.requestIds()
+
+    /**
+     * Whether a `text_done` on [turnId] is a command's answer the daemon wrote inline: the turn answers a command
+     * this session wrote, and nothing of it shows yet, as no `turn_started`, thought or tool came for it.
+     */
+    fun answersCommandInline(turnId: String): Boolean =
+        book.stateOf(turnId) == TurnState.Idle && commands.ownsTurn(turnId)
 }

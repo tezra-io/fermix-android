@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.map
 /**
  * One (instance, profile)'s Room database (design section 9.1): the timeline cache with its full-text index,
  * the notified set, the outbox, the cursors and the chat's own state. Feature modules read [timeline],
- * [notified], [chat] and [pending]; core-session's store is [RoomSessionStore] over the same database, and
- * the outbox's one writer.
+ * [notified], [chat], [pending] and [readFrontier]; core-session's store is [RoomSessionStore] over the same
+ * database, and the outbox's one writer.
  */
 @Database(
     entities = [
@@ -45,6 +45,13 @@ abstract class ProfileDatabase : RoomDatabase() {
      * section 13.6, which outlive a relaunch as the outbox does.
      */
     fun pending(): Flow<List<OutboxItem>> = outbox().observed().map { rows -> rows.map { it.toItem() } }
+
+    /**
+     * The read frontier (core-session's StoredCursors.readUpToSeq), again on every change: where the Chat
+     * screen places its unread divider as it opens (design section 13.5).
+     */
+    fun readFrontier(): Flow<ULong> =
+        cache().readFrontier().map { seq -> checkNotNull(seq) { "the cursors row is missing" }.toSeq() }
 }
 
 /**

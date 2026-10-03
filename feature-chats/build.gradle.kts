@@ -23,6 +23,9 @@ dependencies {
     api(project(":data"))
     api(project(":design"))
     api(project(":feature-instance"))
+    // A chat's bar facts (ChatHeader), which the app's chat entry reads for its trust states, and the plain
+    // words of a row's markdown, which the row's last message shows, are the Chat screen's.
+    api(project(":feature-chat"))
     api(libs.androidx.lifecycle.viewmodel.compose)
 
     testImplementation(libs.kotlinx.coroutines.test)

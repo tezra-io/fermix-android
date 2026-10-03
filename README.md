@@ -189,13 +189,19 @@ or a Noise key that does not authenticate is `IdentityChanged`, and every other 
 after core-transport's backoff, the state no longer `Connected` through the wait (a live `1002` among
 them); after 2,880 races in one run the session is `Suspended` until
 `resume()`. `close()` ends it for good and returns only once its run has stopped and every request made
-before it, `send`, `retry`, `markRead` and `remove`, which run in their caller's coroutine, has returned;
+before it, `send`, `retry`, `stop`, `markRead` and `remove`, which run in their caller's coroutine, has returned;
 one made after it is refused, so a closed session touches its store no more. The outbox lives in the app's `SessionStore`, which one session at a time owns: a
 request is persisted, then sent; `accepted` clears it and `error{client_msg_id}` keeps it, failed,
 until `remove()` takes it out; one persisted while the drain reads the store is sent after what the
 drain read, and none goes twice on one connection, accepted or not. "Run again" is a new request
 whose `retry_of` names the failed one, which the app passes, since a run that failed after
-`accepted` left the outbox then; `RequestFailed.inOutbox` says which of the two failed. New rows
+`accepted` left the outbox then; `RequestFailed.inOutbox` says which of the two failed. `stop` is never
+queued: `command{name:"stop"}` goes at once over the connection that is up, or not at all, so a Stop
+pressed offline never stops a later turn. Only the owner's own `msg` opens a card at `accepted` (section
+8.2); a command the session wrote shows a card only from its `turn_started`, and its answer written inline,
+a bare `text_done` on a turn nothing of which shows, ends that turn there, since the daemon answers `/stop`
+before its queue and sends no `turn_done` after it. Each `Turn` event carries the turn machine's
+`daemonSpeaking` after its step, which the indicator reads. New rows
 leave the session only through the app's `Announcer`, one at a time in timeline order; older pages
 come as `OlderLoaded` events and are never announced. The session acks a row only once the announcer
 has said what it did with it: a row the owner was not told of holds the ack until the owner reads it
@@ -606,7 +612,8 @@ bar ("Fermix", "+", and the overflow's "App lock") over a row per (instance, pro
 the mark and "Add Fermix", which the app does not reach today (below). A row (`rowOf`, pure) is the avatar with its dot, the title (the
 nickname or the label, with the host-owned agent's name when it is not "Fermix", and the DEV tag), and a
 second line in the canon's order: a link that speaks (a trust state, a protocol error, a connection taken
-over, a daemon too old or too new), "thinking…", "Draft: …", then the newest row's words; with the time
+over, a daemon too old or too new), "thinking…", "Draft: …", then the newest row's words, the agent's markdown as its plain
+words (feature-chat's `rowWords`); with the time
 of the newest message (the hour today, the weekday for the six days before, the date before that, in the
 phone's own form) and the unread count, the notified set's size. A row offline or connecting keeps its
 last message. A long-press, felt, opens Move to top · Rename · Details · Unpair…, each with the canon's icon, the
@@ -616,9 +623,7 @@ launch check dropped, by its instance id, and goes once that daemon is paired ag
 write, or on its long-press's "Remove". `TrustScreen` is "This phone was unpaired from {host}" or "{host}'s identity changed
 (reinstalled?)" with "Pair again" and "Remove", in place of the chat. `LockScreen` is "Fermix is locked"
 with "Unlock", and `AppLockScreen` the "Lock with biometrics" switch, off and explained on a phone with no
-screen lock. `ChatPlaceholder` is the Chat screen until it is built: its app bar, live, with section
-13.5's subtitle (`chatLine`), which cross-fades as it changes (a cut under reduced motion), and the
-title opening the Instance screen. `ChatsViewModel` reads the
+screen lock. `ChatsViewModel` reads the
 records, the sessions, the turns and each instance's main profile, and moves, renames, unpairs and
 removes. `ConversationSync` keeps one long-lived conversation shortcut and one notification channel per
 (instance, profile), id `{instance}:{profile}`, named as its row reads (`conversationName`: the title,
@@ -626,7 +631,7 @@ the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row
 `ConversationSurface`: `PlatformConversations` on the phone, a fake in the JVM tests. Each row's
 conversation is made with it, published again when it is renamed or its agent is, and removed with it, and
 the first sync after a start removes what a removal cut short. The JVM tests cover the row rules, a row's
-time in the locale it is handed, the subtitle order, the sync, and on Robolectric a conversation's name, a
+time in the locale it is handed, a last message's plain words, the sync, and on Robolectric a conversation's name, a
 `1002` row reading "Protocol error" and nothing of being unpaired, a revoked row naming who unpaired it,
 the long-press menu, its place over the held row and the tap, and the empty state. Every
 screen is a preview at the twelve windows, with references under `feature-chats/src/test/screenshots`.
@@ -641,9 +646,7 @@ owner to settle:
   build, "More options" and "Back" label the bar's icons, "Set a screen lock on this phone to use it."
   explains the switch that cannot turn on, and "{title} · {agent}" is how a title carries the agent's
   name; the design gives none of them.
-- The candidate a session last reached is kept for the process alone (`Session.lastSuccessful`), not on
-  the record, so a new process races in the record's order. "Test connection"'s result reuses the deck's
-  words: "Connecting…", the path, the banner's "Can't reach {host} — is it on and awake?" and the
+- "Test connection"'s result reuses the deck's words: "Connecting…", the path, the banner's "Can't reach {host} — is it on and awake?" and the
   identity-changed line.
 - The Diagnostics log gives each line's time after the session opened, and its kind in lower case.
 - The empty list is the mark and "Add Fermix", with no sentence; the canon gives none. The app never shows
@@ -654,8 +657,6 @@ owner to settle:
   on this phone". Section 13.9's "Something went wrong on {host}" is a daemon's `turn_error`, and would put
   the fault on the computer.
 - A conversation's name carries the DEV tag as "{name} (DEV)", as a row draws the tag beside its title.
-- A row's last message is the daemon's text as it came, its markdown unrendered (`**`, backticks, links),
-  until the Chat screen's markdown (stage A3) gives the row its plain words.
 - A "Re-pair this Fermix" row is drawn in the Slate tint with no dot, and its long-press offers only
   "Remove".
 - The Notifications switch sets the record's flag and hands it to `NotificationsPolicy`, which does
@@ -664,6 +665,130 @@ owner to settle:
   40 characters.", "Another Fermix on this phone has this name."); the design gives no words.
 - The lock uses the platform's `BiometricPrompt`, a strong biometric or the screen lock, not
   `androidx.biometric`, which would add a dependency for what API 35 gives.
+
+`feature-chat` (`io.tezra.fermix.chat`) is design section 13.5's Chat screen, with section 13.6's composer
+and section 13.7's message actions. `ChatViewModel` builds its `ChatScreenState` in pure, tested functions
+(`chatScreenState`, `chatItems`) from the profile's cache, newest first (60 rows at a time and 3,000 at
+most, then `loadOlder` from the oldest), the outbox, and the app's fold of the session's events
+(`ChatLive.after`): the thinking card, one list item with the bubble that takes its place, whose bounds
+morph into it in 300 ms on the emphasized easing and which stands in for it while a bare `text_done` waits
+for its row, the live bubbles, `accepted`,
+each turn's ending (an error card by `turn_error` code, or "Stopped"), and the notices and model lines.
+The bar's subtitle keeps section 13.5's order (`chatLine`); the banner shows once its condition has held
+2 s, Offline without a network and "Can't reach {host} — is it on and awake?" once every candidate has
+failed for 30 s, whose tap (48 dp tall) opens the Instance screen; the screen draws nothing until the cache
+has returned its first page, so its first frame holds the rows and the answers that came before it; the unread
+divider is placed once, from that first page, empty or not, before the agent's first row past the read
+frontier the chat opened on (`unreadAnchor`), and a row that lands later moves nothing; the scroll pill, a 48 dp target at the column's end, counts the agent's rows
+past what the owner has seen; each day has its pill, and while the owner scrolls a date pill names the day
+of the topmost item and fades 500 ms after; a pull at the top shows three skeleton bubbles until the older
+page lands, the rows asked of the cache growing only once the daemon took the pull; bubbles within 2
+minutes group with 6 dp inner corners, a message with no time grouped as if it came now. A bubble that
+lands rises 12 dp, a tool chip scales in from 0.92, a streaming bubble's lines grow by
+`animateContentSize`, and send ↔ stop turn into each other; all of it at once under reduce-motion. The
+working indicator is core-session's `indicatorLine` on a seed per turn (`cardLine`), "Thinking" while
+core-session says the daemon speaks on the card (`SessionEvent.Turn.daemonSpeaking`),
+cross-faded in 200 ms, beside the orbiting two-dot mark, which moved from onboarding to `design`; under it
+the latest two headings and two tool chips with "+n more", worded by the verb map (`toolVerb`). TalkBack
+hears "Fermix is thinking" once, from one polite live region, and never the phrase. An answer renders with
+mikepenz's multiplatform-markdown-renderer 0.45.0 (`-m3` and `-code`): as it streams, into
+`rememberStreamingMarkdownState`, which a `replace` snapshot starts again, with the beam cursor after the
+last paragraph's last glyph, or after the "code…" chip of a fence still open; sealed, parsed as it composes.
+Each top-level fence and table is a card grouped under the bubble (`segmentsOf`; as an answer streams, the
+parts from its last settled card on are read again, `segmentsAfter`), and only the answer's last part streams,
+so the prose above a fence that closed or a table that formed is sealed at once: the code card, `#16171B` in both themes, with its language chip, Copy and
+Share, no soft wrap, folded past 14 lines, and tinted by highlights 1.1.0 for Kotlin, Swift,
+JavaScript/TypeScript, Python and shell; the table card, flat, figures (times, counts, amounts, a number
+with a short unit) in mono to the right, past four columns in columns as wide as their words, which share the
+card's room when they need less and pan when they need more, a cell past three lines opening whole. A job's
+tag stands above an answer's first part and the cursor after its last, whatever they are, and an answer made
+only of cards shows its time under the last one. Raw HTML never renders: a tag, an HTML block and an
+image show as the text they are. The owner's bubble has the clock until `accepted`, then one tick, its
+time floated on its last line when it fits; a queued one is at 55 % under "queued · sends after this
+reply", a pending one says "Queued", a refused one keeps the clock with "Not sent. Tap to retry sending."
+under it in the error colour, an error card with "Retry sending", and a tap menu of "Try again" and
+"Remove from outbox"; a queued or pending one's tap offers Edit and Remove while its frame was never written
+(core-session's `OutboxItem.written`). The composer is the canon's two-row pill: the field, "Message
+{name}…", up to six lines, and send ↔ stop at the end of the second row (Stop is core-session's
+`Session.stop`, `command{name:"stop"}` sent at once over the link that is up and never queued, so it never
+stops a later turn, and a `/stop` typed or picked on the palette goes the same way; send plays `CONFIRM` once
+the session took the request); a "/" at the start, a
+long-press on send or Ctrl+K opens the slash palette of the daemon's commands, a sheet the dock opens into
+over a scrim on the whole window, its grab bar on top and the field at its foot; Enter sends and
+Shift+Enter puts a newline. An answer that arrives whole plays `CLOCK_TICK` on its final bubble and
+TalkBack reads its plain words once, from one polite live region, only while the chat is on screen and
+never again on a rotation (`Arrivals`). The draft is kept 400 ms after the typing stops and as the screen
+leaves, and comes back as the chat opens. A long-press lifts a message over the dimmed timeline with Copy ·
+Select text · Copy code · Share · Info · Retry, each where it applies; Info shows the times, `server_seq`,
+`client_msg_id`, the turn's duration, "Thought for 12 s · 3 tools", the model, its tools and the path;
+multi-select copies or shares a transcript. While the screen is on screen, resumed with its window focused
+(`onScreen`), it reports the newest row its list holds (`ChatPresence`), and at the bottom it marks the
+newest row read once the session took it, never backwards, asking again as a session comes. What the
+owner asked and could not have (a Stop with no link, a Remove of an item written meanwhile, a resent
+request whose old item stays) goes to the app's log. `plainWords` and `rowWords` reduce a row's markdown to one line of words, which the
+Chats list's last message shows. The JVM tests cover the timeline, the fold, the segments, the lexers, the
+verbs, the commands, the menus, Info, the plain words, and the ViewModel over a fake session and cache
+(the draft's debounce, its keeping on leaving and its return, a draft kept when the chat leaves before it
+came back, the read frontier with no session yet, the divider placed once and none for a chat that opened
+empty, no state before the cache's first page and the answers it held in the first one, the banner's delay,
+Edit, Remove logged, the older page's pull and skeleton, "Retry sending" under a new id, a typed `/stop` that
+never enters the outbox, and no run again unless asked),
+the pure pieces (`onScreen`, `freshKeys`, `dateAt`, `stampFloats`, `isFigure`, `freshArrivals`,
+`segmentsAfter` against a whole read at every split, `cursorHome`, a wide table's columns), and on
+Robolectric raw HTML in a sealed answer and in its row, Run again only from the owner's tap through
+`ChatRoute`, an arrival's one `CLOCK_TICK` and live region, the screen's reports to its presence through
+`ChatRoute` over a real ViewModel (the newest row its state holds, and none below resumed or without the
+window's focus), a fence that closes and a table that forms mid-stream leaving no "code…" chip or raw header
+line, an answer made only of a card with its time and a job's tag, and the indicator line's pixels, peaking
+in the ink over its middle when still and in the sweep's first frame. Every state is a preview at the twelve windows, with references under
+`feature-chat/src/test/screenshots`. Its instrumented tests (below) keep the draft, the row scrolled to and
+the indicator's phrase through a rotation and a fold, and check the long-press menu's order, the
+announcements (the card's, and an arrived answer's plain words once), the hardware keys and Copy's
+clipboard.
+
+Where the code departs from sections 8.3 and 13.5 to 13.7, or reads them where they are silent, for the
+owner to settle:
+
+- "Retry sending", and the failed bubble's "Try again", send the refused request again under a new
+  `client_msg_id`, naming nothing in `retry_of`, and take the refused item out of the outbox; "Run again" on
+  a turn that ran and failed is a new request naming the old one in `retry_of` (core-session's
+  `Session.retry`). Sections 13.5 (review R4) and 13.6 keep a never-`accepted` request's id, for the daemon
+  to deduplicate; PROTOCOL.md answers a refused request sent again under its id as a duplicate that never
+  runs, and one neither accepted nor refused is still the outbox's, which sends it again by itself under its
+  own. A failed turn whose request the chat does not hold (a cron's, or one whose message is older than the
+  rows the list holds) shows its line with no "Run again".
+- A refused item has both section 13.5's error card ("Retry sending") and section 13.6's tap menu ("Try
+  again" · "Remove from outbox"); the canon asks for one word.
+- highlights 1.1.0 has no lexer for Elixir, JSON, YAML, SQL or diff, so those fences are mono, untinted.
+- Each top-level fence and table is cut out of the answer before the renderer (`segmentsOf`), to group it
+  as a card under its bubble as the canon draws; the renderer parses each prose part again, so an answer is
+  parsed twice, and the renderer's own fence and table components draw only nested ones.
+- The cursor stands after a paragraph's last glyph (inline content in a paragraph component of the
+  renderer's) and after an open fence's chip; after any other last block, a heading or a table being
+  written, it stands below it. The owner's time floats on the last line, as the canon's `.ts`; the agent's
+  is a line of its own under the prose, whose last line is the renderer's to lay out, or under the last card
+  of an answer made only of cards. A fence nested in a
+  list keeps the renderer's 8 dp padding. Table cells are plain words. An image is its source text, as raw
+  HTML is.
+- A job's delivery reads its job from `metadata.job`, which no wire document defines yet: provisional, a
+  wire question for the owner.
+- A command's answer written inline ends its turn at its `text_done` (core-session above): the engine's
+  `/stop` replies before its queue, and section 7 emits `turn_done` only from `build_turn_result
+  {:completed}`, which such a reply never reaches, so the turn would otherwise hold every later message as
+  queued. Whether protocol v2 ends such a turn on the wire is a question for the owner; a `turn_done` that
+  does come after it is late, and ignored.
+- The running tool chip's glyph is 16 dp in a 22 dp ring, as section 13.5 says; the canon draws 11 dp in 20.
+- The scroll pill floats over the list, as the canon's `.sp` does, and covers what scrolls under it; no
+  padding is added while it shows, which would move the list as the owner scrolls off the bottom.
+- The unreachable banner is 48 dp tall, section 13.8's least target, where the canon's line is 28 dp; the
+  offline one, which does not tap, stays thin.
+- The date pill shows while the owner drags or flings the list, not while the list follows what lands, and
+  not while a day header is the topmost item, which names its day itself. A panned table's columns are as
+  wide as their words, 64 to 220 dp and never narrower than their longest word (up to 320 dp).
+- Multi-select starts from a tap on a lifted message; the empty chat greets the instance's title ("Say
+  hello to {title}."); after a reconnect the card starts again at "Thinking", from the reconciliation's
+  active turns; a daemon of protocol v1, which sends no `turn_done`, holds a queued message until the
+  reconciliation.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the
@@ -674,14 +799,18 @@ its rows' readers may run while the check drops a Fermix, which orders them as a
 `Session` per paired instance, keyed by its id, opened from the records while the app is in sight
 (`AppSessions`, on the I/O dispatcher, a missing Keystore key logged and left without a session), each with
 one collector that keeps `hello_ack`'s facts on the record, the agent's name on the chat, the daemon's
-later routes, and the read frontier against the notified set (`SessionEvents`), and the turns running
-per instance for the rows' "thinking…", which lasts while any of them runs. Each session's announcer
+later routes and the candidate the last `hello` went over (`Instance.lastCandidate`, which the next
+process races first), an older page's rows in the cache, and the read frontier against the notified set
+(`SessionEvents`); that folds the events into what each chat shows besides its rows (`ChatFolds`, whose
+turns end with their session); and that counts the turns running per instance for the rows'
+"thinking…", which lasts while any of them runs. Each session's announcer
 (`RowAnnouncer`) keeps every row in the profile's timeline, then answers: the owner's own message is
-known already; a row of the chat on screen (`ChatOnScreen`) is shown there; any other is put into the
-notified set and posted (`RowNotifier`), or known already when the set held it. Until the Chat screen
-and the notifications change come, no chat is on screen and nothing can be posted, so another's row is
-not announced and never acked, its push still to come (tla/specs/mobile_push, PUSH-2), and the unread
-count stays 0. Out of sight for 5 s every session is suspended, by one timer that a return within
+known already; a row the chat on screen lists is shown there (`OnScreenChats`: a Chat screen reports the
+newest row its list holds while it is resumed and focused, and the answer waits for the list to take the
+row, at most 3 s, so the row is persisted, shown, then acked); any other is put into the notified set and
+posted (`RowNotifier`), or known already when the set held it. Until the notifications change comes
+nothing can be posted, so a row of a chat not on screen is not announced and never acked, its push still
+to come (tla/specs/mobile_push, PUSH-2), and the unread count stays 0. Out of sight for 5 s every session is suspended, by one timer that a return within
 them cancels; back in sight each resumes, and one that ended reconnects, unless it was revoked or its
 identity changed, which wait for the owner. A pairing's approved session is taken over as its record is
 stored (`adopt`), so no second socket opens; unpairing sends `unpair`, waits up to 5 s for the daemon to
@@ -749,6 +878,7 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 ./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true   # redraw the references (Linux), dropping stale ones
 ./gradlew :feature-onboarding:connectedDebugAndroidTest   # the instrumented tests, on the device adb sees (below)
 ./gradlew :feature-chats:connectedDebugAndroidTest        # ... and the Chats list's
+./gradlew :feature-chat:connectedDebugAndroidTest         # ... and the chat's
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
@@ -815,8 +945,8 @@ the sha256 of the jar from Google's Maven repository. The file trusts without a 
 A `fermix.android.library.compose` module's `src/androidTest` runs on an emulator or a phone, with
 AndroidX Test's runner, Compose's test rule and Espresso 3.7 (Compose's own 3.5 cannot start on API 36).
 `check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the tests to every
-gate; running them needs a device. Today `feature-onboarding` and `feature-chats` have them, and they
-need no daemon and no camera. `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
+gate; running them needs a device. Today `feature-onboarding`, `feature-chats` and `feature-chat` have
+them, and they need no daemon and no camera. `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
 activity's ViewModel store, which holds the fake pairing control (`FakeStarter`, from `src/sharedTest`,
 which the JVM tests compile too), the gate's answer, the network facts, a stub preview that reads what a
 test hands it and reports a torch, an `ActivityResultRegistry` that answers the camera prompt, and a fake
@@ -830,7 +960,14 @@ and `clipboardClip` on the phone's own clipboard. The test APK is signed with th
 not the app, and pairs with nothing. `ChatsTestActivity` shows the Chats list and the Instance screen
 over fixed state, two rows and one connected Fermix, with a `ChatsTestRig` kept the same way that counts
 the activity's creations and picks the screen; its tests long-press a row for Move to top · Rename · Details · Unpair…, and keep a rename
-dialog's half-typed name, on the list and on the Instance screen, through a rotation and a fold. A test
+dialog's half-typed name, on the list and on the Instance screen, through a rotation and a fold.
+`ChatTestActivity` shows the Chat screen through `ChatRoute`, its `ChatViewModel` over a fake session and
+cache (`FakeChatSession`, `FakeChatStore`, from `feature-chat/src/sharedTest`) holding forty rows, kept with
+the app's fold of the events and a fake monotonic clock in a `ChatTestRig`; its tests keep a half-typed
+draft, the row scrolled to and the working indicator's phrase through a rotation and a fold, read the
+long-press menu as Copy · Select text · Copy code · Share · Info with no Reply or Forward, find one polite
+live region saying "Fermix is thinking" that stays the same node with the same words as the phrase
+changes, send on Enter and put a newline on Shift+Enter, and find Copy's words on the clipboard. A test
 that needs the window's focus, Espresso's back and the clipboard's read, waits for it
 (`awaitWindowFocus`) and fails naming the window that holds it.
 
@@ -853,7 +990,8 @@ the shell that runs it, so it is not for pasting into a terminal:
 
 ```bash
 serial=emulator-5554
-emulator -avd ui_35_medium_phone -port 5554 -no-window -no-audio -gpu swiftshader_indirect -no-snapshot -no-boot-anim &
+emulator -avd ui_35_medium_phone -port 5554 -no-window -no-audio -gpu swiftshader_indirect -no-snapshot -no-boot-anim \
+  -feature -QuickbootFileBacked &
 pid=$!
 stop() {                                     # stops the emulator however the run ends, and waits for it
   adb -s "$serial" emu kill
@@ -872,8 +1010,14 @@ adb -s "$serial" shell svc power stayon true
 ANDROID_SERIAL="$serial" ./gradlew :feature-onboarding:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.onboarding.FoldingPhone || exit 1
 ANDROID_SERIAL="$serial" ./gradlew :feature-chats:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chats.FoldingPhone
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chats.FoldingPhone || exit 1
+ANDROID_SERIAL="$serial" ./gradlew :feature-chat:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chat.FoldingPhone
 ```
+
+`-feature -QuickbootFileBacked` keeps the guest's 2 GB of RAM out of a file: a host that pins
+`vm.dirty_bytes` low, as Pop!_OS's defaults do at 256 MB, throttles that file through writeback, and a
+cold boot never comes online, while with the feature off it boots in 20 s.
 
 `ANDROID_SERIAL` names the device to use. `scripts/settle_emulator.sh` waits, 30 polls 2 s apart, for
 the home screen to have the focus, as a cold boot can leave a system dialog holding it, System UI's

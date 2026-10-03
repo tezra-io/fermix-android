@@ -14,16 +14,19 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
  * core-session's SessionStore, rule by rule as its KDoc states them: each call one write, made whole or
  * not at all; the cursor and the ack frontier written together; the mutations applied to the rows the
  * cache holds and to no other; the rebuild dropping the cache and its cursor and keeping the ack frontier;
- * the outbox in the order it was enqueued, a dequeue of an id it does not hold no change, and a failure
- * marked on the item the session names. An implementation's test extends it, over the cache the store
+ * the outbox in the order it was enqueued, a dequeue of an id it does not hold no change, a failure
+ * marked on the item the session names, an item marked written in place, and one withdrawn only while it
+ * was never written or has failed. An implementation's test extends it, over the cache the store
  * shares a database with, and a fault that makes every write of the stored cursors fail. The fault lands
  * on the cursor, which each write records last, so a write that is not whole leaves what it did before.
  */
@@ -159,6 +162,32 @@ abstract class SessionStoreContract {
             store.enqueue(OutboxItem(msg("m2")))
             store.markFailed("m1", failure)
             assertEquals(listOf(OutboxItem(msg("m1"), failure), OutboxItem(msg("m2"))), store.outbox())
+        }
+
+    @Test
+    fun `an item is marked written in place, and an id the outbox does not hold is not`() =
+        runTest {
+            store.enqueue(OutboxItem(msg("m1")))
+            store.enqueue(OutboxItem(msg("m2")))
+            assertTrue(store.markWritten("m1"))
+            assertTrue(store.markWritten("m1"))
+            assertFalse(store.markWritten("m9"))
+            assertEquals(listOf(OutboxItem(msg("m1"), written = true), OutboxItem(msg("m2"))), store.outbox())
+        }
+
+    @Test
+    fun `an item never written or failed is withdrawn, and one written that did not fail stays`() =
+        runTest {
+            val failure = RequestFailure("client_message_conflict", "content differs")
+            listOf("unwritten", "written", "failed").forEach { store.enqueue(OutboxItem(msg(it))) }
+            store.markWritten("written")
+            store.markWritten("failed")
+            store.markFailed("failed", failure)
+            assertTrue(store.withdraw("unwritten"))
+            assertFalse(store.withdraw("written"))
+            assertTrue(store.withdraw("failed"))
+            assertFalse(store.withdraw("absent"))
+            assertEquals(listOf(OutboxItem(msg("written"), written = true)), store.outbox())
         }
 
     @Test

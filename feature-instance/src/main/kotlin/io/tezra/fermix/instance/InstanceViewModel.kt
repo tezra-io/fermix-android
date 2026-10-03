@@ -4,10 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
-import io.tezra.fermix.data.InstanceGone
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
+import io.tezra.fermix.data.Use
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.Session
@@ -210,17 +210,19 @@ class InstanceViewModel(
         }
     }
 
+    /**
+     * The previews switch. A Fermix removed meanwhile has no chat to set ([Use.Gone]); its screen goes with its
+     * record.
+     */
     fun setPreviews(on: Boolean) {
-        viewModelScope.launch {
-            whilePaired { parts.profiles.withDatabase(instanceId, MAIN_PROFILE) { it.chat().setPreviews(on) } }
-        }
+        viewModelScope.launch { parts.profiles.withDatabase(instanceId, MAIN_PROFILE) { it.chat().setPreviews(on) } }
     }
 
-    /** "Clear media cache", then the size again. */
+    /** "Clear media cache", then the size again; a Fermix removed meanwhile has neither ([Use.Gone]). */
     fun clearCache() {
         viewModelScope.launch {
-            whilePaired { parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.clear() } }
-            measureCache()
+            val cleared = parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.clear() }
+            if (cleared is Use.Ran) measureCache()
         }
     }
 
@@ -229,23 +231,10 @@ class InstanceViewModel(
         viewModelScope.launch { parts.unpair(instanceId) }
     }
 
+    /** The cache's size, unless a removal took the files meanwhile: the record went first, and the screen with it. */
     private suspend fun measureCache() {
-        whilePaired {
-            val bytes = parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.size() }
-            facts.update { it.copy(cacheBytes = bytes) }
-        }
-    }
-
-    /**
-     * [use] of the instance's files, unless a removal took them meanwhile (ProfileDatabases.delete): the record
-     * went first, so the screen leaves with it, and there is nothing left to set, clear or measure.
-     */
-    private suspend fun whilePaired(use: suspend () -> Unit) {
-        try {
-            use()
-        } catch (expected: InstanceGone) {
-            // The instance was removed while the screen asked; its screen goes with its record.
-        }
+        val measured = parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.size() }
+        if (measured is Use.Ran) facts.update { it.copy(cacheBytes = measured.value) }
     }
 }
 

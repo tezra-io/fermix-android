@@ -1,5 +1,6 @@
 package io.tezra.fermix.chats
 
+import io.tezra.fermix.chat.rowWords
 import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.RepairNotice
@@ -115,13 +116,9 @@ fun rowOf(
     )
 }
 
-/** The newest row's words; a reply's bubble has its text, a message its content. */
+/** The newest row's words on one line (rowWords): the agent's markdown as its plain words, the owner's as typed. */
 private fun lastText(newest: List<TimelineRow>): String? =
-    when (val row = newest.firstOrNull()) {
-        is TimelineRow.Message -> row.message.content
-        is TimelineRow.Reply -> row.text
-        null -> null
-    }?.takeIf { it.isNotBlank() }
+    newest.firstOrNull()?.let(::rowWords)?.takeIf { it.isNotBlank() }
 
 /**
  * When the newest row with a time came: a reply's bubble carries none (TimelineRow), its message does. A

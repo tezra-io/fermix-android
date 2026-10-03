@@ -30,11 +30,14 @@ data class RequestFailure(
 /**
  * A `msg` or `command` the phone has persisted and not yet seen accepted (design section 13.6). One
  * with a [failure] stays for the UI and is never sent again: running it again is a new request with
- * a new client_msg_id and `retry_of` (design section 7, the `msg.retry_of?` row).
+ * a new client_msg_id and `retry_of` (design section 7, the `msg.retry_of?` row). [written] is set
+ * before its frame first goes to a socket and never cleared: until then the owner may still edit or
+ * remove it, and after it the daemon may have it (design section 13.6, "Queued and pending messages").
  */
 data class OutboxItem(
     val request: ClientEvent,
     val failure: RequestFailure? = null,
+    val written: Boolean = false,
 ) {
     init {
         require(request is ClientEvent.Msg || request is ClientEvent.Command) { "only a msg or a command is outboxed" }
@@ -95,6 +98,19 @@ interface SessionStore {
 
     /** Removes [clientMsgId]'s item; an id the outbox does not hold, a duplicate receipt's, is no change. */
     suspend fun dequeue(clientMsgId: String)
+
+    /**
+     * Marks [clientMsgId]'s item written, just before its frame first goes; false when the outbox no longer
+     * holds it, removed meanwhile, and then the frame does not go. One write, so it and [withdraw] are never
+     * both true for an item.
+     */
+    suspend fun markWritten(clientMsgId: String): Boolean
+
+    /**
+     * Removes [clientMsgId]'s item if it failed or was never written, in one write; whether it did. One
+     * written and not failed stays, since the daemon may have it.
+     */
+    suspend fun withdraw(clientMsgId: String): Boolean
 
     /** Marks the item the outbox holds for [clientMsgId] failed; the session never names another. */
     suspend fun markFailed(

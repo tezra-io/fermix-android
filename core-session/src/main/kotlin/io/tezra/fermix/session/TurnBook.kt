@@ -60,6 +60,9 @@ class TurnBook private constructor(
         }
     }
 
+    /** Whether any turn shows: a `msg` made meanwhile waits for the last to end (Live.offer). */
+    val anyLive: Boolean get() = live.isNotEmpty()
+
     /** The client_msg_ids of the requests the shown turns answer, for `request_status`. */
     fun requestIds(): List<String> = live.values.mapNotNull { it.inReplyTo }.distinct()
 

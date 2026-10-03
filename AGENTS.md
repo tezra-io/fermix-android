@@ -54,10 +54,16 @@ feature-instance/     design section 13.7's Instance screen, io.tezra.fermix.ins
                       them, 1002 a protocol error and never revoked), the avatar and its dot,
                       InstanceViewModel, and the screenshot references in its src/test/screenshots
 feature-chats/        design sections 13.4 and 9.4 as screens, io.tezra.fermix.chats (Compose library):
-                      the Chats list and its rows, the trust screens, the app lock's screens, the chat's
-                      bar until the Chat screen comes, ChatsViewModel, the conversation shortcuts and
-                      channels (ConversationSync); its instrumented tests in src/androidTest, the
-                      samples both test sets compile in src/sharedTest
+                      the Chats list and its rows, the trust screens, the app lock's screens,
+                      ChatsViewModel, the conversation shortcuts and channels (ConversationSync); its
+                      instrumented tests in src/androidTest, the samples both test sets compile in
+                      src/sharedTest
+feature-chat/         design sections 8 and 13.5 to 13.7 as a screen, io.tezra.fermix.chat (Compose
+                      library): the Chat screen, its timeline built in pure functions (chatItems,
+                      ChatLive), the markdown, code and table cards, the composer, the message actions,
+                      ChatViewModel, and the screenshot references in its src/test/screenshots; its
+                      instrumented tests in src/androidTest, the fake session and cache both test sets
+                      compile in src/sharedTest
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 policy/               permissions.txt: the permissions the release APK requests, exactly
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
@@ -128,9 +134,11 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   JVM tests' too) behind `PairingStarter`, and the stub preview behind `ScanCamera`, whose `allowed`
   stands in for the camera permission, since a connected test's APK is installed with every permission
   granted; the camera's prompt is answered by `PromptRegistry`, an `ActivityResultRegistry` in
-  `src/sharedTest`, and the clip is `FakeClip`. `check` builds them, so they pass every gate; run them with
-  `./gradlew :feature-onboarding:connectedDebugAndroidTest` and `:feature-chats:connectedDebugAndroidTest`,
-  one Gradle run each, on an emulator (`README.md`), settled first
+  `src/sharedTest`, and the clip is `FakeClip`; the chat's are the fake session and cache (`FakeChatSession`,
+  `FakeChatStore` in `feature-chat/src/sharedTest`) behind `ChatSession` and `ChatStore`. `check` builds
+  them, so they pass every gate; run them with `./gradlew :feature-onboarding:connectedDebugAndroidTest`,
+  `:feature-chats:connectedDebugAndroidTest` and `:feature-chat:connectedDebugAndroidTest`, one Gradle run
+  each, on an emulator (`README.md`), settled first
   by `scripts/settle_emulator.sh`, and on CI's own Google APIs images when the run is evidence for CI. A
   test that needs the window's focus (a key event, the clipboard) waits for it with `awaitWindowFocus`. A
   test that changes the device (the animator scale, the rotation, a fold) puts it back however it ends.

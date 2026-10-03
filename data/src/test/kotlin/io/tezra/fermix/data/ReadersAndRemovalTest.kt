@@ -276,7 +276,7 @@ class ReadersAndRemovalTest {
             runCurrent()
             // A write on a closed database would cancel the use (Room's close above), not fail it.
             assertTrue(use.isCompleted && !use.isCancelled, "the use did not return")
-            assertEquals("half a thought", use.getCompleted().draft)
+            assertEquals("half a thought", (use.getCompleted() as Use.Ran).value.draft)
             assertTrue(removal.isCompleted, "the removal did not go on once the use returned")
             assertFalse(File(root, record.id).exists(), "the removed instance's files are still there")
             assertEquals(emptyList<Throwable>(), reported)

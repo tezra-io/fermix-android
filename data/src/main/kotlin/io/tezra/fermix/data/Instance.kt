@@ -34,8 +34,10 @@ val TINT_NAMES: List<String> = listOf("Slate", "Sage", "Clay", "Plum", "Ocean", 
  * [host] and [profile] are the daemon's computer and its home's `[fermix_core] profile` (design D11). [label]
  * is the daemon's own name and [nickname] the owner's, which lives on this phone alone and survives a
  * re-pairing (section 9.2); [tint] is one of [TINT_NAMES], the design module's `Tint` by name, which the UI
- * maps to its colour. [candidates] are the routes for the next race, [caps] the last `hello_ack`'s, none
- * before the first one. [fcmRegisteredAt] is when this phone last sent `push_register`, in Unix milliseconds.
+ * maps to its colour. [candidates] are the routes for the next race, and [lastCandidate] the one the last
+ * completed `hello` went over (core-session's Session.lastSuccessful), which the next process races first
+ * (section 5.1, "last successful first") while [candidates] still holds it; [caps] are the last `hello_ack`'s,
+ * none before the first one. [fcmRegisteredAt] is when this phone last sent `push_register`, in Unix milliseconds.
  * [deviceName] and [pairedAt] are the Instance screen's "This phone" (section 13.7): the name `pair_request`
  * carried, and when the pairing was approved, in Unix milliseconds. Section 9.1 does not list them; the
  * screen needs them, and only the pairing knows them.
@@ -70,6 +72,8 @@ data class Instance(
     @SerialName("fcm_registered_at") val fcmRegisteredAt: Long? = null,
     @SerialName("device_name") val deviceName: String? = null,
     @SerialName("paired_at") val pairedAt: Long? = null,
+    @Serializable(with = CandidateSerializer::class)
+    @SerialName("last_candidate") val lastCandidate: Candidate? = null,
 ) {
     init {
         keyBytes("gateway_pk", gatewayPk)

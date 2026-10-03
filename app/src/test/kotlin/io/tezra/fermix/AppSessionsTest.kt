@@ -5,8 +5,10 @@ import androidx.test.core.app.ApplicationProvider
 import io.tezra.fermix.attest.AttestedKey
 import io.tezra.fermix.attest.DeviceKeyFacade
 import io.tezra.fermix.data.InstanceGone
+import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
+import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.instance.TestOutcome
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.session.Announcement
@@ -14,9 +16,13 @@ import io.tezra.fermix.session.Announcer
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import io.tezra.fermix.transport.WebSocketConnector
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -74,8 +80,9 @@ private class Socket : AutoCloseable {
 
 /**
  * How the app opens a session and tests a connection (AppSessions): each instance's session with its own
- * Keystore key and none without a key or a route; and "Test connection"'s race (design section 13.7),
- * which names a candidate only for its own attempt's failure, never for the winner's cancel.
+ * Keystore key and none without a key or a route, racing first the candidate its last `hello` went over; and
+ * "Test connection"'s race (design section 13.7), which names a candidate only for its own attempt's failure,
+ * never for the winner's cancel.
  *
  * On Robolectric, as MainActivityTest: the opener opens the instance's database, and the app's tests load
  * the bundled SQLite library once for the JVM, into Robolectric's classloader. The plain Application stands
@@ -113,6 +120,24 @@ class AppSessionsTest {
             assertEquals(listOf(paired.keyAlias, lost.keyAlias), keys.asked)
             val routeless = paired.copy(candidates = emptyList())
             assertThrows(SessionUnavailable::class.java) { opener.open(routeless, backgroundScope) }
+        }
+
+    @Test
+    fun `the candidate the last hello went over is kept on the record, and the next process races it first`() =
+        runTest {
+            val file = File(folder.root, "instances.json")
+            val process = CoroutineScope(backgroundScope.coroutineContext + Job(backgroundScope.coroutineContext[Job]))
+            val store = InstanceStore(instanceDataStore(file, process), databases)
+            val paired = record(1).copy(candidates = listOf(TAILNET, LAN))
+            store.upsert(paired)
+            SessionEvents(store, databases, ChatFolds(TestClock) { 0uL }).reached(paired.id, LAN)
+            // The process ends, and the next one reads the records from their file.
+            checkNotNull(process.coroutineContext[Job]).cancelAndJoin()
+            val kept = InstanceStore(instanceDataStore(file, backgroundScope), databases).instances.first().single()
+            assertEquals(LAN, kept.lastCandidate)
+            val session = opener(FakeKeys(holds = setOf(kept.keyAlias))).open(kept, backgroundScope)
+            assertEquals(LAN, session.lastSuccessful.value)
+            session.close()
         }
 
     @Test

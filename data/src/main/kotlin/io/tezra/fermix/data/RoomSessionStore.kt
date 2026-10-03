@@ -54,10 +54,14 @@ class RoomSessionStore(
     /** Enqueues [item] last; an id the outbox holds already is refused, as core-session never enqueues one. */
     override suspend fun enqueue(item: OutboxItem) {
         val request = STORED_JSON.encodeToString(serializer<ClientEvent>(), item.request)
-        outbox.enqueue(item.clientMsgId, request, item.failure?.code, item.failure?.message)
+        outbox.enqueue(item.clientMsgId, request, item.failure?.code, item.failure?.message, item.written)
     }
 
     override suspend fun dequeue(clientMsgId: String) = outbox.dequeue(clientMsgId)
+
+    override suspend fun markWritten(clientMsgId: String): Boolean = outbox.markWritten(clientMsgId) == 1
+
+    override suspend fun withdraw(clientMsgId: String): Boolean = outbox.withdraw(clientMsgId) == 1
 
     override suspend fun markFailed(
         clientMsgId: String,
@@ -72,7 +76,7 @@ internal fun OutboxEntity.toItem(): OutboxItem {
     val request = STORED_JSON.decodeFromString(serializer<ClientEvent>(), request)
     check((failureCode == null) == (failureMessage == null)) { "$clientMsgId's failure is stored in part" }
     val failure = failureCode?.let { code -> RequestFailure(code, checkNotNull(failureMessage)) }
-    val item = OutboxItem(request, failure)
+    val item = OutboxItem(request, failure, written)
     check(item.clientMsgId == clientMsgId) { "outbox row $clientMsgId holds ${item.clientMsgId}" }
     return item
 }

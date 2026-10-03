@@ -15,11 +15,13 @@ import io.tezra.fermix.instance.InstanceParts
 import io.tezra.fermix.instance.InstanceViewModel
 import io.tezra.fermix.instance.NotificationsPolicy
 import io.tezra.fermix.protocol.Caps
+import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.Profile
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionEvent
+import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CompletableDeferred
@@ -113,8 +115,8 @@ private class RecordingPolicy : NotificationsPolicy {
 
 /**
  * What reaches the screens from the stores and the sessions: the session events the app keeps (design
- * sections 9.2 and 10), the Chats row's unread count from the notified set (section 9.4), and the Instance
- * screen's Notifications switch through its policy (section 13.7).
+ * sections 9.2 and 10), an older page's rows, the Chats row's unread count from the notified set (section
+ * 9.4), and the Instance screen's Notifications switch through its policy (section 13.7).
  *
  * On Robolectric, as MainActivityTest: the app's tests load the bundled SQLite library once for the JVM,
  * into Robolectric's classloader, so every test of the app that opens a database runs there. The plain
@@ -141,6 +143,9 @@ class ScreenWiringTest {
         ProfileDatabases(ApplicationProvider.getApplicationContext(), File(directory, "profiles"))
     }
 
+    /** The app's sink over [store], its chats' folds on a clock that stands still. */
+    private fun events(store: InstanceStore) = SessionEvents(store, databases, ChatFolds(TestClock) { 0uL })
+
     private suspend fun TestScope.store(): InstanceStore {
         val records = instanceDataStore(File(directory, "instances.json"), backgroundScope)
         val store = InstanceStore(records, databases)
@@ -152,8 +157,9 @@ class ScreenWiringTest {
     fun `hello_ack's facts reach the record and the agent's name the chat, and new routes the record`() =
         runTest(main, timeout = SETTLE) {
             val store = store()
-            val events = SessionEvents(store, databases)
-            events.take(RECORD.id, SessionEvent.Server(helloAck()))
+            val events = events(store)
+            val session = idleSession(backgroundScope)
+            events.take(RECORD.id, session, SessionEvent.Server(helloAck()))
             val acked = store.instances.first().single()
             assertEquals("Studio Mac", acked.label)
             assertEquals("studio", acked.host)
@@ -161,7 +167,7 @@ class ScreenWiringTest {
             val chat = databases.open(RECORD.id, MAIN_PROFILE).chat()
             assertEquals("Jarvis", chat.state().first { it.agentName != null }.agentName)
 
-            events.take(RECORD.id, SessionEvent.Candidates(listOf(LAN, TAILNET)))
+            events.take(RECORD.id, session, SessionEvent.Candidates(listOf(LAN, TAILNET)))
             assertEquals(
                 listOf(LAN, TAILNET),
                 store.instances
@@ -177,8 +183,24 @@ class ScreenWiringTest {
             val store = store()
             val notified = databases.open(RECORD.id, MAIN_PROFILE).notified()
             listOf(3uL, 5uL, 9uL).forEach { assertTrue(notified.put(NotifiedEntry.Row(it), 1_000L)) }
-            SessionEvents(store, databases).take(RECORD.id, SessionEvent.ReadFrontier(5uL))
+            assertTrue(events(store).take(RECORD.id, idleSession(backgroundScope), SessionEvent.ReadFrontier(5uL)))
             assertEquals(listOf(9uL), notified.serverSeqs().first())
+        }
+
+    @Test
+    fun `an older page's rows are kept in the chat's cache, which they were not announced to`() =
+        runTest(main, timeout = SETTLE) {
+            val store = store()
+            val older =
+                listOf(3, 4).map { seq ->
+                    TimelineRow.Message(
+                        HistoryMessage(seq.toULong(), "assistant", "row $seq", "2026-09-27T09:0$seq:00Z", emptyList()),
+                    )
+                }
+            val page = SessionEvent.OlderLoaded(older, 2uL)
+            assertTrue(events(store).take(RECORD.id, idleSession(backgroundScope), page))
+            val timeline = databases.open(RECORD.id, MAIN_PROFILE).timeline()
+            assertEquals(listOf(4uL, 3uL), timeline.newest(10).first().map { it.serverSeq })
         }
 
     @Test
@@ -248,8 +270,11 @@ class ScreenWiringTest {
             val store = store()
             databases.open(RECORD.id, MAIN_PROFILE)
             store.remove(RECORD.id)
-            val events = SessionEvents(store, databases)
-            events.take(RECORD.id, SessionEvent.ReadFrontier(5uL))
+            val events = events(store)
+            assertFalse(
+                "a removed Fermix's event kept something",
+                events.take(RECORD.id, idleSession(backgroundScope), SessionEvent.ReadFrontier(5uL)),
+            )
             assertFalse("the event made the removed files again", File(directory, "profiles/${RECORD.id}").exists())
         }
 

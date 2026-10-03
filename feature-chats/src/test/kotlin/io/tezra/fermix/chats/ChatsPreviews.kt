@@ -8,7 +8,7 @@ import io.tezra.fermix.design.FermixPreviews
 import io.tezra.fermix.instance.Link
 import io.tezra.fermix.transport.Candidate
 
-// The Chats list, its trust states, a chat's bar and the app lock at the twelve windows of @FermixPreviews.
+// The Chats list, its trust states and the app lock at the twelve windows of @FermixPreviews.
 // The list holds three Fermixes: production on suj-mbp over Tailscale with two unread, the dev daemon on
 // the same Mac connecting with a draft and its DEV tag, and a Linux box that unpaired this phone. The rows'
 // other states are a list of their own, as the canon's trust-state frame: the dev daemon thinking, a
@@ -150,16 +150,4 @@ fun AppLockPreview() {
 @Composable
 fun AppLockSettingPreview() {
     FermixPreviewTheme { AppLockScreen(on = true, available = true, onBack = {}, onChange = {}) }
-}
-
-@FermixPreviews
-@Composable
-fun ChatBarPreview() {
-    val header =
-        ChatHeader(
-            record = sample(1, tint = "Ocean"),
-            link = Link.Up(Candidate.Scope.TAILNET, latencyMs = 38, caughtUp = true),
-            thinking = false,
-        )
-    FermixPreviewTheme { ChatPlaceholder(header = header, onBack = {}, onTitle = {}) }
 }

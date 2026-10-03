@@ -6,9 +6,11 @@ import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionEvent
 import io.tezra.fermix.session.SessionState
 import io.tezra.fermix.session.TurnEffect
+import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -46,12 +49,32 @@ fun interface SessionOpener {
     ): Session
 }
 
-/** Where a session's events go that the app keeps: the record's, the chat's and the notified set's (AppServices). */
-fun interface EventSink {
+/**
+ * Where a session's events go that the app keeps (SessionEvents): the record's, the chat's, the notified set's,
+ * and what the chat shows besides its rows, which lasts as long as the session.
+ */
+interface EventSink {
+    /**
+     * Keeps what [event] of [instanceId]'s [session] says; false when the instance was removed meanwhile, its
+     * files with it, so nothing was.
+     */
     suspend fun take(
         instanceId: String,
+        session: Session,
         event: SessionEvent,
+    ): Boolean
+
+    /** [instanceId]'s session completed a `hello` over [candidate], which the next process races first. */
+    suspend fun reached(
+        instanceId: String,
+        candidate: Candidate,
     )
+
+    /** [instanceId]'s session ended or was dropped: nothing it showed runs on where the phone can see. */
+    fun ended(instanceId: String)
+
+    /** [instanceId] was removed: nothing of it is kept. */
+    fun removed(instanceId: String)
 }
 
 /**
@@ -62,7 +85,8 @@ fun interface EventSink {
  * changed). An approved pairing's session is taken over as its record is stored ([adopt]), so no second
  * socket opens. Its sessions run in [scope], whose end closes every one, as the process's end does. Unpairing
  * asks the daemon to forget the phone through [forget], which says whether `unpair` went out (AppServices's
- * sends it over the session's live connection, if one is up).
+ * sends it over the session's live connection, if one is up). What each session showed ends with it
+ * ([EventSink.ended]), and the candidate each `hello` went over goes to the record ([EventSink.reached]).
  */
 class SessionSupervisor(
     private val records: Flow<List<Instance>>,
@@ -145,6 +169,7 @@ class SessionSupervisor(
             }
             drop(instanceId)
             removal(instanceId)
+            sink.removed(instanceId)
         }
     }
 
@@ -152,7 +177,10 @@ class SessionSupervisor(
     private suspend fun reconcile() {
         val current = records.first()
         val ids = current.map { it.id }.toSet()
-        for (gone in held.value.keys - ids) drop(gone)
+        for (gone in held.value.keys - ids) {
+            drop(gone)
+            sink.removed(gone)
+        }
         if (!active) return
         current.filter { it.id !in held.value }.forEach { open(it) }
     }
@@ -204,9 +232,14 @@ class SessionSupervisor(
         held.update { it + (instanceId to session) }
         collectors[instanceId] =
             scope.launch {
-                session.events.collect { event -> take(instanceId, event) }
+                launch { session.lastSuccessful.filterNotNull().collect { sink.reached(instanceId, it) } }
+                session.events.collect { event -> take(instanceId, session, event) }
                 // The session ended, and no turn of its runs on; a session put in its place keeps its own.
-                if (held.value[instanceId] === session) liveTurns.update { it - instanceId }
+                if (held.value[instanceId] === session) {
+                    liveTurns.update { it - instanceId }
+                    sink.ended(instanceId)
+                }
+                coroutineContext.cancelChildren()
             }
     }
 
@@ -215,12 +248,14 @@ class SessionSupervisor(
         val session = held.value[instanceId] ?: return
         held.update { it - instanceId }
         liveTurns.update { it - instanceId }
+        sink.ended(instanceId)
         collectors.remove(instanceId)?.cancel()
         session.close()
     }
 
     private suspend fun take(
         instanceId: String,
+        session: Session,
         event: SessionEvent,
     ) {
         if (event is SessionEvent.Turn) {
@@ -229,7 +264,8 @@ class SessionSupervisor(
                 if (running.isEmpty()) all - instanceId else all + (instanceId to running)
             }
         }
-        sink.take(instanceId, event)
+        val kept = sink.take(instanceId, session, event)
+        if (!kept) log("an event of $instanceId came after its removal: ${event::class.simpleName}", null)
     }
 }
 

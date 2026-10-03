@@ -20,6 +20,9 @@ import kotlin.time.TimeSource
 /** An X25519 public key's bytes: the daemon's `gateway_pk`. */
 private const val GATEWAY_KEY_BYTES = 32
 
+/** The daemon's command that stops the reply (design section 8.1, "Stop generation"). */
+private const val STOP_COMMAND = "stop"
+
 /** What the pairing left this phone with for one daemon and one of its profiles (design section 6.6). */
 class PairedInstance(
     val deviceId: String,
@@ -110,6 +113,22 @@ class Session private constructor(
         newClientMsgId: String,
     ): Unit = withContext(confined) { runner.request { requests.retry(failed, newClientMsgId) } }
 
+    /**
+     * Stop on the composer (design section 8.1, the "Stop generation" row: `command{name:"stop"}`) as
+     * [clientMsgId]: sent once if connected and never queued, since a stop that waited in the outbox for a
+     * later connection would stop whatever runs then; false when no connection is up. An ended session refuses
+     * it.
+     */
+    suspend fun stop(clientMsgId: String): Boolean =
+        withContext(confined) {
+            core.requireOpen()
+            require(clientMsgId.isNotEmpty()) { "a stop names itself" }
+            val live = core.live ?: return@withContext false
+            core.commands.written(clientMsgId)
+            live.post(ClientEvent.Command(clientMsgId, core.instance.profileId, STOP_COMMAND, null))
+            true
+        }
+
     /** Asks the daemon to stop [clientMsgId]'s turn: sent once if connected, never queued, never answered. */
     suspend fun cancel(clientMsgId: String): Boolean =
         withContext(confined) {
@@ -142,10 +161,12 @@ class Session private constructor(
         }
 
     /**
-     * "Remove from outbox" (design section 13.6): [clientMsgId]'s request, which the daemon refused, leaves
-     * the outbox. One the outbox still sends is never removed, since it may have reached the daemon.
+     * "Remove from outbox", and a queued message's Edit or Remove (design section 13.6): [clientMsgId]'s
+     * request leaves the outbox if the daemon refused it or its frame was never written to a socket
+     * ([OutboxItem.written]); whether it left. One written and not refused stays, since it may have reached
+     * the daemon, and so does an id the outbox does not hold.
      */
-    suspend fun remove(clientMsgId: String): Unit =
+    suspend fun remove(clientMsgId: String): Boolean =
         withContext(confined) { runner.request { requests.remove(clientMsgId) } }
 
     /**
@@ -177,8 +198,10 @@ class Session private constructor(
     companion object {
         /**
          * Starts a session in [scope], whose dispatcher it runs on one coroutine at a time, racing
-         * [candidates], at most 16, for [instance]'s daemon. It runs until it ends or [scope] does, which
-         * ends it as [SessionState.Closed]. The caller opens one session per (instance, profile) at a
+         * [candidates], at most 16, for [instance]'s daemon, [lastSuccessful] first when [candidates] holds
+         * it: the candidate an earlier session's last `hello` went over, which the app keeps with the
+         * instance (design section 5.1, "last successful first"). It runs until it ends or [scope] does,
+         * which ends it as [SessionState.Closed]. The caller opens one session per (instance, profile) at a
          * time: its store is that session's alone (SessionStore).
          */
         fun open(
@@ -186,7 +209,11 @@ class Session private constructor(
             candidates: List<Candidate>,
             parts: SessionParts,
             scope: CoroutineScope,
-        ): Session = start(instance, candidates, parts, scope, adopted = null)
+            lastSuccessful: Candidate? = null,
+        ): Session =
+            start(instance, candidates, parts, scope) { core ->
+                core.lastSuccessful.value = lastSuccessful?.takeIf { it in candidates }
+            }
 
         /**
          * [open], but the first attempt takes over [adopted], a pairing's connection just approved, and
@@ -200,14 +227,15 @@ class Session private constructor(
             parts: SessionParts,
             scope: CoroutineScope,
             adopted: Adopted,
-        ): Session = start(instance, candidates, parts, scope, adopted)
+        ): Session = start(instance, candidates, parts, scope) { core -> core.adopted = adopted }
 
+        /** A session as [open] and [adopt] start it, its first race set up by [first] before it runs. */
         private fun start(
             instance: PairedInstance,
             candidates: List<Candidate>,
             parts: SessionParts,
             scope: CoroutineScope,
-            adopted: Adopted?,
+            first: (SessionCore) -> Unit,
         ): Session {
             require(candidates.isNotEmpty()) { "a session needs a candidate to race" }
             require(candidates.size <= MAX_CANDIDATES) { "${candidates.size} candidates is past $MAX_CANDIDATES" }
@@ -218,7 +246,7 @@ class Session private constructor(
             requireNotNull(scopeJob) { "a session's scope has a job, whose end ends the session" }
             val confined = dispatcher.limitedParallelism(1)
             val core = SessionCore(instance, parts, candidates)
-            core.adopted = adopted
+            first(core)
             // The scope's job completes once every coroutine of the session has, so nothing else runs then.
             core.scopeWatch = scopeJob.invokeOnCompletion { core.end(SessionState.Closed) }
             val requests = Requests(core)

@@ -63,9 +63,16 @@ internal class Dispatch(
         }
     }
 
-    /** The bubble seals, then its row is the timeline's like any other. */
+    /**
+     * The bubble seals, then its row is the timeline's like any other. A command's answer the daemon wrote
+     * inline (SessionCore.answersCommandInline) also ends its turn: the daemon answers `/stop` before its queue,
+     * and no `turn_done` follows such an answer, so the turn would otherwise hold every later `msg` back. A
+     * `turn_done` that does come after it is a late one, and ignored.
+     */
     private suspend fun textDone(event: ServerEvent.TextDone) {
+        val inline = core.answersCommandInline(event.turnId)
         core.turns { it.apply(TurnEvent.TextDone(event.turnId, event.serverSeq)) }
+        if (inline) core.turns { it.apply(TurnEvent.TurnDone(event.turnId)) }
         liveRow(event.toTimelineRow())
     }
 

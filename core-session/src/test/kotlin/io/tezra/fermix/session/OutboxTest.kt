@@ -1,8 +1,10 @@
 package io.tezra.fermix.session
 
+import io.tezra.fermix.protocol.ActiveTurn
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.ProtocolException
 import io.tezra.fermix.protocol.ServerEvent
+import io.tezra.fermix.protocol.ToolPhase
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -18,7 +20,10 @@ import org.junit.jupiter.api.assertThrows
  * The outbox (design section 13.6, PROTOCOL.md "Delivery and failure behavior"): persisted before it is
  * sent, cleared by `accepted`, kept failed by `error{client_msg_id}`, run again under a new id whether it
  * failed before `accepted` or after it, and resent in order once per connection after the
- * reconciliation, a request persisted while the drain reads included, against a store that suspends.
+ * reconciliation, a request persisted while the drain reads included, against a store that suspends. A
+ * `msg` made while a turn runs waits in the outbox until the last turn ends (design section 13.6, "queued ·
+ * sends after this reply", released by `turn_done`), and an item is marked written before its frame first
+ * goes, so one never written can still be removed (design section 13.6, review R16).
  */
 class OutboxTest {
     private val emptyStatus = ServerEvent.RequestStatusPage(emptyList())
@@ -30,7 +35,7 @@ class OutboxTest {
             val connection = harness.connect()
             harness.session.send(msg("m1"))
             assertEquals(msg("m1"), connection.expect<ClientEvent.Msg>())
-            assertEquals(listOf(OutboxItem(msg("m1"))), harness.store.items)
+            assertEquals(listOf(OutboxItem(msg("m1"), written = true)), harness.store.items)
         }
 
     @Test
@@ -70,7 +75,7 @@ class OutboxTest {
             connection.send(ServerEvent.Error("client_message_conflict", "content differs", clientMsgId = "m1"))
             harness.settle()
             val failure = RequestFailure("client_message_conflict", "content differs")
-            assertEquals(listOf(OutboxItem(msg("m1"), failure)), harness.store.items)
+            assertEquals(listOf(OutboxItem(msg("m1"), failure, written = true)), harness.store.items)
             assertTrue(SessionEvent.RequestFailed("m1", failure, inOutbox = true) in harness.events)
         }
 
@@ -85,7 +90,7 @@ class OutboxTest {
             harness.settle()
             harness.session.retry(msg("m1"), "m2")
             assertEquals(msg("m2", retryOf = "m1"), connection.expect<ClientEvent.Msg>())
-            assertEquals(listOf(OutboxItem(msg("m2", retryOf = "m1"))), harness.store.items)
+            assertEquals(listOf(OutboxItem(msg("m2", retryOf = "m1"), written = true)), harness.store.items)
         }
 
     @Test
@@ -228,7 +233,7 @@ class OutboxTest {
         }
 
     @Test
-    fun `a failed request is removed from the outbox, and one the outbox still sends is not`() =
+    fun `a failed request is removed from the outbox, and one written to a socket is not`() =
         runTest {
             val harness = Harness(this)
             val connection = harness.connect()
@@ -236,10 +241,99 @@ class OutboxTest {
             harness.session.send(msg("m2"))
             connection.send(ServerEvent.Error("client_message_conflict", "content differs", clientMsgId = "m1"))
             harness.settle()
-            harness.session.remove("m1")
-            assertThrows<IllegalArgumentException> { harness.session.remove("m2") }
-            assertThrows<IllegalArgumentException> { harness.session.remove("m3") }
+            assertTrue(harness.session.remove("m1"))
+            assertFalse(harness.session.remove("m2"))
+            assertFalse(harness.session.remove("m3"))
+            assertEquals(listOf(OutboxItem(msg("m2"), written = true)), harness.store.items)
+        }
+
+    @Test
+    fun `a request made while away is never written, so it can be removed, and nothing is sent for it`() =
+        runTest {
+            val harness = Harness(this)
+            harness.open()
+            harness.session.send(msg("m1"))
+            harness.session.send(msg("m2"))
+            assertEquals(listOf(OutboxItem(msg("m1")), OutboxItem(msg("m2"))), harness.store.items)
+            assertTrue(harness.session.remove("m1"))
+            val connection = harness.daemon.accept()
+            connection.connect()
+            assertEquals(ClientEvent.RequestStatus(listOf("m2")), connection.expect<ClientEvent.RequestStatus>())
+            connection.send(emptyStatus)
+            assertEquals(msg("m2"), connection.expect<ClientEvent.Msg>())
+            assertEquals(listOf(OutboxItem(msg("m2"), written = true)), harness.store.items)
+        }
+
+    @Test
+    fun `a request removed while its write is marked is not sent`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            val marked = CompletableDeferred<Unit>()
+            harness.store.writtenGate = marked
+            val sending = launch { harness.session.send(msg("m1")) }
+            harness.settle()
+            assertTrue(harness.session.remove("m1"))
+            marked.complete(Unit)
+            sending.join()
+            connection.send(row(1uL))
+            assertEquals(ClientEvent.Ack(1uL), connection.next().event)
+            assertTrue(harness.store.items.isEmpty())
+        }
+
+    @Test
+    fun `a message made while a turn runs waits unwritten, and goes when the last turn ends`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            harness.session.send(msg("m1"))
+            connection.expect<ClientEvent.Msg>()
+            connection.send(ServerEvent.Accepted("m1", duplicate = false))
+            connection.send(ServerEvent.TurnStarted(PROFILE, "turn-cron", "cron-1"))
+            harness.settle()
+            harness.session.send(msg("m2"))
+            harness.settle()
             assertEquals(listOf(OutboxItem(msg("m2"))), harness.store.items)
+            connection.send(ServerEvent.TurnDone("turn-m1"))
+            connection.send(row(1uL))
+            // The ack is the next frame: m2 waits for the cron turn too.
+            assertEquals(ClientEvent.Ack(1uL), connection.next().event)
+            assertTrue(harness.session.remove("m2"))
+            harness.session.send(msg("m3"))
+            connection.send(ServerEvent.TurnError("turn-cron", "turn_failed", "no"))
+            assertEquals(msg("m3"), connection.expect<ClientEvent.Msg>())
+            assertEquals(listOf(OutboxItem(msg("m3"), written = true)), harness.store.items)
+        }
+
+    @Test
+    fun `a command goes while a turn runs, since stop and the model cannot wait for it`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            harness.session.send(msg("m1"))
+            connection.expect<ClientEvent.Msg>()
+            connection.send(ServerEvent.Accepted("m1", duplicate = false))
+            harness.settle()
+            val stop = ClientEvent.Command("c1", PROFILE, "stop", "")
+            harness.session.send(stop)
+            assertEquals(stop, connection.expect<ClientEvent.Command>())
+        }
+
+    @Test
+    fun `a message waiting for a turn the reconnect finds still running waits on, and goes when it ends`() =
+        runTest {
+            val harness = Harness(this)
+            harness.store.items += OutboxItem(msg("m2"))
+            harness.open()
+            val connection = harness.daemon.accept()
+            val active = HELLO_ACK.copy(activeTurns = listOf(ActiveTurn("turn-m1", "m1")))
+            connection.connect(active)
+            assertEquals(ClientEvent.RequestStatus(listOf("m2")), connection.expect<ClientEvent.RequestStatus>())
+            connection.send(emptyStatus)
+            connection.send(row(1uL))
+            assertEquals(ClientEvent.Ack(1uL), connection.next().event)
+            connection.send(ServerEvent.TurnDone("turn-m1"))
+            assertEquals(msg("m2"), connection.expect<ClientEvent.Msg>())
         }
 
     @Test
@@ -267,6 +361,91 @@ class OutboxTest {
         }
 
     @Test
+    fun `stop is sent once when connected and never queued, so it never stops a later turn`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            assertTrue(harness.session.stop("s1"))
+            assertEquals(ClientEvent.Command("s1", PROFILE, "stop", null), connection.expect<ClientEvent.Command>())
+            assertTrue(harness.store.items.isEmpty())
+            harness.session.suspend()
+            assertFalse(harness.session.stop("s2"))
+            assertTrue(harness.store.items.isEmpty())
+        }
+
+    @Test
+    fun `a stop opens no card and its answer ends its own turn, so a message made after it goes`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            harness.session.send(msg("m1"))
+            connection.expect<ClientEvent.Msg>()
+            connection.send(ServerEvent.Accepted("m1", duplicate = false))
+            harness.settle()
+            assertTrue(harness.session.stop("s1"))
+            connection.expect<ClientEvent.Command>()
+            // The daemon answers a command inline, with a bare text_done and no turn_done after it.
+            connection.send(ServerEvent.Accepted("s1", duplicate = false))
+            connection.send(ServerEvent.TextDone("turn-s1", 1uL, "Stopped Fermix execution"))
+            connection.send(ServerEvent.TurnError("turn-m1", "cancelled", "Stopped"))
+            assertEquals(ClientEvent.Ack(1uL), connection.expect<ClientEvent.Ack>())
+            harness.session.send(msg("m2"))
+            assertEquals(msg("m2"), connection.expect<ClientEvent.Msg>())
+            val effects =
+                listOf(
+                    TurnEffect.CardShown("turn-m1"),
+                    TurnEffect.BubbleOpened("turn-s1", 1, fromCard = false),
+                    TurnEffect.BubbleSealed("turn-s1", 1, 1uL),
+                    TurnEffect.TurnEnded("turn-s1", TurnOutcome.Completed),
+                    TurnEffect.CardRemoved("turn-m1"),
+                    TurnEffect.TurnEnded("turn-m1", TurnOutcome.Stopped),
+                )
+            assertEquals(effects, harness.turnEffects())
+        }
+
+    @Test
+    fun `a command's turn the daemon runs shows as any turn, from its turn_started to its turn_done`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            val compact = ClientEvent.Command("c1", PROFILE, "compact", null)
+            harness.session.send(compact)
+            connection.expect<ClientEvent.Command>()
+            connection.send(ServerEvent.Accepted("c1", duplicate = false))
+            connection.send(ServerEvent.TurnStarted(PROFILE, "turn-c1", "c1"))
+            connection.send(ServerEvent.TextDone("turn-c1", 1uL, "Compacted."))
+            assertEquals(ClientEvent.Ack(1uL), connection.expect<ClientEvent.Ack>())
+            harness.session.send(msg("m2"))
+            harness.settle()
+            assertEquals(listOf(OutboxItem(msg("m2"))), harness.store.items)
+            connection.send(ServerEvent.TurnDone("turn-c1"))
+            assertEquals(msg("m2"), connection.expect<ClientEvent.Msg>())
+            val effects =
+                listOf(
+                    TurnEffect.CardShown("turn-c1"),
+                    TurnEffect.BubbleOpened("turn-c1", 1, fromCard = true),
+                    TurnEffect.BubbleSealed("turn-c1", 1, 1uL),
+                    TurnEffect.TurnEnded("turn-c1", TurnOutcome.Completed),
+                )
+            assertEquals(effects, harness.turnEffects())
+        }
+
+    @Test
+    fun `each turn step says whether the daemon speaks on its card, a heading or a running tool`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            harness.session.send(msg("m1"))
+            connection.expect<ClientEvent.Msg>()
+            connection.send(ServerEvent.Accepted("m1", duplicate = false))
+            connection.send(ServerEvent.ToolEvent("turn-m1", "shell", ToolPhase.START, status = null))
+            connection.send(ServerEvent.ToolEvent("turn-m1", "shell", ToolPhase.STOP, status = "ok"))
+            harness.settle()
+            val steps = harness.events.filterIsInstance<SessionEvent.Turn>()
+            assertEquals(listOf(false, true, false), steps.map { it.daemonSpeaking })
+        }
+
+    @Test
     fun `request_backlog_full is surfaced as the refusal it is`() =
         runTest {
             val harness = Harness(this)
@@ -276,7 +455,7 @@ class OutboxTest {
             connection.send(full)
             harness.settle()
             assertTrue(SessionEvent.Refused(full) in harness.events)
-            assertEquals(listOf(OutboxItem(msg("m1"))), harness.store.items)
+            assertEquals(listOf(OutboxItem(msg("m1"), written = true)), harness.store.items)
         }
 
     private fun List<ClientEvent.Msg>.ids(): List<String> = map { it.clientMsgId }

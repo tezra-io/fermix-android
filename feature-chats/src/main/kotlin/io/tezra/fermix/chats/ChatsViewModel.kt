@@ -2,6 +2,7 @@ package io.tezra.fermix.chats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.tezra.fermix.chat.ChatHeader
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE

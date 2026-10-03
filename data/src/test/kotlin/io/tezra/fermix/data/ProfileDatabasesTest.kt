@@ -5,6 +5,7 @@ import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.StoredCursors
 import io.tezra.fermix.session.TimelineRow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -51,18 +52,19 @@ class ProfileDatabasesTest {
             val databases = ProfileDatabases(TestContext, directory, mediaClock = { 0L })
             val blob = "a blob".encodeToByteArray()
             databases.withMediaCache(instanceId, "main") { it.put(blob, idOf(blob)) }
-            assertEquals(blob.size.toLong(), databases.withMediaCache(instanceId, "main") { it.size() })
-            assertEquals(0L, databases.withMediaCache(instanceId, "work") { it.size() })
+            assertEquals(Use.Ran(blob.size.toLong()), databases.withMediaCache(instanceId, "main") { it.size() })
+            assertEquals(Use.Ran(0L), databases.withMediaCache(instanceId, "work") { it.size() })
 
             // A use hands its cache out only to be compared at once, never to be used outside it.
             suspend fun cacheOf(profileId: String) = databases.withMediaCache(instanceId, profileId) { it }
-            assertSame(cacheOf("main"), cacheOf("main"))
-            assertNotSame(cacheOf("main"), cacheOf("work"))
+            assertSame((cacheOf("main") as Use.Ran).value, (cacheOf("main") as Use.Ran).value)
+            assertNotSame((cacheOf("main") as Use.Ran).value, (cacheOf("work") as Use.Ran).value)
             databases.delete(instanceId)
-            val refused = runCatching { databases.withMediaCache(instanceId, "main") { it.size() } }.exceptionOrNull()
-            assertInstanceOf(InstanceGone::class.java, refused)
+            assertEquals(Use.Gone, databases.withMediaCache(instanceId, "main") { it.size() })
+            assertEquals(Use.Gone, databases.withDatabase(instanceId, "main") { it.chat().state().first() })
+            assertFalse(File(directory, instanceId).exists(), "a use refused made the instance's files again")
             databases.admit(instanceId)
-            assertEquals(0L, databases.withMediaCache(instanceId, "main") { it.size() })
+            assertEquals(Use.Ran(0L), databases.withMediaCache(instanceId, "main") { it.size() })
         }
 
     @Test

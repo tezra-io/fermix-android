@@ -41,7 +41,8 @@ internal const val TEST_TIMEOUT_MILLIS = 20_000L
 
 /**
  * How the app makes what talks to a daemon: each instance's session, over its pinned WebSocket with its
- * Keystore key, its main profile's store and the [announcer] made for it over the same database; a
+ * Keystore key, its main profile's store and the [announcer] made for it over the same database, racing the
+ * candidate the record kept from the last `hello` first; a
  * pairing's parts; and the Instance screen's connection test. Opening a session reads the Keystore and
  * opens the database, so the supervisor calls it off the main thread. A session, its store and its announcer,
  * holds its database for its life, outside ProfileDatabases' count of readers: the supervisor closes each
@@ -75,7 +76,7 @@ internal class AppSessions(
                 network = network,
             )
         val paired = PairedInstance(instance.deviceId, MAIN_PROFILE, instance.gatewayPublicKey())
-        return Session.open(paired, instance.candidates, parts, scope)
+        return Session.open(paired, instance.candidates, parts, scope, lastSuccessful = instance.lastCandidate)
     }
 
     /**

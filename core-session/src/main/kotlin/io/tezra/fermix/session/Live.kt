@@ -35,7 +35,10 @@ private enum class Drain { WAITING, READING, DONE }
  * it waits on, which outbox items it has sent, and how its link is shown, [connected]. A request is sent
  * at most once per connection, its `accepted` notwithstanding, and only once the reconnect reconciliation
  * has drained the outbox (design section 8.2); the ids it sent last as long as the connection, which the
- * daemon closes within the hour, one id per request the owner made in it.
+ * daemon closes within the hour, one id per request the owner made in it. A `msg` made while a turn shows
+ * waits in the outbox, unwritten, until the last turn ends: design section 13.6's "queued ·
+ * sends after this reply", released by `turn_done` (SessionCore.turns). A `command` never waits, since
+ * `/stop` is one.
  */
 internal class Live(
     private val core: SessionCore,
@@ -78,15 +81,20 @@ internal class Live(
     }
 
     /**
-     * A request to send: once the drain is done it goes, unless it failed or went on this connection
-     * already; while the drain reads the store it waits for it; before, the drain's read will hold it.
+     * A request to send: once the drain is done it goes, unless it failed, went on this connection
+     * already, or is a `msg` while a turn shows; while the drain reads the store it waits for it; before,
+     * the drain's read will hold it. Its id is taken before it is marked written, so a second offer of it
+     * meanwhile sends nothing, and one removed meanwhile is not sent.
      */
-    fun offer(item: OutboxItem) {
-        when (drain) {
-            Drain.WAITING -> Unit
-            Drain.READING -> waiting += item
-            Drain.DONE -> if (item.failure == null && sent.add(item.clientMsgId)) post(item.request)
-        }
+    suspend fun offer(item: OutboxItem) {
+        if (drain == Drain.READING) waiting += item
+        val waitsForTurn = item.request is ClientEvent.Msg && core.turnsLive
+        val goes = drain == Drain.DONE && item.failure == null && item.clientMsgId !in sent && !waitsForTurn
+        if (!goes) return
+        sent += item.clientMsgId
+        if (!core.parts.store.markWritten(item.clientMsgId)) return
+        if (item.request is ClientEvent.Command) core.commands.written(item.clientMsgId)
+        post(item.request)
     }
 
     /**
@@ -97,8 +105,9 @@ internal class Live(
         drain = Drain.READING
         val items = read()
         drain = Drain.DONE
-        (items + waiting).forEach(::offer)
+        val offered = items + waiting
         waiting.clear()
+        for (item in offered) offer(item)
     }
 
     /**

@@ -149,6 +149,8 @@ class ReconciliationTest {
             second.send(row(12uL))
             assertEquals(ClientEvent.Ack(12uL), second.expect<ClientEvent.Ack>())
             assertTrue(SessionEvent.RequestStatus(failed) in harness.events)
+            val failure = RequestFailure("turn_failed", "failed while this phone was away")
+            assertTrue(SessionEvent.RequestFailed("m1", failure, inOutbox = false) in harness.events)
             assertTrue(harness.session.state.value is SessionState.Connected)
         }
 
@@ -257,7 +259,10 @@ class ReconciliationTest {
             connection.send(ServerEvent.RequestStatusPage(outcomes))
             assertEquals(msg("new"), connection.expect<ClientEvent.Msg>())
             val failed = RequestFailure("request_failed", "failed while this phone was away")
-            assertEquals(listOf(OutboxItem(msg("failed"), failed), OutboxItem(msg("new"))), harness.store.items)
+            val held = listOf(OutboxItem(msg("failed"), failed), OutboxItem(msg("new"), written = true))
+            assertEquals(held, harness.store.items)
+            // The item stays failed in the outbox, as one refused before `accepted` does.
+            assertTrue(SessionEvent.RequestFailed("failed", failed, inOutbox = true) in harness.events)
         }
 
     @Test

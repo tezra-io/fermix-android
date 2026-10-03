@@ -66,20 +66,27 @@ internal class Requests(
         if (held != null) store.dequeue(clientMsgId)
     }
 
+    /**
+     * `accepted`: the request leaves the outbox, and the owner's own `msg` opens its card (design section 8.2,
+     * `accepted(own msg)`). A duplicate is a resend of a request that ran or runs already, whose card came the
+     * first time; a command's answer comes inline (Dispatch), and one the daemon runs as a turn shows from its
+     * `turn_started`.
+     */
     suspend fun accepted(event: ServerEvent.Accepted) {
         store.dequeue(event.clientMsgId)
         core.emit(SessionEvent.Accepted(event.clientMsgId, event.duplicate))
-        // A duplicate is a resend of a request that ran or runs already; its card came the first time.
-        if (!event.duplicate) core.turns { it.apply(TurnEvent.Accepted(event.clientMsgId)) }
+        val opens = !event.duplicate && event.clientMsgId !in core.commands
+        if (opens) core.turns { it.apply(TurnEvent.Accepted(event.clientMsgId)) }
     }
 
-    /** "Remove from outbox" (design section 13.6): a request the daemon refused leaves it. */
-    suspend fun remove(clientMsgId: String) {
+    /**
+     * "Remove from outbox" and a queued message's Remove or Edit (design section 13.6): a request the daemon
+     * refused, or one never written to a socket, leaves it; whether it did.
+     */
+    suspend fun remove(clientMsgId: String): Boolean {
         core.requireOpen()
-        val held = store.outbox().firstOrNull { it.clientMsgId == clientMsgId }
-        requireNotNull(held) { "$clientMsgId is not in the outbox" }
-        requireNotNull(held.failure) { "$clientMsgId has not failed; the outbox sends it" }
-        store.dequeue(clientMsgId)
+        require(clientMsgId.isNotEmpty()) { "a removal names its request" }
+        return store.withdraw(clientMsgId)
     }
 
     /** `error{client_msg_id}`: the request failed, before `accepted` or after it, and so did its turn. */
@@ -95,14 +102,16 @@ internal class Requests(
 
     /**
      * A `request_status_page`: a request the daemon has is no longer the outbox's, unless it failed. A
-     * shown turn's request left the outbox at `accepted`, so only the outbox's own are marked failed; the
-     * app hears every outcome, and each request's turn moves as its state says (statusTurnEvent).
+     * shown turn's request left the outbox at `accepted`, so only the outbox's own are marked failed; a
+     * failed one is told as `error{client_msg_id}` tells it, whether the outbox holds it or not; the app
+     * hears every outcome, and each request's turn moves as its state says (statusTurnEvent).
      */
     suspend fun status(page: ServerEvent.RequestStatusPage) {
         page.requests.forEach { outcome ->
             if (outcome.status == RequestState.FAILED) {
                 val failure = RequestFailure(outcome.error ?: REQUEST_FAILED, FAILED_WHILE_AWAY)
-                markFailedIfHeld(outcome.clientMsgId, failure)
+                val inOutbox = markFailedIfHeld(outcome.clientMsgId, failure)
+                core.emit(SessionEvent.RequestFailed(outcome.clientMsgId, failure, inOutbox))
             } else {
                 store.dequeue(outcome.clientMsgId)
             }

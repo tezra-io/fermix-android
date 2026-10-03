@@ -10,13 +10,15 @@ import io.tezra.fermix.session.TimelineRow
 private const val OWNER_ROLE = "user"
 
 /**
- * Which chat shows its rows now, read by the announcer as each row comes: the Chat screen's, on top and in
- * sight. The app's says none until the Chat screen comes, as the chat's bar shows no row.
+ * Which chat shows its rows now, asked by the announcer as each row comes, once the row is kept (PUSH-2:
+ * persisted, shown, then acked): whether [instanceId]'s [profileId] chat is on screen with row [serverSeq] in
+ * its list, which it may wait for, at most a bound (OnScreenChats).
  */
 fun interface ChatOnScreen {
-    fun shows(
+    suspend fun shows(
         instanceId: String,
         profileId: String,
+        serverSeq: ULong,
     ): Boolean
 }
 
@@ -42,7 +44,7 @@ interface RowNotifier {
 /**
  * The announcer of [instanceId]'s [profileId] (core-session's Announcer, design section 10): every row is
  * kept in the profile's timeline, opening [database] at the first; then the owner's own message is known
- * already, a row of the chat on screen is shown there and read, and any other is put into the notified
+ * already, a row the chat on screen lists is shown there and read, and any other is put into the notified
  * set and notified, unless the set held it or it was read already, which is known; a row that can be
  * notified of in no way is not announced, so it is never acked and its push still comes
  * (tla/specs/mobile_push, PUSH-2). The notified set is put at [now], in Unix milliseconds.
@@ -64,7 +66,7 @@ class RowAnnouncer(
         profile.timeline().persist(row)
         return when {
             row.isOwners() -> Announcement.ALREADY_KNOWN
-            onScreen.shows(instanceId, profileId) -> Announcement.ON_SCREEN
+            onScreen.shows(instanceId, profileId, row.serverSeq) -> Announcement.ON_SCREEN
             !notifier.canNotify(instanceId, profileId) -> Announcement.NOT_ANNOUNCED
             !profile.notified().put(NotifiedEntry.Row(row.serverSeq), now()) -> Announcement.ALREADY_KNOWN
             else -> notified(row)

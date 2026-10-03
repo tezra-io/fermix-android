@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 /**
  * Hello first (PROTOCOL.md "Envelope, ordering, and version negotiation", design section 7): the
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.Test
  * the seq rules that close `1002`.
  */
 class HelloTest {
+    /** Long enough for a race of two candidates to dial both, inside the first backoff. */
+    private val raceMs = 600L
     private val refusal =
         ServerEvent.Error(
             code = ServerEvent.Error.UNSUPPORTED_PROTOCOL_VERSION,
@@ -62,6 +65,28 @@ class HelloTest {
             assertEquals(TAILNET, harness.session.lastSuccessful.value)
             harness.settle()
             assertTrue(SessionEvent.Server(HELLO_ACK) in harness.events)
+        }
+
+    @Test
+    fun `a session opened with the candidate an earlier one last reached races it first`() =
+        runTest {
+            val harness = Harness(this)
+            harness.daemon.refusal = { IOException("unreachable") }
+            harness.open(candidates = listOf(TAILNET, LAN), lastSuccessful = LAN)
+            assertEquals(LAN, harness.session.lastSuccessful.value)
+            delay(raceMs)
+            assertEquals(listOf(LAN, TAILNET), harness.daemon.dialed.take(2))
+        }
+
+    @Test
+    fun `a candidate an earlier session reached that the list no longer holds is not raced`() =
+        runTest {
+            val harness = Harness(this)
+            harness.daemon.refusal = { IOException("unreachable") }
+            harness.open(candidates = listOf(TAILNET), lastSuccessful = LAN)
+            assertEquals(null, harness.session.lastSuccessful.value)
+            delay(raceMs)
+            assertEquals(listOf(TAILNET), harness.daemon.dialed.take(1))
         }
 
     @Test

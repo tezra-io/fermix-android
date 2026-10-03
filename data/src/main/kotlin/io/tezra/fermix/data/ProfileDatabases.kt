@@ -38,6 +38,21 @@ class InstanceGone(
 ) : IllegalStateException("$instanceId was removed, and its files with it")
 
 /**
+ * What a use of an instance's files came to ([ProfileDatabases.withDatabase], [ProfileDatabases.withMediaCache]):
+ * it [Ran], or the instance was removed in this process first and it is [Gone], an end its caller expects,
+ * since a removal may come at any time and takes the files with it.
+ */
+sealed interface Use<out T> {
+    /** The use ran, and returned [value]. */
+    data class Ran<out T>(
+        val value: T,
+    ) : Use<T>
+
+    /** The instance was removed first: nothing ran, and no file was made. */
+    data object Gone : Use<Nothing>
+}
+
+/**
  * Every (instance, profile)'s database and media directory under [root], keyed by both ids from day one
  * (design section 9.1): `<root>/<instance id>/<profile key>/profile.db` and `.../media/`. The profile key is
  * the SHA-256 of the profile id, since the wire holds the id to nothing but being non-empty and a file name
@@ -117,27 +132,27 @@ class ProfileDatabases(
     }
 
     /**
-     * [block] over [instanceId]'s database for [profileId], on [queries], which a [delete] waits for;
-     * [InstanceGone] once the instance is deleted.
+     * [block] over [instanceId]'s database for [profileId], on [queries], which a [delete] waits for: [Use.Ran]
+     * with its value, or [Use.Gone] once the instance is deleted.
      */
     suspend fun <T> withDatabase(
         instanceId: String,
         profileId: String,
         block: suspend (ProfileDatabase) -> T,
-    ): T {
+    ): Use<T> {
         val directory = profileDirectory(root, instanceId, profileId)
         return using(instanceId, { database(instanceId, profileId, directory) }, block)
     }
 
     /**
      * [block] over [instanceId]'s media cache for [profileId], the same one for the process (MediaCache), on
-     * [queries], which a [delete] waits for; [InstanceGone] once the instance is deleted.
+     * [queries], which a [delete] waits for: [Use.Ran] with its value, or [Use.Gone] once the instance is deleted.
      */
     suspend fun <T> withMediaCache(
         instanceId: String,
         profileId: String,
         block: (MediaCache) -> T,
-    ): T {
+    ): Use<T> {
         val directory = mediaDirectory(instanceId, profileId)
         val cache = {
             synchronized(lock) { caches.getOrPut(instanceId to profileId) { MediaCache(directory, mediaClock) } }
@@ -169,16 +184,16 @@ class ProfileDatabases(
         listed.filter { it.isDirectory && SHA256_HEX.matches(it.name) && it.name !in keep }.forEach { delete(it.name) }
     }
 
-    /** [block] over what [take] opens for [instanceId], counted as a reader; [InstanceGone] once it is deleted. */
+    /** [block] over what [take] opens for [instanceId], counted as a reader; [Use.Gone] once it is deleted. */
     private suspend fun <R : Any, T> using(
         instanceId: String,
         take: () -> R,
         block: suspend (R) -> T,
-    ): T =
+    ): Use<T> =
         withContext(queries) {
-            val taken = readers.enter(instanceId, take) ?: throw InstanceGone(instanceId)
+            val taken = readers.enter(instanceId, take) ?: return@withContext Use.Gone
             try {
-                block(taken)
+                Use.Ran(block(taken))
             } finally {
                 readers.leave(instanceId)
             }

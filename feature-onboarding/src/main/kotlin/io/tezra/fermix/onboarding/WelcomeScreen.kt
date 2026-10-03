@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.MarkMotion
+import io.tezra.fermix.design.TwoDotMark
 import io.tezra.fermix.design.textButtonColors
 
 // The visual canon's Welcome: the hero 120 dp down, its lines 8 dp apart and the mark 20 dp above them.

@@ -11,6 +11,8 @@ import io.tezra.fermix.design.ExpressiveMotion
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.MarkMotion
+import io.tezra.fermix.design.TwoDotMark
 
 /** The canon's title 28 dp under the mark, with the centred column's 12 dp gap. */
 private val TITLE_TOP = 40.dp

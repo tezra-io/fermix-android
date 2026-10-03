@@ -21,9 +21,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(project(":design"))
     implementation(project(":feature-onboarding"))
-    // The Chats list, the trust states, the app lock's screens and the conversations (feature-chats), and
-    // the Instance screen (feature-instance), over the sessions the app keeps.
+    // The Chats list, the trust states, the app lock's screens and the conversations (feature-chats), a
+    // chat (feature-chat), and the Instance screen (feature-instance), over the sessions the app keeps.
     implementation(project(":feature-chats"))
+    implementation(project(":feature-chat"))
     implementation(project(":feature-instance"))
     // The sessions are put aside when the process leaves sight (design section 12.5).
     implementation(libs.androidx.lifecycle.process)

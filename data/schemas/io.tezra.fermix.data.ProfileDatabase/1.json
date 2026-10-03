@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "c5457ba5dd34fb2319e297d6594fe2b2",
+    "identityHash": "a6905e1f7251acc951ffaac1f50e9fdc",
     "entities": [
       {
         "tableName": "timeline",
@@ -208,7 +208,7 @@
       },
       {
         "tableName": "outbox",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`client_msg_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `request` TEXT NOT NULL, `failure_code` TEXT, `failure_message` TEXT, PRIMARY KEY(`client_msg_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`client_msg_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `request` TEXT NOT NULL, `failure_code` TEXT, `failure_message` TEXT, `written` INTEGER NOT NULL, PRIMARY KEY(`client_msg_id`))",
         "fields": [
           {
             "fieldPath": "clientMsgId",
@@ -237,6 +237,12 @@
             "fieldPath": "failureMessage",
             "columnName": "failure_message",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "written",
+            "columnName": "written",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -283,7 +289,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c5457ba5dd34fb2319e297d6594fe2b2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a6905e1f7251acc951ffaac1f50e9fdc')"
     ]
   }
 }

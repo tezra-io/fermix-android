@@ -12,8 +12,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
+import io.tezra.fermix.chat.ChatNavigation
+import io.tezra.fermix.chat.ChatRoute
+import io.tezra.fermix.chat.ChatViewModel
 import io.tezra.fermix.chats.AppLockScreen
-import io.tezra.fermix.chats.ChatPlaceholder
 import io.tezra.fermix.chats.ChatRow
 import io.tezra.fermix.chats.ChatsActions
 import io.tezra.fermix.chats.ChatsScreen
@@ -36,7 +38,7 @@ internal fun appEntries(
     showing: (NavKey) -> Boolean,
 ) {
     builder.entry<ChatsKey> { ChatsEntry(models) { showing(ChatsKey) } }
-    builder.entry<ChatKey> { key -> ChatEntry(key, models) { showing(key) } }
+    builder.entry<ChatKey> { key -> ChatEntry(key, services, models) { showing(key) } }
     builder.entry<InstanceKey> { key ->
         val model =
             viewModel(
@@ -94,10 +96,11 @@ private fun ChatsEntry(
     ui?.let { ChatsScreen(it, actions) }
 }
 
-/** A chat, until the Chat screen is built its bar; a trust state takes its place as soon as it holds. */
+/** A chat (design section 13.5); a trust state takes its place as soon as it holds. */
 @Composable
 private fun ChatEntry(
     key: ChatKey,
+    services: AppServices,
     models: AppModels,
     showing: () -> Boolean,
 ) {
@@ -106,13 +109,19 @@ private fun ChatEntry(
     LaunchedEffect(trust) {
         if (trust != null) models.navigator.replace(key, trust)
     }
-    header?.let {
-        ChatPlaceholder(
-            header = it,
-            onBack = { if (showing()) models.navigator.back() },
-            onTitle = { if (showing()) models.navigator.open(InstanceKey(key.instanceId)) },
-        )
-    }
+    val model =
+        viewModel(key = "chat:${key.instanceId}:${key.profileId}") {
+            ChatViewModel(services.chatParts(key.instanceId, key.profileId))
+        }
+    val navigation =
+        remember(key, models) {
+            ChatNavigation(
+                onBack = models.navigator::back,
+                onInstance = { models.navigator.open(InstanceKey(key.instanceId)) },
+                showing = showing,
+            )
+        }
+    ChatRoute(model, navigation)
 }
 
 /** A trust state's screen: "Pair again" pairs from the root and merges into the row; "Remove" removes it. */

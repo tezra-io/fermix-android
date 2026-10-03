@@ -7,6 +7,7 @@ import io.tezra.fermix.session.SessionState
 import io.tezra.fermix.session.SessionStore
 import io.tezra.fermix.session.TurnEffect
 import io.tezra.fermix.session.TurnOutcome
+import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,8 +32,9 @@ import org.junit.jupiter.api.assertThrows
 
 /**
  * The sessions' keeper (design section 12.5): one session per paired instance, an approval's taken over and
- * never a second, every session put aside after 5 s out of sight, the timer cancelled by a return, and
- * "Unpair" asking the daemon to forget the phone where "Remove" does not.
+ * never a second, every session put aside after 5 s out of sight, the timer cancelled by a return,
+ * "Unpair" asking the daemon to forget the phone where "Remove" does not, and the candidate each session's last
+ * `hello` went over handed to the sink, which keeps it on the record for the next process to race first.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionSupervisorTest {
@@ -59,7 +61,7 @@ class SessionSupervisorTest {
                     opened.merge(instance.id, 1, Int::plus)
                     idleSession(sessionScope, store)
                 },
-                sink = { _, _ -> },
+                sink = NoSink,
                 scope = sessions,
                 log = { message, _ -> faults += message },
                 forget = { session ->
@@ -296,7 +298,7 @@ class SessionSupervisorTest {
                 SessionSupervisor(
                     records = records,
                     opener = { _, _ -> throw SessionUnavailable("no key") },
-                    sink = { _, _ -> },
+                    sink = NoSink,
                     scope = backgroundScope,
                     log = { message, _ -> faults += message },
                     forget = { error("nothing is unpaired here") },
@@ -306,6 +308,34 @@ class SessionSupervisorTest {
             runCurrent()
             assertTrue(supervisor.sessions.value.isEmpty())
             assertEquals(listOf("no session for ${first.id}"), faults)
+        }
+
+    @Test
+    fun `the candidate a session's last hello went over reaches the sink, which keeps it on the record`() =
+        runTest {
+            val reached = mutableListOf<Pair<String, Candidate>>()
+            val sink =
+                object : EventSink by NoSink {
+                    override suspend fun reached(
+                        instanceId: String,
+                        candidate: Candidate,
+                    ) {
+                        reached += instanceId to candidate
+                    }
+                }
+            val supervisor =
+                SessionSupervisor(
+                    records = MutableStateFlow(listOf(first)),
+                    opener = { _, sessionScope -> idleSession(sessionScope, lastSuccessful = IDLE_CANDIDATE) },
+                    sink = sink,
+                    scope = backgroundScope,
+                    log = { message, _ -> error(message) },
+                    forget = { error("nothing is unpaired here") },
+                )
+            supervisor.start(StandardTestDispatcher(testScheduler))
+            supervisor.inSight.value = true
+            runCurrent()
+            assertEquals(listOf(first.id to IDLE_CANDIDATE), reached)
         }
 
     @Test

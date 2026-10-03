@@ -2,10 +2,16 @@ package io.tezra.fermix
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import io.tezra.fermix.attest.DeviceKeys
 import io.tezra.fermix.attest.HardwareGate
+import io.tezra.fermix.chat.ChatClock
+import io.tezra.fermix.chat.ChatLive
+import io.tezra.fermix.chat.ChatParts
+import io.tezra.fermix.chat.RoomChatStore
+import io.tezra.fermix.chat.SessionChat
 import io.tezra.fermix.chats.ChatsParts
 import io.tezra.fermix.chats.ConversationSync
 import io.tezra.fermix.chats.PlatformConversations
@@ -14,6 +20,7 @@ import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
+import io.tezra.fermix.data.Use
 import io.tezra.fermix.data.appSettingsDataStore
 import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.data.launchCheck
@@ -47,6 +54,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 private const val TAG = "Fermix"
 
@@ -79,6 +87,7 @@ class AppServices(
     private val network = NetworkWatcher(context)
     private val keys = DeviceKeys()
     private val identity by lazy { phoneIdentity(context) }
+    private val onScreen = OnScreenChats()
     private val sessionsMade =
         AppSessions(
             databases,
@@ -90,17 +99,18 @@ class AppServices(
                     instanceId,
                     MAIN_PROFILE,
                     database,
-                    NO_CHAT_ON_SCREEN,
+                    onScreen,
                     NotificationsToCome,
                     System::currentTimeMillis,
                 )
             },
         ) { identity.appVersion }
+    private val folds = ChatFolds(AppClock, ::newestKept)
     val supervisor =
         SessionSupervisor(
             instances.instances,
             sessionsMade,
-            SessionEvents(instances, databases),
+            SessionEvents(instances, databases, folds),
             sessionScope,
             ::logFault,
             sendUnpair,
@@ -195,6 +205,52 @@ class AppServices(
             releaseBuild = !debuggable(context),
         )
 
+    /**
+     * A chat's parts: [instanceId]'s session while the supervisor holds one, the app's fold of its events, its
+     * [profileId]'s cache, the network, where it reports itself on screen, the clocks, and the app's scope,
+     * which keeps its draft as it leaves.
+     */
+    fun chatParts(
+        instanceId: String,
+        profileId: String,
+    ): ChatParts =
+        ChatParts(
+            instanceId = instanceId,
+            profileId = profileId,
+            records = instances.instances,
+            session =
+                supervisor.sessions
+                    .map { held -> held[instanceId]?.let { SessionChat(it, ::logFault) } }
+                    .distinctUntilChanged(),
+            live = folds.chats.map { it[instanceId] ?: ChatLive() }.distinctUntilChanged(),
+            store = RoomChatStore(databases, instanceId, profileId),
+            network = network.facts,
+            presence = onScreen.presence(instanceId, profileId),
+            clock = AppClock,
+            background = scope,
+            newId = { UUID.randomUUID().toString() },
+            log = ::logFault,
+        )
+
+    /** The newest row [instanceId]'s main profile keeps, 0 when none or once it is removed. */
+    private suspend fun newestKept(instanceId: String): ULong {
+        val newest =
+            databases.withDatabase(instanceId, MAIN_PROFILE) { profile ->
+                profile
+                    .timeline()
+                    .newest(1)
+                    .first()
+                    .firstOrNull()
+                    ?.serverSeq
+            }
+        return when (newest) {
+            is Use.Ran -> newest.value ?: 0uL
+
+            // A Fermix removed meanwhile keeps no row: its chat is folded with nothing held.
+            Use.Gone -> 0uL
+        }
+    }
+
     /** Removes [instanceId]'s record with its files, then its key, which only the record named. */
     private suspend fun forget(instanceId: String) {
         val record = instances.instances.first().find { it.id == instanceId } ?: return
@@ -206,8 +262,12 @@ class AppServices(
         chatIntent(context, conversation.instanceId, conversation.profileId)
 }
 
-/** No chat shows its rows yet: the chat's bar is all there is of the Chat screen until it comes. */
-private val NO_CHAT_ON_SCREEN = ChatOnScreen { _, _ -> false }
+/** The clocks a chat reads: the monotonic one since boot, and the wall's. */
+private object AppClock : ChatClock {
+    override fun monoMs(): Long = SystemClock.elapsedRealtime()
+
+    override fun wallMs(): Long = System.currentTimeMillis()
+}
 
 /**
  * The notifications to come: until the notifications change brings the channel's posts, no row can be
@@ -226,7 +286,7 @@ private object NotificationsToCome : RowNotifier {
     ): Unit = error("no notification is posted before the notifications change")
 }
 
-/** A fault the app logs and lives with: a session it cannot open now. */
+/** A fault the app logs and lives with: a session it cannot open now, a chat's request that did not go. */
 private fun logFault(
     message: String,
     fault: Throwable?,

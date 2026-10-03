@@ -71,6 +71,7 @@ class InstanceRecordTest {
                 "fcm_registered_at",
                 "device_name",
                 "paired_at",
+                "last_candidate",
             )
         assertEquals(expected, names)
         val secretName = Regex("secret|psk|private|token|password", RegexOption.IGNORE_CASE)
@@ -97,9 +98,15 @@ class InstanceRecordTest {
         }
 
     @Test
-    fun `a record reads back as it was written, caps, candidates and nickname included`() =
+    fun `a record reads back as it was written, caps, candidates, nickname and last candidate included`() =
         runTest {
-            val named = paired.copy(nickname = "Mini", deviceName = "Pixel 9 Pro", pairedAt = 1_790_000_000_000L)
+            val named =
+                paired.copy(
+                    nickname = "Mini",
+                    deviceName = "Pixel 9 Pro",
+                    pairedAt = 1_790_000_000_000L,
+                    lastCandidate = paired.candidates.last(),
+                )
             val records = Instances(listOf(named, instance(gateway = 3)))
             val text = written(records)
             assertEquals(records, InstancesSerializer.readFrom(ByteArrayInputStream(text.encodeToByteArray())))

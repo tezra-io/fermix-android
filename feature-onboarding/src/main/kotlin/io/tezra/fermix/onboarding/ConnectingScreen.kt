@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixMotion
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.MarkMotion
+import io.tezra.fermix.design.TwoDotMark
 
 // The visual canon's Connecting, centred: the line 40 dp under the orbiting mark (its 28 dp and the
 // column's 12 dp gap), then 20 dp lower three 8 dp step dots 8 dp apart: done in the secondary ink, the

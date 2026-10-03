@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Chat screen's words (design sections 8.2, 13.5 to 13.9 and the copy deck, 13.9) verbatim unless a comment
+  names another source; the host, the model and the agent's name are always format arguments.
+-->
+<resources>
+    <!-- The app bar (section 13.5). Labels the design does not give (section 13.8): back. -->
+    <string name="chat_back">Back</string>
+    <string name="chat_thinking">thinking…</string>
+
+    <!-- The banner (sections 13.5 and 13.9). -->
+    <string name="chat_offline">Offline — messages will send when reconnected</string>
+    <string name="chat_unreachable">Can\'t reach %1$s — is it on and awake?</string>
+
+    <!-- The working indicator's draft pools (sections 8.2 and 13.9), which the owner edits. -->
+    <string name="chat_indicator_opening">Thinking</string>
+    <string-array name="chat_indicator_first">
+        <item>Connecting the dots</item>
+        <item>Mulling it over</item>
+        <item>Digging in</item>
+        <item>Piecing it together</item>
+        <item>Turning it over</item>
+        <item>Following the thread</item>
+        <item>Working it out</item>
+        <item>Chewing on it</item>
+    </string-array>
+    <string-array name="chat_indicator_second">
+        <item>Still working</item>
+        <item>Still on it</item>
+        <item>Staying with it</item>
+        <item>Deep in it</item>
+        <item>Not done yet</item>
+        <item>Taking the long road</item>
+    </string-array>
+    <!-- TalkBack (section 13.8). -->
+    <string name="chat_thinking_announcement">Fermix is thinking</string>
+    <string name="chat_chip_started">%1$s, started</string>
+    <string name="chat_chip_finished">%1$s, finished</string>
+
+    <!-- The tool chips' verb map (section 13.5). -->
+    <string name="chat_verb_running_shell">Running shell</string>
+    <string name="chat_verb_searching_web">Searching the web</string>
+    <string name="chat_verb_reading_page">Reading a page</string>
+    <string name="chat_verb_using_browser">Using the browser</string>
+    <string name="chat_verb_reading_files">Reading files</string>
+    <string name="chat_verb_editing_file">Editing a file</string>
+    <string name="chat_verb_searching_files">Searching files</string>
+    <string name="chat_verb_checking_memory">Checking memory</string>
+    <string name="chat_verb_working_with_helper">Working with a helper</string>
+    <string name="chat_verb_coding">Coding</string>
+    <string name="chat_verb_making_image">Making an image</string>
+    <string name="chat_verb_scheduling">Scheduling</string>
+    <string name="chat_verb_using_computer">Using your computer</string>
+    <string name="chat_verb_working">Working</string>
+    <!-- Not the design's words but its canon's (section 13.5, "+n more"). -->
+    <plurals name="chat_chips_more">
+        <item quantity="one">+%1$d more</item>
+        <item quantity="other">+%1$d more</item>
+    </plurals>
+
+    <!-- The timeline (section 13.5). -->
+    <string name="chat_empty">Say hello to %1$s.</string>
+    <string name="chat_job">⏱ %1$s · scheduled</string>
+    <string name="chat_code_placeholder">code…</string>
+    <!-- Not the design's: the day header's words for today and yesterday, and the scroll pill's label (section 13.8). -->
+    <string name="chat_today">Today</string>
+    <string name="chat_yesterday">Yesterday</string>
+    <string name="chat_to_bottom">Scroll to the newest message</string>
+    <string name="chat_unread_divider">Unread messages</string>
+
+    <!-- The user bubble (sections 13.5 and 13.6). -->
+    <string name="chat_queued">Queued</string>
+    <string name="chat_queued_behind_reply">queued · sends after this reply</string>
+    <string name="chat_edit">Edit</string>
+    <string name="chat_remove">Remove</string>
+    <string name="chat_try_again">Try again</string>
+    <string name="chat_remove_from_outbox">Remove from outbox</string>
+    <!-- Labels the design does not give (section 13.8): what a bubble's mark says. -->
+    <string name="chat_mark_sending">Sending</string>
+    <string name="chat_mark_delivered">Delivered</string>
+    <string name="chat_mark_failed">Not sent</string>
+
+    <!-- Error cards (sections 13.5 and 13.9). -->
+    <string name="chat_not_sent">Not sent. Tap to retry sending.</string>
+    <string name="chat_retry_sending">Retry sending</string>
+    <string name="chat_run_again">Run again</string>
+    <string name="chat_reset_to_default">Reset to default</string>
+    <string name="chat_error_timeout">The reply didn\'t finish — the model didn\'t answer in time</string>
+    <string name="chat_error_timeout_body">Earlier actions may have completed. Details are in Info.</string>
+    <string name="chat_error_model_unavailable">%1$s isn\'t available on %2$s anymore</string>
+    <string name="chat_error_generic">Something went wrong on %1$s</string>
+    <string name="chat_error_generic_body">The reply didn\'t finish. Earlier actions may have completed. Details are in Info.</string>
+    <string name="chat_error_unsupported">%1$s didn\'t understand this app\'s request. Update Fermix on your computer or this app.</string>
+    <!-- Not the design's: the model a model_unavailable card names when the chat's caps name none. -->
+    <string name="chat_error_this_model">This model</string>
+
+    <!-- Centred lines (sections 8.4 and 13.9). -->
+    <string name="chat_stopped">Stopped</string>
+    <string name="chat_switched">Switched to %1$s</string>
+    <string name="chat_back_to_default">Back to the default · %1$s</string>
+
+    <!-- The composer (section 13.6). -->
+    <string name="chat_placeholder">Message %1$s…</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_stop">Stop</string>
+    <string name="chat_palette_footer">From %1$s · updates automatically</string>
+    <!-- Not the design's: the palette's label (section 13.8). -->
+    <string name="chat_palette">Commands</string>
+
+    <!-- Message actions (section 13.7). -->
+    <string name="chat_copy">Copy</string>
+    <string name="chat_select_text">Select text</string>
+    <string name="chat_copy_code">Copy code</string>
+    <string name="chat_share">Share</string>
+    <string name="chat_info">Info</string>
+    <string name="chat_retry">Retry</string>
+    <string name="chat_copy_transcript">Copy as transcript</string>
+    <!-- Not the design's: the toast after a copy (section 13.5, "Copy (toast + CONFIRM)"), the selection bar's close
+         and count, a transcript's names and the share sheet's title. -->
+    <string name="chat_copied">Copied</string>
+    <string name="chat_close_selection">Close</string>
+    <plurals name="chat_selected">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <string name="chat_you">You</string>
+
+    <!-- Info (section 13.7); its field names are the visual canon's. -->
+    <string name="chat_info_sent">Sent</string>
+    <string name="chat_info_delivered">Delivered</string>
+    <string name="chat_info_seq" translatable="false">server_seq</string>
+    <string name="chat_info_client_msg_id" translatable="false">client_msg_id</string>
+    <string name="chat_info_turn">Turn</string>
+    <string name="chat_info_duration">Duration</string>
+    <string name="chat_info_seconds">%1$d s</string>
+    <plurals name="chat_info_thought">
+        <item quantity="one">Thought for %1$d s · %2$d tool</item>
+        <item quantity="other">Thought for %1$d s · %2$d tools</item>
+    </plurals>
+    <string name="chat_info_model">Model</string>
+    <string name="chat_info_path">Path</string>
+    <string name="chat_info_tools">Tools</string>
+    <string name="chat_info_started">started</string>
+    <string name="chat_info_finished">finished</string>
+    <string name="chat_path_lan">Wi-Fi</string>
+    <string name="chat_path_tailnet">Tailscale</string>
+
+    <!-- Code and table cards (section 13.5). Labels the design does not give (section 13.8). -->
+    <string name="chat_code_copy">Copy code</string>
+    <string name="chat_code_share">Share code</string>
+    <plurals name="chat_code_more">
+        <item quantity="one">Show all %1$d line</item>
+        <item quantity="other">Show all %1$d lines</item>
+    </plurals>
+    <string name="chat_code_less">Show less</string>
+    <string name="chat_cell_close">Close</string>
+</resources>
