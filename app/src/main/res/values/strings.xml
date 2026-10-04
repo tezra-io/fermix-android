@@ -5,4 +5,10 @@
     <string name="pairing_wait_title">Waiting for approval on %1$s · %2$s</string>
     <!-- The notification channel the pairing wait posts on, as Settings lists it; the design names none. -->
     <string name="pairing_wait_channel">Pairing</string>
+    <!--
+      The upload's short foreground service (design sections 8.5 and 12.5) and its channel: the design gives no
+      words for either, so these are the owner's to settle.
+    -->
+    <string name="upload_title">Sending to %1$s</string>
+    <string name="upload_channel">Uploads</string>
 </resources>

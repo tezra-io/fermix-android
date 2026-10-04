@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -17,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.tezra.fermix.data.Instance
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.protocol.CommandDescriptor
@@ -26,24 +29,93 @@ import kotlinx.coroutines.launch
 /**
  * The Chat screen over [model]: its state, its composer and its actions, search, the "Model" sheet and the
  * jump to a hit while search is open, the draft kept as the screen stops, the platform's clipboard, toast and
- * share sheet for Copy and Share, and a Custom Tab in the instance's tint for a link preview.
+ * share sheet for Copy and Share, and a Custom Tab in the instance's tint for a link preview; the attachments,
+ * the voice note and the blobs on the phone ([outside]), a recording stopped into a draft as the screen leaves the
+ * foreground but not as it turns or folds, the attach sheet over the chat while it is open, and the camera's screen
+ * over everything while it is open.
  */
 @Composable
 fun ChatRoute(
     model: ChatViewModel,
     navigation: ChatNavigation,
+    outside: ChatOutside = ChatOutside(),
 ) {
     val state by model.state.collectAsStateWithLifecycle()
     val field by model.composer.field.collectAsStateWithLifecycle()
+    val written by model.composer.written.collectAsStateWithLifecycle()
     val palette by model.composer.palette.collectAsStateWithLifecycle()
     val search by model.search.state.collectAsStateWithLifecycle()
     val sheet by model.models.sheet.collectAsStateWithLifecycle()
     val jump by model.jumps.jump.collectAsStateWithLifecycle()
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { model.composer.keep() }
+    val media by model.media.collectAsStateWithLifecycle()
+    val activity = LocalActivity.current
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        model.composer.keep()
+        if (activity?.isChangingConfigurations != true) model.voice.stop()
+    }
+    val composer = rememberComposerMedia(model, outside)
+    val actions = rememberRouteActions(model, navigation, outside, composer, state?.header?.record)
+    state?.let {
+        val ui =
+            ChatUi(
+                it,
+                field,
+                palette,
+                search,
+                sheet,
+                jump.takeIf { search != null },
+                media.copy(micOff = composer.micOff),
+                written,
+            )
+        ChatScreen(ui, actions)
+        if (media.attach.sheet) AttachSheet(media.attach, field, actions.composer, outside.photos)
+    }
+    ComposerOverlays(model, outside, composer)
+}
+
+/** The screen's actions, the composer's media and the timeline's blobs among them. */
+@Composable
+private fun rememberRouteActions(
+    model: ChatViewModel,
+    navigation: ChatNavigation,
+    outside: ChatOutside,
+    composer: ComposerMedia,
+    record: Instance?,
+): ChatScreenActions {
     val text = rememberTextActions()
-    val openLink = rememberLinkOpener(state?.header?.record?.tint)
-    val actions = remember(model, navigation, text, openLink) { actionsOf(model, navigation, text, openLink) }
-    state?.let { ChatScreen(ChatUi(it, field, palette, search, sheet, jump.takeIf { search != null }), actions) }
+    val openLink = rememberLinkOpener(record?.tint)
+    val blobs = rememberMediaActions(model, outside, record?.host.orEmpty())
+    return remember(model, navigation, text, openLink, composer.attach, composer.voice, blobs) {
+        val base = actionsOf(model, navigation, text, openLink)
+        base.copy(composer = base.composer.copy(attach = composer.attach, voice = composer.voice), media = blobs)
+    }
+}
+
+/** The microphone's rationale before its prompt, and the camera's screen, over the chat while each is open. */
+@Composable
+private fun ComposerOverlays(
+    model: ChatViewModel,
+    outside: ChatOutside,
+    composer: ComposerMedia,
+) {
+    if (composer.rationale) {
+        MicRationale(
+            onContinue = {
+                composer.rationale = false
+                composer.onAskMic()
+            },
+            onNotNow = { composer.rationale = false },
+        )
+    }
+    if (!composer.cameraOpen) return
+    BackHandler { composer.cameraOpen = false }
+    outside.camera(
+        { photo ->
+            composer.cameraOpen = false
+            model.attach.add(listOf(photo.toURI().toString()), PickedFrom.CAMERA)
+        },
+        { composer.cameraOpen = false },
+    )
 }
 
 /** Copy, with the toast and the haptic (design section 13.5), and Share, one share sheet with the plain text. */
@@ -113,7 +185,7 @@ private fun actionsOf(
         cards =
             CardActions(
                 onAnswer = { id, approve -> if (navigation.showing()) model.approvals.answer(id, approve) },
-                thumbnail = { ref -> model.thumbnails.thumbnail(ref)?.let { decodeThumbnail(it) } },
+                thumbnail = { ref -> model.blobs.thumbnail(ref)?.let { decodeThumbnail(it) } },
                 onLink = { url -> if (navigation.showing()) openLink(url) },
             ),
         models =
@@ -142,7 +214,8 @@ private fun paletteAction(
 }
 
 /**
- * Send; but `/model` typed alone, while the chat has a model chip, does what the chip does (design section 8.6):
+ * Send: with the tray full, its items and the field's words as their caption (ChatAttach.send); else the field,
+ * but `/model` typed alone, while the chat has a model chip, does what the chip does (design section 8.6):
  * the daemon answers that command with `models` pages, which the sheet is the one place to show. While the chip
  * is disabled nothing goes, and the line above the composer says to connect.
  */
@@ -151,10 +224,21 @@ private fun sendAction(
     onTaken: () -> Unit,
 ) {
     val chip = model.state.value?.model
-    if (chip == null || !model.composer.asksForModels()) return model.composer.send(onTaken)
-    if (!chip.enabled) return
-    model.composer.closePalette()
-    model.models.open()
+    val picked = model.media.value.attach.picked
+    when {
+        picked.isNotEmpty() -> {
+            model.attach.send(onTaken)
+        }
+
+        chip == null || !model.composer.asksForModels() -> {
+            model.composer.send(onTaken)
+        }
+
+        chip.enabled -> {
+            model.composer.closePalette()
+            model.models.open()
+        }
+    }
 }
 
 /**
@@ -167,7 +251,7 @@ internal fun errorAction(
     error: ShownError,
 ) {
     when (error.action) {
-        ErrorAction.RETRY_SENDING -> requests.resend(checkNotNull(error.request))
+        ErrorAction.RETRY_SENDING -> requests.resend(checkNotNull(error.request), error.attachments)
         ErrorAction.RUN_AGAIN -> requests.retry(checkNotNull(error.request))
         ErrorAction.RESET_TO_DEFAULT -> requests.resetModel()
         ErrorAction.NONE -> Unit
@@ -181,8 +265,16 @@ private fun outboxAction(
     entry: OutboxEntry,
 ) {
     when (entry) {
-        OutboxEntry.EDIT -> model.edit(message)
-        OutboxEntry.REMOVE, OutboxEntry.REMOVE_FROM_OUTBOX -> model.remove(message)
-        OutboxEntry.TRY_AGAIN -> model.requests.resend(checkNotNull(message.request) { "a refused item holds it" })
+        OutboxEntry.EDIT -> {
+            model.edit(message)
+        }
+
+        OutboxEntry.REMOVE, OutboxEntry.REMOVE_FROM_OUTBOX -> {
+            model.remove(message)
+        }
+
+        OutboxEntry.TRY_AGAIN -> {
+            model.requests.resend(checkNotNull(message.request) { "a refused item holds it" }, message.attachments)
+        }
     }
 }

@@ -52,6 +52,7 @@ class EndingTest {
         assertEquals(Next.ReconnectNow, nextAfter(Ending.KeepaliveLost))
         assertEquals(Next.ReconnectNow, nextAfter(Ending.NetworkChanged))
         assertEquals(Next.ReconnectNow, nextAfter(Ending.LifetimeReached))
+        assertEquals(Next.ReconnectNow, nextAfter(Ending.UploadStalled))
     }
 
     @Test

@@ -8,6 +8,7 @@ import io.tezra.fermix.protocol.decodeServerEvent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import java.io.File
+import java.nio.file.Files
 
 /**
  * The Context Room's Android builder takes, on the JVM: android.jar's stubs throw for every call, so
@@ -17,6 +18,9 @@ import java.io.File
 internal object TestContext : ContextWrapper(null) {
     override fun getDatabasePath(name: String): File = File(name)
 }
+
+/** Staged uploads in a directory of their own under the system's temporary one, for a store whose test stages none. */
+internal fun scratchStaging(): StagedUploads = StagedUploads(Files.createTempDirectory("staged").toFile())
 
 /** A profile database in memory, built as ProfileDatabases builds one on disk, its queries on [queries]. */
 internal fun inMemoryDatabase(queries: CoroutineDispatcher = Dispatchers.IO): ProfileDatabase =

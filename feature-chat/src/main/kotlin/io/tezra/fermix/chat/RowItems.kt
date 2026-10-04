@@ -36,35 +36,44 @@ internal fun rowTimes(
 }
 
 /**
- * A row's message, none for a row with no words to show yet (a media row is Task 13's), none for an approval's
- * answer: the daemon writes it as the owner's row, and the card's receipt is all the chat shows of it
- * (core-session's APPROVAL_ANSWER_PREFIX); and none for a model picked on the sheet, which the daemon's own line
- * tells of (MODEL_PICK_PREFIX).
+ * A row's message, none for a row with neither words nor media to show yet, none for an approval's answer: the
+ * daemon writes it as the owner's row, and the card's receipt is all the chat shows of it (core-session's
+ * APPROVAL_ANSWER_PREFIX); and none for a model picked on the sheet, which the daemon's own line tells of
+ * (MODEL_PICK_PREFIX).
  */
 internal fun rowItem(
     row: TimelineRow,
     wallMs: Long?,
-    live: ChatLive,
+    inputs: ChatInputs,
 ): Placed? {
     val message =
         when (row) {
-            is TimelineRow.Message -> messageOf(row, wallMs)
+            is TimelineRow.Message -> messageOf(row, wallMs, inputs.transcripts)
             is TimelineRow.Reply -> replyOf(row, wallMs)
         }
-    if (message.text.isBlank() || isQuietRow(row)) return null
-    return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, live), message))
+    val empty = message.text.isBlank() && message.media.isEmpty()
+    if (empty || isQuietRow(row)) return null
+    return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, inputs.live), message))
 }
 
+/**
+ * A row's message, its words its content or else its first blob's caption; the owner's voice note with no words
+ * yet waits for its transcript ("Transcribing…") while the daemon [transcripts] its notes (`caps.transcripts`),
+ * whose `transcript` then becomes the row's content.
+ */
 internal fun messageOf(
     row: TimelineRow.Message,
     wallMs: Long?,
+    transcripts: Boolean = false,
 ): ShownMessage {
     val message = row.message
     val user = message.role == USER_ROLE
     val metadata = message.metadata
+    val media = rowMedia(message.mediaRefs, user)
+    val note = media.any { it.shape == MediaShape.VOICE }
     return ShownMessage(
         sender = if (user) Sender.User else Sender.Agent,
-        text = message.content,
+        text = message.content.ifBlank { message.mediaRefs.firstNotNullOfOrNull { it.caption }.orEmpty() },
         wallMs = wallMs,
         delivery = if (user) Delivery.DELIVERED else Delivery.NONE,
         job = metadata?.let(::jobOf),
@@ -74,6 +83,8 @@ internal fun messageOf(
         route = metadata?.let(::routeOf),
         reaction = if (user) metadata?.let(::reactionOf) else null,
         previews = shownPreviews(linkPreviewsOf(row)),
+        media = media,
+        transcribing = note && transcripts && message.content.isBlank(),
     )
 }
 

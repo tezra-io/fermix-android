@@ -53,7 +53,8 @@ fun chatIntent(
  * back, `FLAG_SECURE` while an onboarding screen (design section 13.3) or the Instance screen shows or the
  * app is locked, white
  * system bars over the scan's camera, the recents preview hidden while the app lock is on, and the
- * pairing-wait notification when the owner leaves Verify for another app (section 12.5). The app lock's
+ * pairing-wait notification when the owner leaves Verify for another app and the upload's short service when
+ * the owner leaves with an upload in flight (section 12.5). The app lock's
  * gate hears when the app comes into and goes out of sight, and the system's prompt asks for the unlock as
  * the lock comes, once per time the app is in sight; "Unlock" asks again after a prompt the owner closed.
  */
@@ -94,8 +95,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Out of sight: a pairing that waits on the computer gets its notification, started here, as the app
-     * leaves, while it may still start a foreground service. A rotation is not leaving.
+     * Out of sight: a pairing that waits on the computer gets its notification, and an upload in flight its
+     * short service, each started here, as the app leaves, while it may still start a foreground service. A
+     * rotation is not leaving.
      */
     override fun onStop() {
         super.onStop()
@@ -104,6 +106,8 @@ class MainActivity : ComponentActivity() {
         services.lockGate.wentOutOfSight(SystemClock.elapsedRealtime())
         val shown = pairingWaitShown(services.pairingWait.value, services.inBackground.value)
         if (shown != null) PairingWaitService.start(this)
+        val uploading = services.supervisor.uploading.value
+        if (uploading.isNotEmpty()) UploadService.start(this)
     }
 
     /** The system's prompt each time the lock comes while the activity is in sight, once it is resumed. */

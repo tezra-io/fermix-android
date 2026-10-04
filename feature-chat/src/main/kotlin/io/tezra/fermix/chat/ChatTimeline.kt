@@ -6,6 +6,7 @@ import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.UploadProgress
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -20,7 +21,8 @@ internal const val USER_ROLE = "user"
  * whose rows have not come yet; the session's [live] fold; whether the link is [connected]; the row the unread
  * divider stands above, [unreadAt], chosen once as the chat opened (unreadAnchor), none for a chat read to its
  * end; the [requests] the screen remembers sending, by client_msg_id, for "Run again"; [profileId]; the wall
- * clock's now; and the owner's [zone].
+ * clock's now; the owner's [zone]; each attachment's [uploads], by its `attach_id`; and whether the daemon
+ * transcribes voice notes (`caps.transcripts`), so a note waits for its words only then.
  */
 data class ChatInputs(
     val rows: List<TimelineRow>,
@@ -33,6 +35,8 @@ data class ChatInputs(
     val profileId: String,
     val nowWall: Long,
     val zone: ZoneId,
+    val uploads: Map<String, UploadProgress> = emptyMap(),
+    val transcripts: Boolean = false,
 )
 
 /** An item and where it falls: after row [anchor], at [rank] among what that row is followed by (0 is the row). */
@@ -52,7 +56,7 @@ internal data class Placed(
 fun chatItems(inputs: ChatInputs): List<ChatItem> {
     val ascending = inputs.rows.sortedBy { it.serverSeq }
     val times = rowTimes(ascending, inputs.live)
-    val rowItems = ascending.mapNotNull { row -> rowItem(row, times[row.serverSeq], inputs.live) }
+    val rowItems = ascending.mapNotNull { row -> rowItem(row, times[row.serverSeq], inputs) }
     val rowSeqs = ascending.map { it.serverSeq }.toSet()
     val ordered =
         merged(rowItems, extras(inputs, ascending, rowSeqs)) +

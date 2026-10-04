@@ -9,6 +9,7 @@ import io.tezra.fermix.session.TurnEffect
 import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
@@ -18,8 +19,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -33,6 +37,13 @@ const val BACKGROUND_GRACE_MILLIS = 5_000L
 
 /** How long "Unpair" waits for the daemon's `4003` after `unpair` before the instance goes anyway. */
 const val UNPAIR_WAIT_MILLIS = 5_000L
+
+/**
+ * Past the grace, how long a session with an upload in flight is kept up out of sight (design sections 8.5 and
+ * 12.5): inside the `shortService`'s three minutes, which the service started as the app left, with the grace and
+ * a margin taken off, so the session is put aside before the platform ends the service.
+ */
+const val UPLOAD_HOLD_MILLIS = 165_000L
 
 /** An instance whose session cannot be opened now: its key is missing from the Keystore, or it has no route. */
 class SessionUnavailable(
@@ -86,8 +97,11 @@ interface EventSink {
  * socket opens. Its sessions run in [scope], whose end closes every one, as the process's end does. Unpairing
  * asks the daemon to forget the phone through [forget], which says whether `unpair` went out (AppServices's
  * sends it over the session's live connection, if one is up). What each session showed ends with it
- * ([EventSink.ended]), and the candidate each `hello` went over goes to the record ([EventSink.reached]).
+ * ([EventSink.ended]), and the candidate each `hello` went over goes to the record ([EventSink.reached]). A
+ * session with an upload in flight as the grace ends ([uploading]) is spared until its upload ends or
+ * [UPLOAD_HOLD_MILLIS] pass, then put aside too; its item stays in the outbox.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SessionSupervisor(
     private val records: Flow<List<Instance>>,
     private val opener: SessionOpener,
@@ -116,21 +130,42 @@ class SessionSupervisor(
     val thinking: StateFlow<Set<String>> =
         liveTurns.map { it.keys }.stateIn(scope, SharingStarted.Eagerly, emptySet())
 
+    private val uploadingNow = MutableStateFlow<Set<String>>(emptySet())
+
+    /** The instances whose session has an upload in flight now, which the upload's `shortService` follows. */
+    val uploading: StateFlow<Set<String>> = uploadingNow.asStateFlow()
+
     /**
-     * Follows the records and the app's sight until [scope] ends, on [io], since opening a session reads the
-     * Keystore and opens its database, while each session runs on [scope]'s own dispatcher. Start it once,
-     * after the launch check.
+     * Follows the records, the app's sight and each session's upload ([uploadingOf], Session.uploading by
+     * default) until [scope] ends, on [io], since opening a session reads the Keystore and opens its database,
+     * while each session runs on [scope]'s own dispatcher. Start it once, after the launch check.
      */
-    fun start(io: CoroutineDispatcher) {
+    fun start(
+        io: CoroutineDispatcher,
+        uploadingOf: (Session) -> Flow<Boolean> = { it.uploading },
+    ) {
         check(!started) { "the supervisor is started once" }
         started = true
+        scope.launch(io) { held.flatMapLatest { uploadingIn(it, uploadingOf) }.collect { uploadingNow.value = it } }
         scope.launch(io) { records.collect { lock.withLock { reconcile() } } }
         scope.launch(io) {
             inSight.collectLatest { visible ->
                 if (!visible) delay(BACKGROUND_GRACE_MILLIS)
-                lock.withLock { if (visible) cameIntoSight() else putAside() }
+                lock.withLock { if (visible) cameIntoSight() else putAside(spared = uploading.value) }
+                if (!visible) finishUploads()
             }
         }
+    }
+
+    /**
+     * Out of sight past the grace with uploads in flight: their sessions run until every upload ends or
+     * [UPLOAD_HOLD_MILLIS] pass, then are put aside too. A return to sight cancels the wait.
+     */
+    private suspend fun finishUploads() {
+        if (uploading.value.isEmpty()) return
+        val finished = withTimeoutOrNull(UPLOAD_HOLD_MILLIS) { uploading.first { it.isEmpty() } }
+        if (finished == null) log("an upload was still in flight after ${UPLOAD_HOLD_MILLIS}ms out of sight", null)
+        lock.withLock { putAside(spared = emptySet()) }
     }
 
     override suspend fun adopt(
@@ -191,26 +226,25 @@ class SessionSupervisor(
         val current = records.first()
         for (record in current) {
             val session = held.value[record.id]
-            when {
-                session == null -> open(record)
-                session.state.value.waitsForOwner() -> Unit
-                session.state.value is SessionState.Ended -> reopen(record)
-                else -> session.resume()
+            val state = session?.state?.value
+            if (state?.waitsForOwner() == true) continue
+            // drop does nothing for an instance with no session.
+            if (session == null || state is SessionState.Ended) {
+                drop(record.id)
+                open(record)
+            } else {
+                session.resume()
             }
         }
     }
 
-    /** Out of sight past the grace: every running session is put aside. */
-    private suspend fun putAside() {
+    /** Out of sight past the grace: every running session is put aside, but the [spared] instances'. */
+    private suspend fun putAside(spared: Set<String>) {
         active = false
-        held.value.values
-            .filter { it.state.value !is SessionState.Ended }
+        held.value
+            .filter { (id, session) -> id !in spared && session.state.value !is SessionState.Ended }
+            .values
             .forEach { it.suspend() }
-    }
-
-    private suspend fun reopen(record: Instance) {
-        drop(record.id)
-        open(record)
     }
 
     private fun open(record: Instance) {
@@ -267,6 +301,16 @@ class SessionSupervisor(
         val kept = sink.take(instanceId, session, event)
         if (!kept) log("an event of $instanceId came after its removal: ${event::class.simpleName}", null)
     }
+}
+
+/** Which of [sessions] have an upload in flight, as [uploadingOf] says, by instance id. */
+private fun uploadingIn(
+    sessions: Map<String, Session>,
+    uploadingOf: (Session) -> Flow<Boolean>,
+): Flow<Set<String>> {
+    if (sessions.isEmpty()) return flowOf(emptySet())
+    val each = sessions.map { (id, session) -> uploadingOf(session).map { up -> id.takeIf { up } } }
+    return combine(each) { ids -> ids.filterNotNull().toSet() }
 }
 
 /** The turns running after [effect]: its turn runs until it ends, whatever the others do. */

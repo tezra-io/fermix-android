@@ -39,7 +39,7 @@ class NotifiedDaoTest {
     fun `a row the read frontier has reached is never added, so a late push for it alerts nobody`() =
         runTest {
             assertTrue(notified.put(NotifiedEntry.Row(5uL), NOW))
-            RoomSessionStore(database).setReadFrontier(9uL)
+            RoomSessionStore(database, scratchStaging()).setReadFrontier(9uL)
             notified.removeReadUpTo(9uL)
             assertFalse(notified.put(NotifiedEntry.Row(5uL), NOW), "a row read was added again")
             assertFalse(notified.put(NotifiedEntry.Row(9uL), NOW), "the row at the read frontier was added")

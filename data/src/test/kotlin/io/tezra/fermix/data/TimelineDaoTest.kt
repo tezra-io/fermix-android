@@ -181,7 +181,7 @@ class TimelineDaoTest {
         runTest {
             persist(1uL, "voice note")
             timeline.persist(TimelineRow.Reply(2uL, "turn-1", "draft answer", truncated = false, route = null))
-            val store = RoomSessionStore(database)
+            val store = RoomSessionStore(database, scratchStaging())
             store.applyMutations(listOf(MutationRow(1uL, 1uL, content = "the transcript says umbrella")), 1uL)
             timeline.persist(TimelineRow.Message(HistoryMessage(2uL, "assistant", "final answer", TS, emptyList())))
             assertEquals(listOf(1uL), timeline.search("umbrella", 10).map { it.serverSeq })

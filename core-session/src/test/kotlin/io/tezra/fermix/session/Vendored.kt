@@ -16,6 +16,7 @@ import java.util.Base64
 private const val SERVER_EVENTS = "/fixtures/server_events.jsonl"
 private const val SERVER_BINARY_FRAMES = "/fixtures/server_binary_frames.jsonl"
 private const val CLIENT_EVENTS = "/fixtures/client_events.jsonl"
+private const val CLIENT_BINARY_FRAMES = "/fixtures/client_binary_frames.jsonl"
 
 private fun vendoredLines(path: String): List<String> {
     val stream = checkNotNull(ClientFrame::class.java.getResourceAsStream(path)) { "$path is not on the classpath" }
@@ -55,6 +56,14 @@ internal fun vendoredClient(
     t: String,
     nth: Int = 1,
 ): ClientEvent = clientFrame(Frame(linesOf(CLIENT_EVENTS, t)[nth - 1].encodeToByteArray(), ByteArray(0)).encode()).event
+
+/** The `t` [t] line of client_binary_frames.jsonl as the daemon reads it: its model and its raw tail. */
+internal fun vendoredClientBinary(t: String): Pair<ClientEvent, ByteArray> {
+    val json = Json.parseToJsonElement(linesOf(CLIENT_BINARY_FRAMES, t).first()).jsonObject
+    val header = json.getValue("header").toString().encodeToByteArray()
+    val raw = Base64.getDecoder().decode(json.getValue("bytes_b64").jsonPrimitive.content)
+    return clientFrame(Frame(header, raw).encode()).event to raw
+}
 
 /** The vendored `error` of [code]. */
 internal fun vendoredError(code: String): ServerEvent.Error =

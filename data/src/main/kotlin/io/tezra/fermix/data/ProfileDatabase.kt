@@ -42,6 +42,8 @@ abstract class ProfileDatabase : RoomDatabase() {
 
     internal abstract fun outbox(): OutboxDao
 
+    internal abstract fun uploads(): UploadsDao
+
     /**
      * The outbox, in the order it was enqueued, again on every change: the queued and failed bubbles of design
      * section 13.6, which outlive a relaunch as the outbox does.

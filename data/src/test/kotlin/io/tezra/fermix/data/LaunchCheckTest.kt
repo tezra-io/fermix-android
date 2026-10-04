@@ -1,5 +1,9 @@
 package io.tezra.fermix.data
 
+import io.tezra.fermix.protocol.AttachKind
+import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.session.OutboxAttachment
+import io.tezra.fermix.session.OutboxItem
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -141,6 +145,25 @@ class LaunchCheckTest {
             assertFalse(File(root, orphan.id).exists(), "the orphaned files are still there")
             assertTrue(File(root, kept.id).isDirectory, "the recorded instance's files are gone")
             assertTrue(stranger.isDirectory, "a directory that names no instance was deleted")
+        }
+
+    @Test
+    fun `a staged upload its outbox no longer names is swept, and one an item names stays`() =
+        runTest {
+            val (store, databases) = open()
+            val kept = instance(gateway = 3, host = "linux-box")
+            store.upsert(kept)
+            val database = databases.open(kept.id, "main")
+            val staged = databases.stagedUploads(kept.id, "main")
+            val named = staged.stage(File(directory, "picked").apply { writeBytes(byteArrayOf(1)) }, "a1")
+            val orphan = staged.stage(File(directory, "left").apply { writeBytes(byteArrayOf(2)) }, "a2")
+            val photo = OutboxAttachment("a1", AttachKind.IMAGE, "image/jpeg", 1L, "cd".repeat(32), null, named.path)
+            val request = ClientEvent.Msg("m1", "main", "", listOf("a1"))
+            RoomSessionStore(database, staged).enqueue(OutboxItem(request, attachments = listOf(photo)))
+
+            launchCheck(store) { true }
+            assertTrue(named.isFile, "a file the outbox names was swept")
+            assertFalse(orphan.exists(), "a file no item names is still there")
         }
 
     @Test

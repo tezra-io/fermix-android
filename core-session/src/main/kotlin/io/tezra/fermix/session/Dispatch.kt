@@ -115,16 +115,17 @@ internal class Dispatch(
     }
 
     /**
-     * A refusal: of a request the outbox holds, or of the fetch its ref names; one that is neither goes to the
+     * A refusal: of a request the outbox holds, of the fetch its ref names, or with an upload's code of the
+     * upload on its way, whose codes name nothing (PROTOCOL.md "Errors"); one that is none of them goes to the
      * app as it came. One naming neither a request nor a ref is never taken for a search's or a pull's (Asked):
-     * no code is one only they can get (PROTOCOL.md "Errors"), and `request_backlog_full` comes so for a `msg`.
+     * no code is one only they can get, and `request_backlog_full` comes so for a `msg`.
      */
     private suspend fun error(event: ServerEvent.Error) {
         core.log(DiagnosticKind.REFUSED, event.code)
         val clientMsgId = event.clientMsgId
         if (clientMsgId != null) return requests.failed(clientMsgId, event)
-        val fetch = event.ref != null && live.fetches.refused(event)
-        if (!fetch) core.emit(SessionEvent.Refused(event))
+        val taken = if (event.ref != null) live.fetches.refused(event) else live.uploads.refused(event)
+        if (!taken) core.emit(SessionEvent.Refused(event))
     }
 
     private suspend fun other(event: ServerEvent.Known) {

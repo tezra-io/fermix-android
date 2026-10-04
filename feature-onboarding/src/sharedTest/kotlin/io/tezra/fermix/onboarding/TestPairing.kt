@@ -22,6 +22,7 @@ import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionParts
 import io.tezra.fermix.session.SessionStore
 import io.tezra.fermix.session.StoredCursors
+import io.tezra.fermix.session.UploadMarks
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CoroutineScope
@@ -219,7 +220,7 @@ private object NoKey : StaticKey {
 }
 
 /** The store of a session that never connects: empty cursors and outbox, and no write. */
-private object NoStore : SessionStore, RowEdits by NoRowEdits {
+private object NoStore : SessionStore, RowEdits by NoRowEdits, UploadMarks by NoUploadMarks {
     override suspend fun cursors() = StoredCursors(0uL, 0uL, 0uL, 0uL, 0uL)
 
     override suspend fun setServerCursor(
@@ -253,6 +254,19 @@ private object NoStore : SessionStore, RowEdits by NoRowEdits {
     ) = error("the idle session never sends")
 }
 
+/** The upload marks of a session that never connects: none, since nothing goes. */
+private object NoUploadMarks : UploadMarks {
+    override suspend fun markUploaded(
+        clientMsgId: String,
+        attachId: String,
+    ) = error("the idle session never uploads")
+
+    override suspend fun setUploadStarts(
+        clientMsgId: String,
+        starts: Int,
+    ) = error("the idle session never uploads")
+}
+
 /** The row edits of a session that never connects: none, since nothing reaches it. */
 private object NoRowEdits : RowEdits {
     override suspend fun applyReaction(
@@ -264,4 +278,9 @@ private object NoRowEdits : RowEdits {
         serverSeq: ULong,
         card: LinkPreviewCard,
     ) = error("the idle session gets no link preview")
+
+    override suspend fun applyTranscript(
+        clientMsgId: String,
+        text: String,
+    ) = error("the idle session gets no transcript")
 }

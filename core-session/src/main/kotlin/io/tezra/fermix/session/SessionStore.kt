@@ -1,8 +1,22 @@
 package io.tezra.fermix.session
 
+import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
+
+/** The attachments one `msg` carries at most (design section 8.5, "Caps": at most 10 items per send). */
+const val MAX_ATTACHMENTS = 10
+
+/**
+ * The automatic restarts of one item's upload (design section 8.5, "Interrupted upload"): a disconnect cancels the
+ * daemon's partial upload, so each reconnect starts again from `attach_begin`, three times at most. An item whose
+ * upload started 1 + this many times and was cut again fails instead of starting once more.
+ */
+const val MAX_UPLOAD_RESTARTS = 3
+
+/** A SHA-256 as the phone names a blob: lowercase hex, which the media cache keys its files by too. */
+private val BLOB_DIGEST = Regex("[0-9a-f]{64}")
 
 /**
  * The cursors one (instance, profile) keeps across sessions: [lastServerSeq], the last row applied,
@@ -29,20 +43,63 @@ data class RequestFailure(
 )
 
 /**
+ * One attachment of an outbox `msg` (design section 8.5): what its `attach_begin` announces, and [source], the
+ * path of the local file whose bytes go up, which the app keeps until the item leaves the outbox. [uploaded] is
+ * set once the daemon holds the blob, its `present` after `attach_end` or at once for a digest it stored, and
+ * never cleared: an attachment uploaded is never announced again, since its id names the blob for 48 hours
+ * (PROTOCOL.md "Attachments").
+ */
+data class OutboxAttachment(
+    val attachId: String,
+    val kind: AttachKind,
+    val mime: String,
+    val sizeBytes: Long,
+    val sha256: String,
+    val name: String?,
+    val source: String,
+    val uploaded: Boolean = false,
+) {
+    init {
+        require(attachId.isNotEmpty()) { "an attachment has an id" }
+        require(mime.isNotEmpty()) { "$attachId has a media type" }
+        require(sizeBytes >= 0) { "$attachId is $sizeBytes bytes" }
+        require(BLOB_DIGEST.matches(sha256)) { "$attachId's digest is not a SHA-256 in lowercase hex" }
+        require(name == null || name.isNotEmpty()) { "$attachId's name is empty" }
+        require(source.isNotEmpty()) { "$attachId has a local source" }
+    }
+}
+
+/**
  * A `msg` or `command` the phone has persisted and not yet seen accepted (design section 13.6). One
  * with a [failure] stays for the UI and is never sent again: running it again is a new request with
  * a new client_msg_id and `retry_of` (design section 7, the `msg.retry_of?` row). [written] is set
  * before its frame first goes to a socket and never cleared: until then the owner may still edit or
  * remove it, and after it the daemon may have it (design section 13.6, "Queued and pending messages").
+ *
+ * A `msg` may carry [attachments], in the order of its `attach_ids`, which go up before it does; one with none
+ * may still name blobs the daemon holds, as a run again of a `msg` that was accepted does. [uploadStarts] counts
+ * how many connections began uploading them, persisted with the item: the first start and then at most
+ * [MAX_UPLOAD_RESTARTS] restarts (design section 8.5, "Interrupted upload").
  */
 data class OutboxItem(
     val request: ClientEvent,
     val failure: RequestFailure? = null,
     val written: Boolean = false,
+    val attachments: List<OutboxAttachment> = emptyList(),
+    val uploadStarts: Int = 0,
 ) {
     init {
         require(request is ClientEvent.Msg || request is ClientEvent.Command) { "only a msg or a command is outboxed" }
+        val named = (request as? ClientEvent.Msg)?.attachIds
+        require(attachments.isEmpty() || attachments.map { it.attachId } == named) {
+            "an item's attachments are its msg's attach_ids, in order"
+        }
+        require(attachments.size <= MAX_ATTACHMENTS) { "${attachments.size} attachments is past $MAX_ATTACHMENTS" }
+        require(uploadStarts in 0..1 + MAX_UPLOAD_RESTARTS) { "an upload started $uploadStarts times" }
     }
+
+    /** Whether an attachment of it is still to go up: its `msg` waits for that. */
+    val uploading: Boolean get() = attachments.any { !it.uploaded }
 
     val clientMsgId: String
         get() =
@@ -76,6 +133,39 @@ interface RowEdits {
         serverSeq: ULong,
         card: LinkPreviewCard,
     ): Boolean
+
+    /**
+     * A `transcript` of the owner's voice note [clientMsgId]: the cached row's content becomes [text], as the
+     * mutation that persists it will make it (design section 7, the `transcript` row, which bumps `mutation_seq`).
+     */
+    suspend fun applyTranscript(
+        clientMsgId: String,
+        text: String,
+    ): Boolean
+}
+
+/**
+ * What an upload writes on its outbox item (Uploads), each one write: kept with the store (SessionStore), which
+ * holds the item.
+ */
+interface UploadMarks {
+    /**
+     * Marks [attachId] of [clientMsgId]'s item uploaded, once the daemon said `present`; false when the outbox no
+     * longer holds the item, removed meanwhile.
+     */
+    suspend fun markUploaded(
+        clientMsgId: String,
+        attachId: String,
+    ): Boolean
+
+    /**
+     * Records that [clientMsgId]'s upload starts for the [starts]th time, before its first `attach_begin` on a
+     * connection; false when the outbox no longer holds the item, and then nothing goes.
+     */
+    suspend fun setUploadStarts(
+        clientMsgId: String,
+        starts: Int,
+    ): Boolean
 }
 
 /**
@@ -84,9 +174,11 @@ interface RowEdits {
  * store: the data layer opens at most one [Session] per (instance, profile), since two would race,
  * resend the same outbox and announce the same rows. The session calls it from its own dispatcher,
  * and an exception from it fails the session: its state is lost data otherwise. The edits a live event
- * makes to a cached row are its [RowEdits].
+ * makes to a cached row are its [RowEdits], and an upload's marks on its item its [UploadMarks].
  */
-interface SessionStore : RowEdits {
+interface SessionStore :
+    RowEdits,
+    UploadMarks {
     suspend fun cursors(): StoredCursors
 
     /**

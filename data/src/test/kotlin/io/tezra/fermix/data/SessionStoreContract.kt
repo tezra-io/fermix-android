@@ -1,11 +1,13 @@
 package io.tezra.fermix.data
 
+import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MediaRef
 import io.tezra.fermix.protocol.MutationRow
 import io.tezra.fermix.session.APPROVAL_ANSWER_PREFIX
+import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.RequestFailure
 import io.tezra.fermix.session.SessionStore
@@ -247,6 +249,32 @@ abstract class SessionStoreContract {
             assertFalse(store.addLinkPreview(9uL, example), "a row the cache does not hold")
         }
 
+    @Test
+    fun `an item keeps its attachments in order, each marked uploaded in place, and its upload starts`() =
+        runTest {
+            val photo = attachment("a1")
+            val note = attachment("a2").copy(kind = AttachKind.AUDIO, mime = "audio/ogg", name = null)
+            val request = ClientEvent.Msg("m1", PROFILE, "", listOf("a1", "a2"))
+            store.enqueue(OutboxItem(request, attachments = listOf(photo, note)))
+            assertTrue(store.setUploadStarts("m1", 2))
+            assertTrue(store.markUploaded("m1", "a2"))
+            val expected =
+                OutboxItem(request, attachments = listOf(photo, note.copy(uploaded = true)), uploadStarts = 2)
+            assertEquals(listOf(expected), store.outbox())
+            assertFalse(store.markUploaded("m9", "a1"), "an item the outbox does not hold")
+            assertFalse(store.setUploadStarts("m9", 1), "an item the outbox does not hold")
+        }
+
+    @Test
+    fun `a transcript becomes the owner's row's content, and lands nowhere else`() =
+        runTest {
+            val note = message(6uL, "user", "").copy(clientMsgId = "v-6", mediaRefs = listOf(VOICE))
+            persist(TimelineRow.Message(note))
+            assertTrue(store.applyTranscript("v-6", "Check the backup tonight"))
+            assertEquals(TimelineRow.Message(note.copy(content = "Check the backup tonight")), cached(6uL))
+            assertFalse(store.applyTranscript("v-9", "nothing"), "a row the cache does not hold")
+        }
+
     protected companion object {
         const val PROFILE = "main"
         val VOICE = MediaRef("media-1", "audio", "audio/ogg", 4_096L, sha256 = "ab".repeat(32))
@@ -254,6 +282,17 @@ abstract class SessionStoreContract {
         val REACTED = buildJsonObject { put("reaction", buildJsonObject { put("emoji", "👍") }) }
 
         fun msg(id: String) = ClientEvent.Msg(id, PROFILE, "hello from $id", emptyList())
+
+        fun attachment(attachId: String) =
+            OutboxAttachment(
+                attachId,
+                AttachKind.IMAGE,
+                "image/jpeg",
+                5L,
+                "cd".repeat(32),
+                "photo.jpg",
+                "/staged/$attachId",
+            )
 
         fun message(
             seq: ULong,

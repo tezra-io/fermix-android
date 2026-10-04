@@ -43,6 +43,13 @@ internal sealed interface Ending {
     /** The keepalive's bound on one connection's life ran out; the daemon closes far sooner, at an hour. */
     data object LifetimeReached : Ending
 
+    /**
+     * An upload went 30 s with no answer, or the socket did not drain: the next connection starts it again, a
+     * restart counted, as after any cut (design section 8.5), and the daemon drops its partial upload and its slot
+     * with this one (onboarding gotcha 17). Kept alive, the connection would hold every later `msg` behind it.
+     */
+    data object UploadStalled : Ending
+
     /** `error{code:"unsupported_protocol_version"}`, or a `hello_ack` whose window leaves out protocol v2. */
     data class Refused(
         val direction: VersionDirection,
@@ -74,7 +81,7 @@ internal fun nextAfter(ending: Ending): Next =
             Next.Backoff
         }
 
-        Ending.KeepaliveLost, Ending.NetworkChanged, Ending.LifetimeReached -> {
+        Ending.KeepaliveLost, Ending.NetworkChanged, Ending.LifetimeReached, Ending.UploadStalled -> {
             Next.ReconnectNow
         }
 

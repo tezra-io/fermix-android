@@ -43,8 +43,9 @@ private const val SELECTED_ALPHA = 0.12f
 /**
  * A message of the chat (design sections 13.1 and 13.5): the owner's in an accent bubble at the end of the
  * column, at most 78 % wide; the agent's as its parts (segmentsOf), prose in bubbles at most 88 % wide and its
- * fences and tables as cards grouped under them. A long-press opens the message's menu; a tap opens a queued,
- * pending or refused item's own, or selects while the chat is selecting.
+ * fences and tables as cards grouped under them; one with blobs as its images, documents and voice note
+ * (MediaMessage). A long-press opens the message's menu; a tap opens a queued, pending or refused item's own, or
+ * selects while the chat is selecting.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -65,9 +66,10 @@ internal fun MessageItem(
         )
     Box(modifier = modifier.fillMaxWidth().background(wash)) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            when (message.sender) {
-                Sender.User -> UserMessage(message, context, gestures)
-                Sender.Agent -> AgentMessage(item, context, gestures)
+            when {
+                message.media.isNotEmpty() -> MediaMessage(item, context, gestures)
+                message.sender == Sender.User -> UserMessage(message, context, gestures)
+                else -> AgentMessage(item, context, gestures)
             }
             LinkPreviews(message.previews, message.sender, context)
         }

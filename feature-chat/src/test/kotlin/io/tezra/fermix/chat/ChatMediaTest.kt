@@ -1,12 +1,15 @@
 package io.tezra.fermix.chat
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -81,6 +84,18 @@ private class AfterFirstBlock(
     }
 }
 
+/** The chat's blobs over [session] and [store], its scratch files from [scratch], its log [log]. */
+private fun TestScope.blobsOf(
+    session: FakeChatSession,
+    store: FakeChatStore,
+    scratch: () -> File,
+    log: FakeLog,
+    io: CoroutineDispatcher = Dispatchers.IO,
+): ChatBlobs {
+    val parts = fakeParts(sample(), session, store, backgroundScope).copy(scratch = scratch, log = log.log, io = io)
+    return ChatBlobs(MutableStateFlow(session), parts)
+}
+
 /** Every class file at [location], a classes directory or a jar, by its name, with its bytes. */
 private fun classFiles(location: File): List<Pair<String, ByteArray>> {
     if (location.isDirectory) {
@@ -120,7 +135,7 @@ class ChatMediaTest {
             val scratches = mutableListOf<File>()
             val log = FakeLog()
             val scratch = { File.createTempFile("fetch", null, dir).also { scratches += it } }
-            val thumbnails = ChatThumbnails(MutableStateFlow(session), store, scratch, log.log)
+            val thumbnails = blobsOf(session, store, scratch, log)
             assertArrayEquals(BYTES, thumbnails.thumbnail(THUMB))
             assertArrayEquals(BYTES, thumbnails.thumbnail(THUMB))
             assertEquals(listOf(THUMB), session.fetched.value, "the cached one was fetched again")
@@ -134,8 +149,7 @@ class ChatMediaTest {
             val upper = "CD".repeat(32)
             val session = FakeChatSession(store).apply { blobs = mapOf(upper to BYTES) }
             val log = FakeLog()
-            val thumbnails =
-                ChatThumbnails(MutableStateFlow(session), store, { File.createTempFile("fetch", null, dir) }, log.log)
+            val thumbnails = blobsOf(session, store, { File.createTempFile("fetch", null, dir) }, log)
             assertNull(thumbnails.thumbnail(upper))
             assertNull(thumbnails.thumbnail("not-a-digest"))
             assertTrue(session.fetched.value.isEmpty(), "a ref the cache cannot name was fetched")
@@ -152,7 +166,7 @@ class ChatMediaTest {
             // The fetch's first block on its io dispatcher makes the scratch file.
             val io = AfterFirstBlock(StandardTestDispatcher(testScheduler)) { checkNotNull(asking).cancel() }
             val scratch = { File.createTempFile("fetch", null, dir).also { scratches += it } }
-            val thumbnails = ChatThumbnails(MutableStateFlow(session), store, scratch, FakeLog().log, io)
+            val thumbnails = blobsOf(session, store, scratch, FakeLog(), io)
             asking = launch { thumbnails.thumbnail(THUMB) }
             checkNotNull(asking).join()
             assertEquals(1, scratches.size, "no scratch file was made")
@@ -168,23 +182,95 @@ class ChatMediaTest {
             val scratches = mutableListOf<File>()
             val log = FakeLog()
             val thumbnails =
-                ChatThumbnails(MutableStateFlow(session), store, {
-                    File.createTempFile("fetch", null, dir).also {
-                        scratches +=
-                            it
-                    }
-                }, log.log)
+                blobsOf(session, store, { File.createTempFile("fetch", null, dir).also { scratches += it } }, log)
             assertNull(thumbnails.thumbnail(THUMB))
             session.connected.value = true
             assertNull(thumbnails.thumbnail(THUMB))
             assertTrue(scratches.none { it.exists() })
             assertEquals(
                 listOf(
-                    "Thumbnail $THUMB was not fetched: Offline",
-                    "Thumbnail $THUMB was not fetched: Refused(code=media_gone)",
+                    "Blob $THUMB was not fetched: Offline",
+                    "Blob $THUMB was not fetched: Refused(code=media_gone)",
                 ),
                 log.lines.value,
             )
+        }
+
+    @Test
+    fun `an image streams through the session with its placeholder colour from its first chunk, then is cached`() =
+        runTest {
+            val store = FakeChatStore()
+            val big = ByteArray(100_000) { it.toByte() }
+            val session = FakeChatSession(store).apply { blobs = mapOf(THUMB to big) }
+            val parts =
+                fakeParts(sample(), session, store, backgroundScope)
+                    .copy(
+                        scratch = { File.createTempFile("fetch", null, dir) },
+                        io = StandardTestDispatcher(testScheduler),
+                    )
+            val pipeline = parts.media as FakePipeline
+            val blobs = ChatBlobs(MutableStateFlow(session), parts)
+            val image = ShownMedia(THUMB, THUMB, MediaShape.IMAGE, "image/png", big.size.toLong(), null)
+            assertArrayEquals(big, (blobs.bytes(image) as Blob.Bytes).bytes)
+            assertEquals(listOf(61_440), pipeline.shaded.value, "the placeholder did not decode the first chunk alone")
+            assertEquals(mapOf(THUMB to FakePipeline.PLACEHOLDER), blobs.colours.value)
+            assertArrayEquals(big, (blobs.bytes(image) as Blob.Bytes).bytes)
+            assertEquals(listOf(THUMB), session.fetched.value)
+        }
+
+    @Test
+    fun `two asks for one blob at once fetch it once, the second finding it cached`() =
+        runTest {
+            val store = FakeChatStore()
+            val session = FakeChatSession(store).apply { blobs = mapOf(THUMB to BYTES) }
+            val parts =
+                fakeParts(sample(), session, store, backgroundScope)
+                    .copy(
+                        scratch = { File.createTempFile("fetch", null, dir) },
+                        io = StandardTestDispatcher(testScheduler),
+                    )
+            val blobs = ChatBlobs(MutableStateFlow(session), parts)
+            val image = ShownMedia(THUMB, THUMB, MediaShape.IMAGE, "image/png", BYTES.size.toLong(), null)
+            val first = async { blobs.bytes(image) }
+            val second = async { blobs.bytes(image) }
+            assertArrayEquals(BYTES, (first.await() as Blob.Bytes).bytes)
+            assertArrayEquals(BYTES, (second.await() as Blob.Bytes).bytes)
+            assertEquals(listOf(THUMB), session.fetched.value, "the second ask fetched it again")
+        }
+
+    @Test
+    fun `a blob its row names by its ref alone, as the vendored row does, is fetched once, then read from the cache`() =
+        runTest {
+            val store = FakeChatStore()
+            val session = FakeChatSession(store).apply { blobs = mapOf(THUMB to BYTES) }
+            val blobs = blobsOf(session, store, { File.createTempFile("fetch", null, dir) }, FakeLog())
+            // A media_refs entry's sha256 is optional (PROTOCOL.md "Timeline shapes"); its ref is the blob's digest.
+            val image = ShownMedia(THUMB, null, MediaShape.IMAGE, "image/png", BYTES.size.toLong(), null)
+            assertArrayEquals(BYTES, (blobs.bytes(image) as Blob.Bytes).bytes)
+            assertArrayEquals(BYTES, (blobs.bytes(image) as Blob.Bytes).bytes)
+            val copy = File(dir, "copy")
+            assertEquals(copy, (blobs.file(image, copy) as Blob.InFile).file)
+            assertArrayEquals(BYTES, copy.readBytes())
+            assertEquals(listOf(THUMB), session.fetched.value)
+        }
+
+    @Test
+    fun `a blob the daemon no longer holds is gone, one offline is missing, and an outbox item's reads its file`() =
+        runTest {
+            val store = FakeChatStore()
+            val session = FakeChatSession(store)
+            val blobs = blobsOf(session, store, { File.createTempFile("fetch", null, dir) }, FakeLog())
+            val image = ShownMedia(THUMB, THUMB, MediaShape.IMAGE, "image/png", 4L, null)
+            assertEquals(Blob.Gone, blobs.bytes(image))
+            assertEquals(Blob.Gone, blobs.file(image, File(dir, "out")))
+            session.connected.value = false
+            assertEquals(Blob.Missing, blobs.bytes(image))
+            val staged = File(dir, "staged").apply { writeBytes(BYTES) }
+            val local = image.copy(local = staged.path)
+            assertArrayEquals(BYTES, (blobs.bytes(local) as Blob.Bytes).bytes)
+            val copy = File(dir, "copy")
+            assertEquals(copy, (blobs.file(local, copy) as Blob.InFile).file)
+            assertArrayEquals(BYTES, copy.readBytes())
         }
 
     @Test

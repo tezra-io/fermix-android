@@ -33,6 +33,12 @@ internal class SessionCore(
     val lastSuccessful = MutableStateFlow<Candidate?>(null)
     var live: Live? = null
 
+    /** Each attachment's upload by its `attach_id`, across connections, until its item leaves the outbox (Uploads). */
+    val uploads = MutableStateFlow<Map<String, UploadProgress>>(emptyMap())
+
+    /** Whether the connection that is up has an item's upload under way or queued (Uploads). */
+    val uploading = MutableStateFlow(false)
+
     /** The watch on the session's scope, which ends the session with it; let go once the session ends. */
     var scopeWatch: DisposableHandle? = null
 
@@ -92,7 +98,7 @@ internal class SessionCore(
         // Every outbox item is offered again, in order, to the connection that is up: those that waited go.
         val connection = live
         if (wasLive && !book.anyLive && connection != null) {
-            for (item in parts.store.outbox()) connection.offer(item)
+            connection.offer(parts.store.outbox())
         }
     }
 

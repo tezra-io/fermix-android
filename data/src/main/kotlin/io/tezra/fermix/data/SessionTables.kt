@@ -3,6 +3,8 @@ package io.tezra.fermix.data
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
@@ -34,7 +36,9 @@ internal data class CursorsEntity(
 /**
  * core-session's OutboxItem, keyed by its `client_msg_id`, in the order it was enqueued: [position] is one
  * past the largest the outbox holds. [request] is the `msg` or `command` as core-protocol's model writes it,
- * a failed item has its failure's code and message, and [written] says its frame went to a socket once.
+ * a failed item has its failure's code and message, and [written] says its frame went to a socket once. A
+ * `msg`'s [attachments] are a JSON list of StoredAttachment, `[]` for none, and [uploadStarts] counts the
+ * connections that began uploading them.
  */
 @Entity(tableName = "outbox")
 internal data class OutboxEntity(
@@ -44,6 +48,8 @@ internal data class OutboxEntity(
     @ColumnInfo(name = "failure_code") val failureCode: String?,
     @ColumnInfo(name = "failure_message") val failureMessage: String?,
     @ColumnInfo(name = "written") val written: Boolean,
+    @ColumnInfo(name = "attachments") val attachments: String,
+    @ColumnInfo(name = "upload_starts") val uploadStarts: Int,
 )
 
 /** The cursors and the writes that change the cache and a cursor together, each in one transaction. */
@@ -117,6 +123,16 @@ internal interface RowEditsDao {
         return update(held.withReaction(emoji).toEntity()) == 1
     }
 
+    /** The owner's row [clientMsgId] with [text] as its content, its transcript; false when not cached. */
+    @Transaction
+    suspend fun applyTranscript(
+        clientMsgId: String,
+        text: String,
+    ): Boolean {
+        val held = ownersEntity(clientMsgId)?.toRow() as? TimelineRow.Message ?: return false
+        return update(TimelineRow.Message(held.message.copy(content = text)).toEntity()) == 1
+    }
+
     /** Row [serverSeq] with [card] among its link previews (withLinkPreview); false when not cached. */
     @Transaction
     suspend fun addLinkPreview(
@@ -146,18 +162,15 @@ internal interface OutboxDao {
     @Query("SELECT * FROM outbox ORDER BY position")
     fun observed(): Flow<List<OutboxEntity>>
 
-    @Query(
-        "INSERT INTO outbox (client_msg_id, position, request, failure_code, failure_message, written) " +
-            "SELECT :clientMsgId, COALESCE(MAX(position), 0) + 1, :request, :failureCode, :failureMessage, :written " +
-            "FROM outbox",
-    )
-    suspend fun enqueue(
-        clientMsgId: String,
-        request: String,
-        failureCode: String?,
-        failureMessage: String?,
-        written: Boolean,
-    )
+    /** [entity] last, one past the largest position the outbox holds, whatever position it carries. */
+    @Transaction
+    suspend fun enqueue(entity: OutboxEntity) = insert(entity.copy(position = nextPosition()))
+
+    @Query("SELECT COALESCE(MAX(position), 0) + 1 FROM outbox")
+    suspend fun nextPosition(): Long
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(entity: OutboxEntity)
 
     @Query("DELETE FROM outbox WHERE client_msg_id = :clientMsgId")
     suspend fun dequeue(clientMsgId: String)
@@ -173,6 +186,40 @@ internal interface OutboxDao {
         clientMsgId: String,
         code: String,
         message: String,
+    ): Int
+}
+
+/** What an upload writes on its outbox row (core-session's UploadMarks), and the staged files the rows name. */
+@Dao
+internal interface UploadsDao {
+    @Query("SELECT attachments FROM outbox WHERE client_msg_id = :clientMsgId")
+    suspend fun attachmentsOf(clientMsgId: String): String?
+
+    /** Every row's attachments column, for the staged files the outbox still names. */
+    @Query("SELECT attachments FROM outbox")
+    suspend fun attachments(): List<String>
+
+    /** [attachId] of [clientMsgId]'s item marked uploaded, in one transaction; false when the outbox lacks it. */
+    @Transaction
+    suspend fun markUploaded(
+        clientMsgId: String,
+        attachId: String,
+    ): Boolean {
+        val held = attachmentsOf(clientMsgId) ?: return false
+        val marked = decodeAttachments(held).map { it.copy(uploaded = it.uploaded || it.attachId == attachId) }
+        return setAttachments(clientMsgId, encodeAttachments(marked)) == 1
+    }
+
+    @Query("UPDATE outbox SET attachments = :attachments WHERE client_msg_id = :clientMsgId")
+    suspend fun setAttachments(
+        clientMsgId: String,
+        attachments: String,
+    ): Int
+
+    @Query("UPDATE outbox SET upload_starts = :starts WHERE client_msg_id = :clientMsgId")
+    suspend fun setUploadStarts(
+        clientMsgId: String,
+        starts: Int,
     ): Int
 }
 

@@ -7,6 +7,7 @@ import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabase
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.RoomSessionStore
+import io.tezra.fermix.data.stagedUploads
 import io.tezra.fermix.instance.TestOutcome
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.PairingLink
@@ -71,7 +72,7 @@ internal class AppSessions(
                 appVersion = appVersion(),
                 staticKey = key,
                 dialer = WebSocketDialer(connector, instance.port, PinnedTrust(instance.tlsFingerprint())),
-                store = RoomSessionStore(database),
+                store = RoomSessionStore(database, databases.stagedUploads(instance.id, MAIN_PROFILE)),
                 announcer = announcer(instance.id, lazyOf(database)),
                 network = network,
             )
@@ -100,7 +101,7 @@ internal class AppSessions(
         return PairingParts(
             dialerFor = { port, pin -> WebSocketDialer(connector, port, PinnedTrust(pin)) },
             profileId = MAIN_PROFILE,
-            store = RoomSessionStore(database),
+            store = RoomSessionStore(database, databases.stagedUploads(instanceId, MAIN_PROFILE)),
             announcer = announcer(instanceId, database),
             network = network,
             keystore = keystore,

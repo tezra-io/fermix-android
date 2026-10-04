@@ -4,14 +4,17 @@
 
 # core-transport's network callbacks, behind the reachability facts of design section 5.2.
 android.permission.ACCESS_NETWORK_STATE
-# The scan's camera, onboarding's step 3 (design sections 12.1 and 13.3), asked for after its rationale;
-# no camera is a required feature, as the pasted link is the other way in.
+# The scan's camera, onboarding's step 3 (design sections 12.1 and 13.3), asked for after its rationale,
+# and the attach sheet's Camera (design section 8.5); no camera is a required feature, as the pasted
+# link is the other way in.
 android.permission.CAMERA
-# The pairing-wait notification's short foreground service (design section 12.5).
+# The short foreground services of design section 12.5: the pairing wait's and an upload's.
 android.permission.FOREGROUND_SERVICE
 # The WebSocket to a daemon (design section 5.1), core-transport's.
 android.permission.INTERNET
 # Onboarding's step 7 asks for it (design section 13.3), and the pairing wait posts with it.
 android.permission.POST_NOTIFICATIONS
+# The voice note, asked for on the first hold of the mic after its rationale (design section 8.5).
+android.permission.RECORD_AUDIO
 # The app lock's prompt, BIOMETRIC_STRONG | DEVICE_CREDENTIAL (design section 13.7).
 android.permission.USE_BIOMETRIC

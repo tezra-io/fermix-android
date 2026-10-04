@@ -20,6 +20,9 @@ interface Link {
     /** False when the link is closing and [closed] says why. */
     fun send(message: ByteArray): Boolean
 
+    /** Bytes sent and not yet written to the socket, which an upload paces itself by (Uploads). */
+    val queuedBytes: Long
+
     fun close(
         code: Int,
         reason: String,
@@ -47,6 +50,8 @@ private class ConnectionLink(
     override val closed: Deferred<TransportException> get() = connection.closed
 
     override fun send(message: ByteArray): Boolean = connection.send(message)
+
+    override val queuedBytes: Long get() = connection.queuedBytes
 
     override fun close(
         code: Int,

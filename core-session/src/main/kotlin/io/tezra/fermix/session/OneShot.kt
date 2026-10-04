@@ -97,12 +97,15 @@ suspend fun Session.pullModels(): OneShot<List<ModelEntry>> = calls.models()
  * chunks are written as they come, and at its end its size and SHA-256 are checked against its `media_begin`
  * and `media_end`. A blob whose bytes do not match throws [MediaMismatchException]; on that and on every other
  * way it ends unanswered the file is deleted. Asked as [search] is; 30 s without a frame of it, or of a blob
- * the daemon serves before it, is [OneShot.TimedOut].
+ * the daemon serves before it, is [OneShot.TimedOut]. [firstChunk] is handed a copy of the blob's first chunk as
+ * it comes, in the caller's coroutine: an image's bubble paints its dominant colour from it while the rest
+ * streams (design section 13.5), since the wire carries no colour of its own.
  */
 suspend fun Session.fetchMedia(
     ref: String,
     into: File,
-): OneShot<FetchedMedia> = calls.fetch(ref, into)
+    firstChunk: (ByteArray) -> Unit = {},
+): OneShot<FetchedMedia> = calls.fetch(ref, into, firstChunk)
 
 /**
  * The owner's answer to the approval card [approvalId] (PROTOCOL.md "Approvals"): its approve or deny route
@@ -144,9 +147,10 @@ internal class OneShotCalls(
     suspend fun fetch(
         ref: String,
         into: File,
+        firstChunk: (ByteArray) -> Unit,
     ): OneShot<FetchedMedia> {
         require(ref.isNotEmpty()) { "a fetch names its blob" }
-        return asking({ it.fetches.fetch(ref) }) { waiter -> blob(waiter, into) }
+        return asking({ it.fetches.fetch(ref) }) { waiter -> blob(waiter, into, firstChunk) }
     }
 
     suspend fun answer(
@@ -225,12 +229,13 @@ internal class OneShotCalls(
     private suspend fun blob(
         waiter: Waiter,
         into: File,
+        firstChunk: (ByteArray) -> Unit,
     ): OneShot<FetchedMedia> {
         var out: OutputStream? = null
         var outcome: OneShot<FetchedMedia>? = null
         try {
             withContext(io) { out = FileOutputStream(into) }
-            val write = BlobWrite(checkNotNull(out), io)
+            val write = BlobWrite(checkNotNull(out), io, firstChunk)
             var replies = 0
             while (outcome == null && replies < MAX_FETCH_REPLIES) {
                 outcome = write.take(next(waiter))
@@ -280,12 +285,13 @@ private fun ended(reply: Reply?): OneShot<Nothing>? =
     }
 
 /**
- * One blob as it comes, into [out] on [io]: its `media_begin`, its chunks hashed as they are written, and at
- * its `media_end` its size and digest held to what both said.
+ * One blob as it comes, into [out] on [io]: its `media_begin`, its chunks hashed as they are written, the first
+ * one handed to [firstChunk] too, and at its `media_end` its size and digest held to what both said.
  */
 private class BlobWrite(
     private val out: OutputStream,
     private val io: CoroutineDispatcher,
+    private val firstChunk: (ByteArray) -> Unit,
 ) {
     private val digest = MessageDigest.getInstance("SHA-256")
     private var begin: ServerEvent.MediaBegin? = null
@@ -312,6 +318,7 @@ private class BlobWrite(
         }
 
     private suspend fun write(raw: ByteArray) {
+        if (written == 0L && raw.isNotEmpty()) firstChunk(raw.copyOf())
         digest.update(raw)
         written += raw.size
         withContext(io) { out.write(raw) }

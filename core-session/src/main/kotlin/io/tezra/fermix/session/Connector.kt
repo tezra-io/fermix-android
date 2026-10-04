@@ -6,6 +6,8 @@ import io.tezra.fermix.transport.CandidateRacer
 import io.tezra.fermix.transport.RaceResult
 import io.tezra.fermix.transport.TransportException
 import io.tezra.fermix.transport.candidateOrder
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /** The reason the daemon's hourly `1000` close carries (PROTOCOL.md "Close codes"). */
 internal const val LIFETIME_REASON = "Noise session lifetime reached"
@@ -122,6 +124,9 @@ internal class Connector(
                 // A one-shot waits on this connection alone: its caller hears that it ended.
                 live.asked.interrupt()
                 live.fetches.interrupt()
+                // The daemon drops a partial upload with its connection (onboarding gotcha 17); an item whose last
+                // restart it cut fails in the store, which a closing session still writes.
+                withContext(NonCancellable) { live.uploads.interrupt() }
             }
         return ended(candidate, link, ending, upMs = core.now() - upAt)
     }

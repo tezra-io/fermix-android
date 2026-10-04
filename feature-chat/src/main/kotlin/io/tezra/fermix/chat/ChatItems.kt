@@ -5,6 +5,7 @@ import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.Route
+import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.TurnOutcome
 import java.time.LocalDate
@@ -22,7 +23,9 @@ enum class Delivery { NONE, SENDING, DELIVERED, QUEUED, PENDING, FAILED }
  * the replaced snapshots of a live bubble (LiveBubble). [job] is the scheduled job a delivery wears. [seq],
  * [clientMsgId], [turnId] and [route] are Info's; [request] is the outbox's for Edit, Remove and a retry, and
  * [editable] says its frame was never written to a socket. [reaction] is the daemon's emoji on the owner's
- * message, and [previews] the link previews under it, at most two (design section 13.5).
+ * message, and [previews] the link previews under it, at most two (design section 13.5). [media] are its blobs,
+ * its [text] their one caption; an outbox item's [attachments] go again with a retry, its [uploadLine] says how
+ * its upload stands, and [transcribing] that the owner's voice note waits for its `transcript` (section 8.5).
  */
 data class ShownMessage(
     val sender: Sender,
@@ -42,6 +45,10 @@ data class ShownMessage(
     val editable: Boolean = false,
     val reaction: String? = null,
     val previews: List<LinkPreviewCard> = emptyList(),
+    val media: List<ShownMedia> = emptyList(),
+    val attachments: List<OutboxAttachment> = emptyList(),
+    val uploadLine: UploadLine? = null,
+    val transcribing: Boolean = false,
 )
 
 /** An error card's sentence (design section 13.9, by `turn_error` code). */
@@ -53,7 +60,8 @@ enum class ErrorAction { RETRY_SENDING, RUN_AGAIN, RESET_TO_DEFAULT, NONE }
 /**
  * An error card: its [line] and [action], on the user's side for a request that never got `accepted` and on
  * the agent's for a turn that ran and failed. [request] is what "Retry sending" or "Run again" sends again,
- * when the chat still holds it, and neither shows without it; [code] is the daemon's word, for Info.
+ * when the chat still holds it, and neither shows without it, with the [attachments] a refused `msg` held;
+ * [code] is the daemon's word, for Info.
  */
 data class ShownError(
     val line: ErrorLine,
@@ -61,6 +69,7 @@ data class ShownError(
     val side: Sender,
     val code: String,
     val request: ClientEvent?,
+    val attachments: List<OutboxAttachment> = emptyList(),
 ) {
     init {
         val resends = action == ErrorAction.RETRY_SENDING || action == ErrorAction.RUN_AGAIN
@@ -170,6 +179,7 @@ fun notSentError(item: OutboxItem): ShownError =
         Sender.User,
         checkNotNull(item.failure) { "${item.clientMsgId} has not failed" }.code,
         item.request,
+        item.attachments,
     )
 
 /** The `turn_error` codes the design words on their own (design section 13.9); every other is the generic line. */

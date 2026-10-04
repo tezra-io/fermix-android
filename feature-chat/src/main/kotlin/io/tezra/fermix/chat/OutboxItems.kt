@@ -1,6 +1,7 @@
 package io.tezra.fermix.chat
 
 import io.tezra.fermix.design.Sender
+import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.TimelineRow
@@ -22,7 +23,7 @@ internal fun outboxItems(inputs: ChatInputs): List<ChatItem> {
                 turnRuns -> Delivery.QUEUED
                 else -> Delivery.SENDING
             }
-        val message = ChatItem.Message(outboxKey(item.clientMsgId), outboxMessage(item, delivery))
+        val message = ChatItem.Message(outboxKey(item.clientMsgId), outboxMessage(item, delivery, inputs))
         val notSent = item.failure?.let { ChatItem.Error("refused:${item.clientMsgId}", notSentError(item)) }
         listOfNotNull(message, notSent)
     }
@@ -45,10 +46,15 @@ fun isQuietRow(row: TimelineRow): Boolean {
     return isApprovalAnswer(id) || isModelPick(id)
 }
 
-/** An outbox item's bubble: its words, [delivery], and Edit and Remove while its frame was never written. */
+/**
+ * An outbox item's bubble: its words, [delivery], Edit and Remove while its frame was never written (Edit returns
+ * its attachments to the tray too, design section 13.6), its attachments with their upload as [inputs] say it
+ * stands, and a voice note's "Transcribing…" while the daemon transcribes notes.
+ */
 internal fun outboxMessage(
     item: OutboxItem,
     delivery: Delivery,
+    inputs: ChatInputs,
 ): ShownMessage =
     ShownMessage(
         sender = Sender.User,
@@ -58,6 +64,10 @@ internal fun outboxMessage(
         clientMsgId = item.clientMsgId,
         request = item.request,
         editable = !item.written && item.failure == null,
+        media = outboxMedia(item, inputs.uploads),
+        attachments = item.attachments,
+        uploadLine = uploadLineOf(item, inputs.uploads, inputs.connected),
+        transcribing = inputs.transcripts && item.attachments.any { it.kind == AttachKind.AUDIO },
     )
 
 /** The words a request carries: a message's text, or a command as the owner would type it. */

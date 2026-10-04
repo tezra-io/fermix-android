@@ -86,7 +86,7 @@ class ProfileDatabasesTest {
     fun `a store given its database to open makes no file until its first call`() =
         runTest {
             val databases = ProfileDatabases(TestContext, directory)
-            val store = RoomSessionStore(lazy { databases.open(instanceId, "main") })
+            val store = RoomSessionStore(lazy { databases.open(instanceId, "main") }, scratchStaging())
             assertFalse(File(directory, instanceId).exists(), "the store made the instance's folder")
             assertEquals(StoredCursors(0uL, 0uL, 0uL, 0uL, 0uL), store.cursors())
             assertTrue(File(directory, instanceId).isDirectory)
@@ -96,7 +96,7 @@ class ProfileDatabasesTest {
     fun `a database opened again after a restart holds its cursors, outbox, cache and notified set`() =
         runTest {
             val before = ProfileDatabases(TestContext, directory).open(instanceId, "main")
-            val store = RoomSessionStore(before)
+            val store = RoomSessionStore(before, scratchStaging())
             store.setServerCursor(5uL, announcedUpToSeq = 4uL, lastUnannouncedSeq = 5uL)
             store.setReadFrontier(3uL)
             store.applyMutations(emptyList(), 9uL)
@@ -106,7 +106,7 @@ class ProfileDatabasesTest {
             before.close()
 
             val after = ProfileDatabases(TestContext, directory).open(instanceId, "main")
-            val reopened = RoomSessionStore(after)
+            val reopened = RoomSessionStore(after, scratchStaging())
             assertEquals(StoredCursors(5uL, 3uL, 9uL, 4uL, 5uL), reopened.cursors())
             assertEquals(listOf(OutboxItem(MSG)), reopened.outbox())
             assertEquals(row("kept"), after.timeline().row(1uL))

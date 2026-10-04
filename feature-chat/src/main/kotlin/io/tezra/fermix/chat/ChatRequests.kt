@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.CommandDescriptor
+import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,13 +32,22 @@ class ChatRequests(
     val sent: StateFlow<Map<String, ClientEvent>> = sentRequests.asStateFlow()
     val withdrawn: StateFlow<Set<String>> = withdrawnIds.asStateFlow()
 
-    /** Sends [request]: whether the session took it, none taking it while the chat has no session. */
-    suspend fun send(request: ClientEvent): Boolean {
+    /**
+     * Sends [request], with the [attachments] its `msg` uploads first: whether the session took it, none taking it
+     * while the chat has no session.
+     */
+    suspend fun send(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment> = emptyList(),
+    ): Boolean {
         val chat = session.value ?: return false
-        val taken = chat.send(request)
+        val taken = chat.send(request, attachments)
         if (taken) remember(request)
         return taken
     }
+
+    /** Whether the chat has a session to take a request now; [send] refuses one while it has none. */
+    fun hasSession(): Boolean = session.value != null
 
     /** The request the composer's [words] make, by the daemon's [commands] (requestOf); none for blank words. */
     fun of(
@@ -86,13 +96,19 @@ class ChatRequests(
      * keeps the id, for the daemon to deduplicate; PROTOCOL.md ("Delivery and failure behavior") answers a resend
      * of a failed request as a duplicate that never runs, so the request goes under a new id, for the owner to
      * settle (README). Nothing ran, so it names nothing in `retry_of`, which says a request deliberately runs
-     * again ("Run again", [retry]).
+     * again ("Run again", [retry]). A `msg` with [attachments] takes them with it, each under a new `attach_id`
+     * from `attach_begin`, whose `present` skips the bytes the daemon still holds: an id it let go of, which
+     * refused the item as `attachment_unavailable` (PROTOCOL.md "Attachments"), is never named again.
      */
-    fun resend(request: ClientEvent) {
+    fun resend(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment> = emptyList(),
+    ) {
         val refused = OutboxItem(request).clientMsgId
-        val again = renamed(request, idLike(refused, newId()))
+        val fresh = attachments.map { it.copy(attachId = newId(), uploaded = false) }
+        val again = renamed(request, idLike(refused, newId()), fresh)
         scope.launch {
-            val taken = whileWithdrawn(refused) { send(again) }
+            val taken = whileWithdrawn(refused) { send(again, fresh) }
             if (!taken) return@launch
             val removed = session.value?.remove(refused) == true
             if (!removed) {
@@ -146,16 +162,19 @@ private fun idLike(
     fresh: String,
 ): String = if (isModelPick(old)) "$MODEL_PICK_PREFIX$fresh" else fresh
 
-/** [request] as it was, under [id]. */
+/** [request] as it was, under [id], a `msg` naming [attachments] when it carries any. */
 private fun renamed(
     request: ClientEvent,
     id: String,
-): ClientEvent =
-    when (request) {
-        is ClientEvent.Msg -> request.copy(clientMsgId = id)
+    attachments: List<OutboxAttachment>,
+): ClientEvent {
+    val named = attachments.map { it.attachId }
+    return when (request) {
+        is ClientEvent.Msg -> request.copy(clientMsgId = id, attachIds = named.ifEmpty { request.attachIds })
         is ClientEvent.Command -> request.copy(clientMsgId = id)
         else -> error("only a msg or a command is sent again")
     }
+}
 
 /** [request] as Session.retry sends it again: under [id], a message naming [failed] in `retry_of`. */
 private fun retried(

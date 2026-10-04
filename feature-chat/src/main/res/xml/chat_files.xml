@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the chat's FileProvider serves: the copies under the cache's shared directory (MediaRoute), nothing else. -->
+<paths>
+    <cache-path
+        name="shared"
+        path="shared/" />
+</paths>

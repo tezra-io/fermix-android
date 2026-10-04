@@ -126,6 +126,16 @@ sealed interface SessionEvent {
     ) : SessionEvent
 
     /**
+     * The owner's voice note [clientMsgId] was transcribed (`transcript`): its row's content is [text] from now
+     * on; [stored] says the cached row took it, as the mutation feed will (design section 7, the `transcript` row).
+     */
+    data class Transcript(
+        val clientMsgId: String,
+        val text: String,
+        val stored: Boolean,
+    ) : SessionEvent
+
+    /**
      * The chat's model changed, on every device (`model_changed`): to an override, or back to the config's
      * default, with the daemon's [note] when it sent one.
      */
@@ -153,8 +163,8 @@ sealed interface SessionEvent {
 
     /**
      * A server event the session does not own, passed on as it came: `hello_ack` (caps, instance,
-     * profiles), notices, transcripts, attachment statuses, and a blob's frames no fetch of this session's
-     * asked for.
+     * profiles), notices, an attachment status no upload waits for, and a blob's frames no fetch of this
+     * session's asked for.
      */
     data class Server(
         val event: ServerEvent.Known,

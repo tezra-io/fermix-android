@@ -154,6 +154,67 @@
     <!-- Not the design's: the palette's label (section 13.8). -->
     <string name="chat_palette">Commands</string>
 
+    <!-- Attachments and voice notes (sections 8.5, 13.5, 13.6 and 13.9). -->
+    <string name="chat_camera">Camera</string>
+    <string name="chat_files">Files</string>
+    <string name="chat_paste">Paste</string>
+    <string name="chat_send_as_files">Send as files</string>
+    <string name="chat_send_count">Send %1$d</string>
+    <string name="chat_too_big">%1$s is %2$s — the limit is %3$s.</string>
+    <string name="chat_upload_interrupted">Upload interrupted — resumes when connected</string>
+    <string name="chat_duplicate">Already on %1$s — sent instantly</string>
+    <string name="chat_media_gone">No longer on %1$s</string>
+    <string name="chat_slide_to_cancel">‹ Slide to cancel</string>
+    <string name="chat_transcribing">Transcribing…</string>
+    <string name="chat_mic_off">Microphone is off for Fermix</string>
+    <string name="chat_open_settings">Open settings</string>
+    <string name="chat_recording_stopped">Recording stopped — send or discard</string>
+    <string name="chat_save">Save</string>
+    <string name="chat_show_in_chat">Show in chat</string>
+    <!-- The visual canon's: the caption field's placeholder, a document row's origin for the owner's own, and the
+         speed chip. -->
+    <string name="chat_caption">Caption</string>
+    <string name="chat_this_phone">this phone</string>
+    <string name="chat_speed">%1$s×</string>
+    <!-- A document's row under its name: its size, then where it came from, "this phone" or the host. -->
+    <string name="chat_size_origin">%1$s · %2$s</string>
+    <!-- A size as the sheet's line and a document's row say it, in binary units, as the limit's 20 MB is 20 MiB; a
+         no-break space keeps the number with its unit when the line wraps. -->
+    <string name="chat_size_bytes">%1$d\u00A0B</string>
+    <string name="chat_size_kilobytes">%1$d\u00A0KB</string>
+    <string name="chat_size_megabytes">%1$s\u00A0MB</string>
+    <!-- A document's tile when its name has no extension. -->
+    <string name="chat_file_tile">FILE</string>
+    <!-- Over the last of four images, how many more the message holds. -->
+    <string name="chat_more_images">+%1$d</string>
+    <!--
+      Not the design's, which asks for a rationale before the microphone's prompt (section 8.5) without giving its
+      words, nor a camera capture's: these are the owner's to settle, as onboarding's camera rationale is.
+    -->
+    <string name="chat_mic_rationale_title">Allow the microphone to record voice notes</string>
+    <string name="chat_mic_rationale_body">Nothing is sent until you send it.</string>
+    <string name="chat_continue">Continue</string>
+    <string name="chat_not_now">Not now</string>
+    <string name="chat_camera_off">Camera is off for Fermix</string>
+    <string name="chat_saved">Saved</string>
+    <!-- Labels the design does not give (section 13.8). -->
+    <string name="chat_attach">Attach</string>
+    <string name="chat_photos">Photos</string>
+    <string name="chat_record">Hold to record a voice note</string>
+    <string name="chat_locked">Slide up to lock</string>
+    <string name="chat_pause_recording">Pause recording</string>
+    <string name="chat_resume_recording">Resume recording</string>
+    <string name="chat_stop_recording">Stop recording</string>
+    <string name="chat_discard">Discard</string>
+    <string name="chat_play">Play</string>
+    <string name="chat_pause">Pause</string>
+    <string name="chat_take_photo">Take photo</string>
+    <string name="chat_close">Close</string>
+    <string name="chat_remove_item">Remove %1$s</string>
+    <string name="chat_voice_note">Voice note, %1$s</string>
+    <string name="chat_image">Image</string>
+    <string name="chat_open">Open %1$s</string>
+
     <!-- Message actions (section 13.7). -->
     <string name="chat_copy">Copy</string>
     <string name="chat_select_text">Select text</string>

@@ -127,6 +127,21 @@ internal object NoStore : SessionStore {
         serverSeq: ULong,
         card: LinkPreviewCard,
     ) = error("the idle session gets no link preview")
+
+    override suspend fun applyTranscript(
+        clientMsgId: String,
+        text: String,
+    ) = error("the idle session gets no transcript")
+
+    override suspend fun markUploaded(
+        clientMsgId: String,
+        attachId: String,
+    ) = error("the idle session uploads nothing")
+
+    override suspend fun setUploadStarts(
+        clientMsgId: String,
+        starts: Int,
+    ) = error("the idle session uploads nothing")
 }
 
 /**

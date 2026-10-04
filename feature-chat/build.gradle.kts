@@ -36,6 +36,13 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     // A link preview's tap opens its page in a Custom Tab, tinted with the instance's colour.
     implementation(libs.androidx.browser)
+    // The attach sheet (design section 8.5): Camera's capture through CameraX, bound to the screen's lifecycle and
+    // drawn by its Compose viewfinder, and the grid of the embedded Photo Picker.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.compose)
+    implementation(libs.androidx.photopicker.compose)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

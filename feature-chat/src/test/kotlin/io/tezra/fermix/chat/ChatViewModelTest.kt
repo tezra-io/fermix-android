@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.tezra.fermix.data.ChatState
+import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.RequestFailure
 import io.tezra.fermix.session.SessionEvent
@@ -368,6 +370,29 @@ class ChatViewModelTest {
             rig.store.rows.update { it + agentRow(2, "row 2", minutes = 2) }
             runCurrent()
             assertTrue(ChatItem.Older !in rig.shown.items)
+        }
+
+    @Test
+    fun `Retry sending names each attachment afresh, so an id the daemon let go is never named again`() =
+        runTest(main) {
+            val rig = Rig(this)
+            runCurrent()
+            val photo =
+                OutboxAttachment("a1", AttachKind.IMAGE, "image/jpeg", 5, "ab".repeat(32), "p.jpg", "/s/a1", true)
+            val request = ClientEvent.Msg("q1", PROFILE, "look", listOf("a1"))
+            val failure = RequestFailure("attachment_unavailable", "a1 is past its 48 hours")
+            rig.store.outbox.value = listOf(OutboxItem(request, failure = failure, attachments = listOf(photo)))
+            runCurrent()
+            rig.model.requests.resend(request, listOf(photo))
+            runCurrent()
+            val item =
+                rig.store.outbox.value
+                    .single()
+            val again = item.request as ClientEvent.Msg
+            val fresh = item.attachments.single()
+            assertEquals(photo.copy(attachId = fresh.attachId, uploaded = false), fresh)
+            assertTrue(fresh.attachId != "a1")
+            assertEquals(listOf(fresh.attachId), again.attachIds)
         }
 
     @Test

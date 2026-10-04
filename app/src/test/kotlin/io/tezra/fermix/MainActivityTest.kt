@@ -26,7 +26,9 @@ import io.tezra.fermix.onboarding.OnboardingKey
 import io.tezra.fermix.onboarding.OnboardingViewModel
 import io.tezra.fermix.onboarding.PairingWait
 import io.tezra.fermix.transport.Candidate
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -37,6 +39,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowBiometricManager
 import org.robolectric.shadows.ShadowBiometricPrompt
@@ -55,8 +58,8 @@ private const val MID_EXIT_MILLIS = 150L
 
 /**
  * The one activity on Robolectric, with the app's own services: the window kept out of screenshots while
- * onboarding shows (design sections 12.4 and 13.3), and the pairing-wait notification started as the app
- * leaves Verify for another (section 12.5).
+ * onboarding shows (design sections 12.4 and 13.3), and the pairing-wait and upload notifications started as
+ * the app leaves Verify, or a chat with an upload in flight, for another (section 12.5).
  */
 @RunWith(RobolectricTestRunner::class)
 class MainActivityTest {
@@ -64,6 +67,12 @@ class MainActivityTest {
     val rule = createAndroidComposeRule<MainActivity>()
 
     private val app: FermixApplication = ApplicationProvider.getApplicationContext()
+
+    /** Where a test's idle sessions run, ended with it. */
+    private val sessions = sessionScope()
+
+    @After
+    fun end() = sessions.cancel()
 
     private fun secured(): Boolean = (rule.activity.window.attributes.flags and FLAG_SECURE) != 0
 
@@ -254,6 +263,27 @@ class MainActivityTest {
         welcomeShows()
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         assertTrue(app.services.inBackground.value)
+        assertNull(shadowOf(app).nextStartedService)
+    }
+
+    @Test
+    @Config(application = UploadingApplication::class)
+    fun `leaving the app while a session uploads starts the upload notification`() {
+        welcomeShows()
+        val uploading = app as UploadingApplication
+        uploading.upload.value = true
+        uploading.hold(paired(), sessions)
+        rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        val started = shadowOf(app).nextStartedService
+        assertEquals(UploadService::class.java.name, started?.component?.className)
+    }
+
+    @Test
+    @Config(application = UploadingApplication::class)
+    fun `leaving the app with a session up and no upload in flight starts nothing`() {
+        welcomeShows()
+        (app as UploadingApplication).hold(paired(), sessions)
+        rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         assertNull(shadowOf(app).nextStartedService)
     }
 }

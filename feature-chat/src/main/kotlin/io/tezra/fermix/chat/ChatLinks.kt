@@ -67,19 +67,21 @@ private fun openLink(
 }
 
 /**
- * The thumbnail in [bytes] as the card draws it, halved until it is no larger than [THUMBNAIL_MAX_PX]; none for
- * bytes that are no picture. Decoded off the main thread.
+ * The picture in [bytes] as a card, a bubble or the viewer draws it, halved until it is no larger than [maxPx], a
+ * thumbnail's [THUMBNAIL_MAX_PX] by default; none for bytes that are no picture. Decoded off the main thread.
  */
 internal suspend fun decodeThumbnail(
     bytes: ByteArray,
+    maxPx: Int = THUMBNAIL_MAX_PX,
     io: CoroutineDispatcher = Dispatchers.IO,
 ): ImageBitmap? =
     withContext(io) {
+        require(maxPx > 0) { "a picture is decoded at some size" }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         val longest = maxOf(bounds.outWidth, bounds.outHeight)
         var sample = 1
-        repeat(MAX_HALVINGS) { if (longest / (sample * 2) >= THUMBNAIL_MAX_PX) sample *= 2 }
+        repeat(MAX_HALVINGS) { if (longest / (sample * 2) >= maxPx) sample *= 2 }
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         if (longest <= 0) null else BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap()
     }

@@ -129,6 +129,50 @@ internal class MemoryStore(
         items.replaceAll { if (it.clientMsgId == clientMsgId) it.copy(failure = failure) else it }
     }
 
+    override suspend fun markUploaded(
+        clientMsgId: String,
+        attachId: String,
+    ): Boolean {
+        val held = items.any { it.clientMsgId == clientMsgId }
+        items.replaceAll { item ->
+            if (item.clientMsgId != clientMsgId) return@replaceAll item
+            item.copy(
+                attachments =
+                    item.attachments.map {
+                        if (it.attachId ==
+                            attachId
+                        ) {
+                            it.copy(uploaded = true)
+                        } else {
+                            it
+                        }
+                    },
+            )
+        }
+        return held
+    }
+
+    override suspend fun setUploadStarts(
+        clientMsgId: String,
+        starts: Int,
+    ): Boolean {
+        val held = items.any { it.clientMsgId == clientMsgId }
+        items.replaceAll { if (it.clientMsgId == clientMsgId) it.copy(uploadStarts = starts) else it }
+        return held
+    }
+
+    override suspend fun applyTranscript(
+        clientMsgId: String,
+        text: String,
+    ): Boolean {
+        val row =
+            cached.values
+                .filterIsInstance<TimelineRow.Message>()
+                .firstOrNull { it.message.clientMsgId == clientMsgId && it.message.role == "user" } ?: return false
+        cached[row.serverSeq] = TimelineRow.Message(row.message.copy(content = text))
+        return true
+    }
+
     override suspend fun applyReaction(
         clientMsgId: String,
         emoji: String,

@@ -151,7 +151,10 @@ class InstanceStore(
         return dropped
     }
 
-    /** Deletes the files of every instance no record names. */
+    /**
+     * Deletes the files of every instance no record names, and each recorded one's staged uploads its outbox no
+     * longer names (StagedUploads).
+     */
     internal suspend fun deleteUnrecordedFiles() {
         val ids =
             records.data
@@ -159,7 +162,10 @@ class InstanceStore(
                 .instances
                 .map { it.id }
                 .toSet()
-        withContext(io) { databases.deleteAllExcept(ids) }
+        withContext(io) {
+            databases.deleteAllExcept(ids)
+            ids.forEach { databases.sweepStagedUploads(it, MAIN_PROFILE) }
+        }
     }
 
     private suspend fun deleteFiles(id: String) = withContext(io) { databases.delete(id) }

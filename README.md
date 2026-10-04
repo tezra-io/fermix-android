@@ -319,6 +319,40 @@ IKpsk2 with the link's secret, splits the raw tail by `cert_lengths` and checks 
 handshake's key; its responder writes the vendored `noise_vectors.json` message 2, handshake hash and
 SAS byte for byte, and the SAS the phone shows is that derivation of the daemon's hash.
 
+Attachments go before their `msg` (design section 8.5, PROTOCOL.md "Attachments"). `send(request,
+attachments)` puts the item in the outbox with each attachment's staged file, digest, type and size
+(`OutboxAttachment`), and the session's `Uploads` takes the outbox's items with an attachment still to go, one
+item at a time and one attachment at a time, in order: `attach_begin`, then 60 KiB `attach_chunk`s paced
+against the socket's queue (at most sixteen chunks unwritten, and a queue that does not drain in 30 s stalls
+the upload), then `attach_end`. An `attach_status` of `present` for a digest the daemon already holds skips the
+bytes. Each attachment the daemon holds is marked in the store, and the `msg` goes, through the outbox like any
+other, only once every one is in: never before the last `attach_end` is answered. The outbox's `msg`s reach
+the daemon in its order: one that cannot go yet, as it uploads, waits for a turn or waits behind another,
+holds every later `msg` back, while a `command` passes. The daemon drops a partial upload with its connection,
+so a later connection starts each attachment not yet in again from `attach_begin`, at most
+`MAX_UPLOAD_RESTARTS` (3) times per item, and the connection that cuts the last restart fails the item
+`upload_interrupted`; a staged file that no longer holds the bytes its attachment announced fails it
+`upload_source_changed`, and the daemon's upload refusals fail it with their code. Those name no upload, so
+the one on its way takes them: a refusal while its chunks go stops them, with no `attach_end`, and the late
+refusals of a dropped upload (`unknown_upload` for each chunk it still had, never an answer to an
+`attach_begin`) are let go before the next attachment's answer. An upload stalls when an `attach_begin` or
+an `attach_end` has no answer within 30 s, when the socket's queue does not drain, or when the daemon answers
+`request_failed`, which names nothing: the connection then ends (`Ending.UploadStalled`, reconnecting at once,
+as the uploads are one of the connection's endings), the item shows "Upload interrupted" with no `msg` sent,
+and the next connection starts the attachment again, a restart like any other. `uploads` is each
+attachment's progress by its `attach_id` (`UploadProgress`, whose `UploadStage` the bubble's ring and its one
+line read), and `uploading` says whether an upload is in flight, from an item's first `attach_begin` until its
+`msg` goes or the connection is cut, which the app's supervisor and its upload service follow. The tests run
+the uploads against the fake daemon: the vendored frames in order, the item stored before any frame, the
+`msg` never before its last `attach_end` is answered, chunks of at most 60 KiB adding up to the source, a
+`present` digest with no chunk, a reconnect's restart from `attach_begin` that skips what is in, the item
+failed as its third restart is cut, a stored item with its restarts spent failing and one with a start left
+taking it, a refusal, a refusal mid-chunks, a dropped upload's late refusals, a daemon silent after
+`attach_begin` or after `attach_end` and a `request_failed` each ending the connection in 30 s to 60 s with
+the item interrupted and started again on the next, a text `msg` written behind a stalled upload only after
+it, a changed source, an item removed mid-upload, the paced socket, the in-flight flag, the `msg`s' order
+behind an upload while a second offer comes, and the limits on attachments.
+
 `design` (`io.tezra.fermix.design`) is design section 13.1's language as code, a Compose library
 every screen builds on. `FermixTheme` provides it and hands it to Material 3 too, so that Material's
 components draw in it: `FermixColors`, light and dark with the visual canon's values, and the six
@@ -846,6 +880,89 @@ the search field's caret, and the chip, the sheet, a pick, the palette's and the
 the card's custom actions, its one stop and its two announcements from the window's accessibility tree, pick
 a model from the chip's sheet, and open search with Ctrl+F through the system's input.
 
+Attachments and voice notes (sections 8.5, 13.5 to 13.7 and 13.9). The composer's + opens the attach sheet,
+a modal sheet at 60 % of the window: the chips Camera · Files · Paste, never tabs; the system's embedded Photo
+Picker (androidx.photopicker, SDK extension 15 or later), its picks numbered in order, at most ten, each grant
+a pick and each revocation an un-pick, or, where it cannot draw, a tile that opens the system Photo Picker
+(`PickMultipleVisualMedia`), allowed what the tray's other items leave of the ten (a pick past the ten is
+left out and logged); the first item past `caps.max_media_bytes` inline ("{name} is {size} — the limit
+is {max}."); the caption, which is the composer's words; "Send as files"; and "Send {n}". Files is the
+documents UI (`OpenMultipleDocuments`), Camera the chat's own CameraX capture once the app may use the camera
+("Camera is off for Fermix" when refused), Paste the clipboard's first item (`ChatClip`), and the keyboard's
+images come through the field's content receiver (IME `commitContent`). None of them needs a media
+permission. A paste's and the keyboard's items are copied into the chat's own files as they land, the
+keyboard's commit held until then, since their read grant ends long before Send; one whose grant is already
+gone is logged and left out. The sheet's grid keeps at least 160 dp, and what the window leaves beside it,
+with the sheet's other items (a capture, files, a paste) in a tray at its foot; the Photos tile shows its
+own picks. The picks wait in the tray over the field, 56 dp thumbnails each with its ✕, an 18 dp badge in
+a 48 dp target, a file's extension sized in dp; the files the chat made for the tray, a camera's capture,
+a paste's and the keyboard's copies and Edit's copies, go when they leave it or the chat closes; a send
+that stops short, a grant gone or the disk full, deletes what it made and lets go what it staged. `PhoneMedia` makes
+each item ready: an image is decoded by ImageDecoder at most 2,048 px on its long edge, HEIF among what it
+reads, and goes as a JPEG with no EXIF and no GPS; "Send as files", a video or audio go as their own bytes,
+as documents; each is hashed, and a digest the daemon holds already says "Already on {host} — sent
+instantly". The owner's item shows at once from its staged file, the ring over its images while it goes up,
+a 3 dp bar under a document's size and under a voice note's waveform, and "Upload interrupted — resumes when
+connected", its glyph inline with the words, in place of its time while an upload that was cut waits
+for a connection; one composed offline reads "Queued". "Retry sending" names each attachment under a new
+`attach_id`, whose `present` skips the bytes the daemon holds, so an id it let go of
+(`attachment_unavailable`) is never named again. A send its session did not take lets its staged copies go. Incoming images
+come only through `Session.fetchMedia` into the media cache, drawn in their first chunk's average colour
+until they are in: one at its own aspect clamped to 3:4…16:9, two side by side, three as one large and two,
+four or more as a 2 × 2 whose last cell says "+N", the message's words as the caption inside the card; a blob
+the daemon let go says "No longer on {host}". A document is a 64 dp row, its extension's tile, its name cut
+in the middle and its size · origin; a tap downloads it and opens it through the chooser as a read-only
+content URI of the module's FileProvider (`{applicationId}.chat.files`, the cache's `shared/` alone), raw
+HTML too, which the chat never draws; a long-press offers Share and Save, which writes into Pictures/Fermix or
+Download/Fermix through MediaStore, with no storage permission. A tapped image opens the viewer, black in both
+themes, the image moving from its bubble as a shared element: every image the list holds, oldest first,
+swiped between, pinched to 5× and panned while zoomed, a swipe down at its own size putting it down, with
+Share, Save and Show in chat; it keeps its image as the window turns. The mic, at the end of an empty
+composer, records while held: the first hold shows the microphone's rationale, then the system's prompt
+(`RECORD_AUDIO`); refused, "Microphone is off for Fermix" with "Open settings". Held, slid left past 120 dp
+it cancels, slid up past 96 dp it locks hands-free (pause · stop · send), each threshold felt
+(`GESTURE_THRESHOLD_ACTIVATE`), and let go it sends, with `CONFIRM`, one `msg` with the note as its `audio`
+attachment, OGG/Opus through `MediaRecorder` (`PhoneVoice`). A call, another app taking audio focus, the
+chat leaving the foreground, or the system taking the touch from the finger stops it into a draft,
+"Recording stopped — send or discard", and a release after that sends nothing: only a tap sends a draft; a
+rotation or a fold does not stop it, and a hold the window change took from the finger locks the take
+hands-free. A take records into its profile's `voice-draft.ogg` (`ProfileDatabases.voiceDraft`), so a draft
+outlives the chat and the process and comes back when the chat opens, one unreadable deleted and logged; it
+goes once its session takes the note, and a send its session refused keeps it a draft. A sent note is its
+bubble, at most 78 % of the column: play, the 40-bar waveform, which gives up width first, played solid, its
+length, the speed chip (1× · 1.5× · 2×) on one line and its transcript, "Transcribing…" until
+`transcript` comes; a note this process did not record draws the bars read from its file with its length
+(`noteLevels`: MediaExtractor and MediaCodec, the loudest sample of every 100 ms, as the recording row
+samples it); one note plays at a time through the one player (`ChatPlayback` over `VoicePlayer`). What the chat asks of the phone beyond its
+screen, another app's activity, a permission, the camera's screen and the picker's surface, is `ChatOutside`,
+which the instrumented tests replace. The JVM tests cover the sheet's and the tray's state, the size line,
+the caption written once into the field, the un-pick, each source's items, a paste's and the keyboard's
+copied as they land and a grant gone at Send, the keyboard's image committed through the field's input
+connection (`ComposerMediaUiTest`), the tray's 48 dp ✕, the long-edge cap (`ImageCapTest`), the pipeline's
+cache and digest, one blob asked for twice at once fetched once, the files a closed chat, a failed Edit, a
+stage that stops part-way or a full disk leaves none of, and the staged files a send its session did not take
+lets go, the voice note's start, lock, pause, stop, release, send, discard and focus loss, a release after an
+interruption keeping the draft, the draft kept through the chat's close, a recording the chat closes on and
+a refused send, and one unreadable let go, a recording stopped into a draft as the chat leaves the
+foreground and going on through a rotation, its length and bars, the player's one note and the notes it
+cannot open or read, the outbox's ring and lines, "Retry sending"'s new ids, the layouts and the viewer's
+pages, a shared file's name, and the module's scan for a network client; `data`'s tests keep the voice
+draft in its profile's directory, gone with its instance, and a send's staged files let go unless an item
+names them; the screenshots draw the sheet with two picked, a file and a paste in its tray, and a
+caption, the size line, the sheet's Photos tile with its pick, the tray, the composer recording, locked, its
+draft and the microphone off, one, two, three and five images, the ring, the duplicate line, a gone image
+in a lone and a small cell, documents and a voice note uploading, voice notes playing and transcribing, the
+interrupted and the failed item and the viewer. The instrumented tests prove a photo leaves the phone with
+no EXIF and no GPS, at most 2,048 px on its long edge, and as its own bytes sent as a file; the Photo
+Picker's, the documents UI's, the clipboard's and the camera's items reaching the tray, the clipboard's as a
+copy that still sends once the clip changed and its grant went; the mic's cancel past 120 dp, its send short of it and its lock; a take stopped by a lost audio focus while held, and a hold
+the system took, staying a draft; the microphone's rationale before its prompt, and "Open settings" once
+refused; the phone's own recorder writing OGG/Opus whose length and levels its player reads, and losing
+audio focus to another app (`PhoneVoiceDeviceTest`); a document's chooser and its provider's bytes, raw HTML
+among them; a locked recording, with its bars and its timer, and an upload going on through a rotation and
+a fold, and a recording held through a rotation locked hands-free; and the viewer open on its image through
+a rotation.
+
 Where the code departs from sections 8.3 and 13.5 to 13.7, or reads them where they are silent, for the
 owner to settle:
 
@@ -928,6 +1045,40 @@ owner to settle:
   hello to {title}."); after a reconnect the card starts again at "Thinking", from the reconciliation's
   active turns; a daemon of protocol v1, which sends no `turn_done`, holds a queued message until the
   reconciliation.
+- The embedded Photo Picker is the system's surface: no screenshot or instrumented test draws it. The
+  screenshots draw a stand-in grid of its shape, and the instrumented tests reach the tray through the
+  system Photo Picker's tile, which the sheet shows where the embedded picker cannot draw. On the API 36.1
+  emulator (SDK extension 20, so the sheet takes the embedded path) a throwaway probe opened the embedded
+  session and the picker indexed the three images pushed to the device, but its surface drew blank under the
+  emulator's software GPU and taps on it picked nothing: the embedded grid is still to be seen on a phone.
+- An image goes at most 2,048 px on its long edge, at JPEG quality 85; section 8.5 names no edge. Its
+  placeholder colour is the average of what the blob's first chunk decodes to, not a dominant colour
+  computed from a palette.
+- Camera puts the sheet down before its screen opens, since the sheet is a window above the chat's own. The
+  field holds a `TextFieldState`, which the keyboard's images need; a restored draft or Edit's words open on
+  the caret's last line once the field has laid them out.
+- A voice note's bubble draws an even line until its bars are known: recorded here, or read from its file
+  with its length. The viewer swipes between every image the list holds, not only the message's.
+- General audio picked from Files goes up as `kind: document`, where section 8.1's "Videos and general audio"
+  row names `audio`: an `audio` attachment is what the daemon transcribes, and the owner's `audio` is drawn
+  as their voice note, so a podcast would come back as a voice note with a transcript. A video goes as `video`.
+  The owner to settle.
+- Edit returns an outbox item's attachments to the tray, which is not kept with the draft: a chat closed
+  before the owner sends again keeps Edit's words and lets its files go. Keeping the tray with the draft, or
+  withdrawing the item only at the next send, is the owner's to choose.
+- A picked item past the ten a send takes is left out of the tray and logged; the design gives no words to
+  say so.
+- "Already on {host} — sent instantly" is the canon's and section 13.9's words, where section 13.5 words the
+  same state "Duplicate — sent instantly". An upload's line takes the time's place under the image, as the
+  canon's one `.state` line does, and the interrupted line drops "Queued" under it, which would say the wait
+  twice.
+- Section 13.11's rule 1, a compact window in portrait only with the viewer alone turning, is not in the app:
+  `android:screenOrientation="portrait"` fails lint's `LockedOrientationActivity` and `DiscouragedApi` (Android 16
+  ignores a fixed orientation on large screens), which the gate holds with no suppression, and a lock set from
+  code would read to lint as the same. Every screen follows the rotation, the viewer among them, and rule 3 holds
+  for each.
+- A row's `media_refs` entry names its blob by `ref`, which is the blob's digest, and carries no `sha256` in the
+  vendored rows: the media cache is read by the digest, or else by the ref, so an image is fetched once.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the
@@ -984,7 +1135,12 @@ the lock screen stands in place of the app's screens, none of which is composed,
 comes at once and "Unlock" asks again; back leaves the app; the recents preview is hidden while the lock
 is on. A phone with no strong biometric and no screen lock is never locked, as nothing could open it. On leaving Verify for another app it starts `PairingWaitService`,
 the short foreground service of section 12.5, "Waiting for approval on suj-mbp · 1:42", which ends itself
-when the wait ends or the app comes back (`pairingWaitShown` decides both). The app's tests run on
+when the wait ends or the app comes back (`pairingWaitShown` decides both). On leaving the app while a
+session has an upload in flight (the supervisor's `uploading`, from each session's) it starts `UploadService`,
+section 12.5's `shortService` for an upload, "Sending to {host}", which ends itself when no upload is in
+flight, the app comes back, or the platform's timeout comes (`uploadShown`); out of sight past the grace, the
+supervisor keeps such a session up until its upload ends or `UPLOAD_HOLD_MILLIS` (165 s, inside the service's
+three minutes) pass, then puts it aside with the rest, its item left in the outbox for the next connection. The app's tests run on
 Robolectric through the application convention, over the app's own services and the bundled SQLite: the
 supervisor's one session per instance, its grace and its timer, a return within the grace never
 suspending a session, nothing opened out of sight, a removal with the session closed before it runs and
@@ -1000,8 +1156,14 @@ flag on Welcome and on the Instance screen, its clearing on the Chats list and i
 holds, with the list gone and the prompt up; a dropped Fermix's "Re-pair this Fermix" row as the root; a
 paired Fermix as a row with its long-press menu; the intents the activity takes, and a chat's link
 reaching the running app; the App lock switch turning on once a screen lock is set; the bars over the
-scan in light mode and back after it; a second tap on a failure screen as it leaves dropped; and the pairing-wait
-service started as the app leaves Verify and not otherwise, and ending itself.
+scan in light mode and back after it; a second tap on a failure screen as it leaves dropped; the pairing-wait
+service started as the app leaves Verify and not otherwise, and ending itself; and the upload hold, a session
+with an upload in flight spared past the grace until its upload ends or the hold passes, and the upload
+service started as the app leaves with an upload in flight and not otherwise, naming the computer and
+ending itself when the upload ends, the app comes back or the platform's timeout comes (`onTimeout`). The
+app's tests that need an upload run under `UploadingApplication`, whose services take each session's upload
+from the test; the upload service's run on Robolectric, not on a device, as it is a service the app starts
+and stops with no window of its own.
 
 ## Build and check
 
@@ -1117,7 +1279,19 @@ stays the same node with the same words as the phrase changes, find the approval
 accessibility tree as one node whose custom actions Approve and Deny answer it and its countdown's live
 region saying 30 s, then 10 s, and nothing between, pick a model from the chip's sheet, send on Enter and
 put a newline on Shift+Enter, open search with Ctrl+F sent through the system's input
-(`input keycombination`), and find Copy's words on the clipboard. A test
+(`input keycombination`), and find Copy's words on the clipboard. Beyond the screen the rig answers the
+system's pickers and prompts (`PickerRegistry`, through `LocalActivityResultRegistryOwner`), keeps every
+activity the chat starts, grants every permission, stands in for the camera (`FakeCamera`) and shows the
+Photo Picker's tile in the sheet (`ChatOutside`); its tests bring the Photo Picker's, the documents UI's,
+the clipboard's and the camera's items to the tray, cancel a held mic past 120 dp, send it short of it and
+lock it slid up, keep a take the phone stopped while held (a lost audio focus, a touch the system took) a
+draft that a release does not send, ask for the microphone with its rationale first and offer "Open
+settings" once it is refused, open a document and raw HTML through the chooser from the module's provider,
+keep a locked recording, its bars and its timer, and an upload with its ring through a rotation and a fold,
+and keep the viewer open on its image through a rotation (`ViewerDeviceTest`). `MediaPipelineDeviceTest`
+runs the phone's own image pipeline on a photo with GPS and a camera's EXIF, and on a 4,000 × 3,000 photo
+that goes up at 2,048 × 1,536; `PhoneVoiceDeviceTest` the phone's own recorder and player, an OGG/Opus note
+whose length and levels are read back, and a take another app's audio focus stops. A test
 that needs the window's focus, Espresso's back and the clipboard's read, waits for it
 (`awaitWindowFocus`) and fails naming the window that holds it.
 

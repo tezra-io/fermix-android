@@ -11,9 +11,11 @@ import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.FetchedMedia
 import io.tezra.fermix.session.MAX_QUERY_SCALARS
 import io.tezra.fermix.session.OneShot
+import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.SessionState
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.UploadProgress
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +25,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+
+/** A blob's chunk on the wire, 60 KiB. */
+private const val CHUNK_BYTES = 61_440
 
 /** Connected over the tailnet and caught up: the chat's subtitle reads "Tailscale · 38 ms". */
 internal val UP = SessionState.Connected(Candidate.Scope.TAILNET, latencyMs = 38, caughtUp = true)
@@ -103,6 +108,7 @@ class FakeChatSession(
 ) : ChatSession {
     override val state = MutableStateFlow(initial)
     override val diagnostics = MutableStateFlow<List<Diagnostic>>(emptyList())
+    override val uploads = MutableStateFlow<Map<String, UploadProgress>>(emptyMap())
 
     val sent = MutableStateFlow<List<ClientEvent>>(emptyList())
     val retried = MutableStateFlow<List<Pair<ClientEvent, String>>>(emptyList())
@@ -113,6 +119,9 @@ class FakeChatSession(
 
     /** Whether a connection is up for what is sent once and never queued: Stop and an older page's pull. */
     val connected = MutableStateFlow(true)
+
+    /** Whether a send is taken; false as a session that ends as the request comes refuses it (SessionChat.send). */
+    var takes = true
 
     val answers = MutableStateFlow<List<Pair<String, Boolean>>>(emptyList())
     val searches = MutableStateFlow<List<Pair<String, ULong?>>>(emptyList())
@@ -132,9 +141,13 @@ class FakeChatSession(
     /** What the daemon does as an older page is asked for before a seq: a test that needs its rows sets it. */
     var onOlder: (ULong) -> Unit = {}
 
-    override suspend fun send(request: ClientEvent): Boolean {
+    override suspend fun send(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment>,
+    ): Boolean {
+        if (!takes) return false
         sent.update { it + request }
-        store.outbox.update { it + OutboxItem(request) }
+        store.outbox.update { it + OutboxItem(request, attachments = attachments) }
         return true
     }
 
@@ -190,10 +203,12 @@ class FakeChatSession(
     override suspend fun fetchMedia(
         ref: String,
         into: File,
+        firstChunk: (ByteArray) -> Unit,
     ): OneShot<FetchedMedia> {
         val gone: OneShot<FetchedMedia> = if (connected.value) OneShot.Refused("media_gone") else OneShot.Offline
         val bytes = blobs[ref]?.takeIf { connected.value } ?: return gone
         fetched.update { it + ref }
+        if (bytes.isNotEmpty()) firstChunk(bytes.copyOf(minOf(bytes.size, CHUNK_BYTES)))
         into.writeBytes(bytes)
         return OneShot.Answered(FetchedMedia("image", "image/png", bytes.size.toLong(), ref, null))
     }
@@ -259,6 +274,11 @@ internal fun fakeParts(
         background = background,
         newId = { "m${ids.incrementAndGet()}" },
         log = FakeLog().log,
+        files = FakeChatFiles(store),
+        media = FakePipeline(),
+        clip = FakeClip(),
+        recorder = FakeRecorder(),
+        player = FakePlayer(),
         zone = { UTC },
     )
 }

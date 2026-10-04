@@ -102,11 +102,32 @@ class Session private constructor(
     val acks: StateFlow<List<Diagnostic>> get() = core.acks.entries
 
     /**
+     * Each attachment's upload by its `attach_id` (Uploads), for its bubble's ring and its line: from its first
+     * `attach_begin` until its item leaves the outbox, across connections.
+     */
+    val uploads: StateFlow<Map<String, UploadProgress>> get() = core.uploads
+
+    /**
+     * Whether an upload is in flight: the connection that is up has an outbox item whose attachments it uploads
+     * now or will next, from the item's turn until its `msg` goes, it fails, or the connection ends. The app keeps
+     * the session up for it a while out of sight (design section 12.5, the `shortService` for an upload in flight).
+     */
+    val uploading: StateFlow<Boolean> get() = core.uploading
+
+    /**
      * Persists [request], a `msg` or a `command` of this session's profile, in the outbox, then sends
      * it if a connection is up and reconciled; otherwise the next one's outbox drain sends it. A request
      * its version's rules refuse throws before anything is stored.
+     *
+     * A `msg` with [attachments], one per id of its `attach_ids` in order and at most [MAX_ATTACHMENTS], is
+     * persisted with each one's digest, kind, type, size, name and local file before anything is written; each
+     * goes up in its turn, and the `msg` only once every one is in (design section 8.5). The app keeps each
+     * file until the item leaves the outbox.
      */
-    suspend fun send(request: ClientEvent): Unit = withContext(confined) { runner.request { requests.submit(request) } }
+    suspend fun send(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment> = emptyList(),
+    ): Unit = withContext(confined) { runner.request { requests.submit(request, attachments) } }
 
     /**
      * "Run again" (design section 13.5): runs [failed], the `msg` or `command` whose run failed or which

@@ -1,7 +1,6 @@
 package io.tezra.fermix.session
 
 import io.tezra.fermix.protocol.ClientEvent
-import kotlinx.coroutines.channels.SendChannel
 
 /**
  * Forward and newest pulls one connection makes; each moves the cursor on (Dispatch), so a catch-up of
@@ -61,11 +60,18 @@ internal class Live(
     /** The blobs fetched on this connection (Session.fetchMedia). */
     val fetches = Fetches(::post)
 
+    /** The attachments uploaded on this connection before their `msg` goes (Uploads). */
+    val uploads = Uploads(core, this)
+
     /** Whether the reconnect reconciliation is done: a one-shot is asked only then, after the outbox. */
     val reconciled: Boolean get() = drain == Drain.DONE
 
-    fun post(event: ClientEvent) {
-        channel.send(event)
+    /** Sends [event], with [raw] as its frame's tail: an `attach_chunk`'s bytes, none for any other. */
+    fun post(
+        event: ClientEvent,
+        raw: ByteArray = ByteArray(0),
+    ) {
+        channel.send(event, raw)
         keepalive.sent(core.now())
     }
 
@@ -77,33 +83,44 @@ internal class Live(
     }
 
     /**
-     * Hands [input] to the actor, which takes it once it is done with the one before. Until it does the
-     * reader reads nothing, pongs included, so the keepalive counts none of that time against the link.
+     * The outbox, [items] in its order, offered to this connection: while the drain reads the store they wait
+     * for it; before, the drain's read will hold them. The `msg`s go in the outbox's order (design section 8.2):
+     * one that cannot go now, as it uploads, waits for a turn or waits behind another, holds every later `msg`
+     * back, so the daemon never has a message before an earlier one; a `command` passes, since `/stop` is one.
      */
-    suspend fun handOff(
-        inputs: SendChannel<Input>,
-        input: Input,
-    ) {
-        keepalive.stall(core.now())
-        inputs.send(input)
-        keepalive.unstall(core.now())
+    suspend fun offer(items: List<OutboxItem>) {
+        if (drain == Drain.READING) waiting += items
+        var behind = false
+        for (item in items) {
+            val inOrder = item.request is ClientEvent.Msg && item.failure == null
+            if (!offerOne(item, behind) && inOrder) behind = true
+        }
     }
 
     /**
-     * A request to send: once the drain is done it goes, unless it failed, went on this connection
-     * already, or is a `msg` while a turn shows; while the drain reads the store it waits for it; before,
-     * the drain's read will hold it. Its id is taken before it is marked written, so a second offer of it
-     * meanwhile sends nothing, and one removed meanwhile is not sent.
+     * One request: once the drain is done it goes, unless it failed, went on this connection already, or is a
+     * `msg` while a turn shows or [behind] an earlier one; whether it is on this connection now. Its id is taken
+     * before it is marked written, so a second offer of it meanwhile sends nothing, and one removed meanwhile is
+     * not sent. A `msg` with an attachment still to go up goes to the uploads first, turn or no turn, and comes
+     * back here once every attachment is in: its frame is never written before its last `attach_end` is answered
+     * (design section 8.5).
      */
-    suspend fun offer(item: OutboxItem) {
-        if (drain == Drain.READING) waiting += item
-        val waitsForTurn = item.request is ClientEvent.Msg && core.turnsLive
-        val goes = drain == Drain.DONE && item.failure == null && item.clientMsgId !in sent && !waitsForTurn
-        if (!goes) return
-        sent += item.clientMsgId
-        if (!core.parts.store.markWritten(item.clientMsgId)) return
-        if (item.request is ClientEvent.Command) core.commands.written(item.clientMsgId)
-        post(item.request)
+    private suspend fun offerOne(
+        item: OutboxItem,
+        behind: Boolean,
+    ): Boolean {
+        if (item.clientMsgId in sent) return true
+        val open = drain == Drain.DONE && item.failure == null
+        if (open && item.uploading) uploads.queue(item)
+        val waits = item.request is ClientEvent.Msg && (behind || core.turnsLive)
+        val goes = open && !item.uploading && !waits
+        if (goes) {
+            sent += item.clientMsgId
+            val written = core.parts.store.markWritten(item.clientMsgId)
+            if (written && item.request is ClientEvent.Command) core.commands.written(item.clientMsgId)
+            if (written) post(item.request)
+        }
+        return goes
     }
 
     /**
@@ -116,7 +133,7 @@ internal class Live(
         drain = Drain.DONE
         val offered = items + waiting
         waiting.clear()
-        for (item in offered) offer(item)
+        offer(offered)
     }
 
     /**

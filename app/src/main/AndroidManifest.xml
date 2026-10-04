@@ -13,7 +13,7 @@
         android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
         tools:node="remove" />
 
-    <!-- The pairing-wait notification's short foreground service (design section 12.5). -->
+    <!-- The short foreground services of the pairing wait and of an upload in flight (design section 12.5). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Onboarding's step 7 asks for it (design section 13.3), and the pairing wait posts with it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -54,6 +54,12 @@
 
         <service
             android:name=".PairingWaitService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
+
+        <!-- An upload in flight finishes out of sight (design sections 8.5 and 12.5); no type needs a permission. -->
+        <service
+            android:name=".UploadService"
             android:exported="false"
             android:foregroundServiceType="shortService" />
     </application>

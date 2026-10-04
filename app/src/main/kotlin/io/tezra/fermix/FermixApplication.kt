@@ -7,16 +7,20 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
- * The process: it makes the app's services once, starts reading the network and the records, and tells the
- * sessions' supervisor when the process comes into and goes out of sight.
+ * The process: it makes the app's services once ([makeServices], which a test's application makes with a fake
+ * of its own), starts reading the network and the records, and tells the sessions' supervisor when the process
+ * comes into and goes out of sight.
  */
-class FermixApplication : Application() {
+open class FermixApplication : Application() {
     lateinit var services: AppServices
         private set
 
+    /** The app's services, made once as the process starts. */
+    protected open fun makeServices(): AppServices = AppServices(this)
+
     override fun onCreate() {
         super.onCreate()
-        services = AppServices(this)
+        services = makeServices()
         services.start()
         ProcessLifecycleOwner.get().lifecycle.addObserver(SightObserver(services.supervisor.inSight))
     }

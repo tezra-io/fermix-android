@@ -36,6 +36,12 @@ internal class FakeLink : Link {
     /** The close this side sent, once it sent one. */
     val phoneClose = CompletableDeferred<TransportException.Closed>()
 
+    /** What the socket holds unwritten, as a test sets it: a daemon that reads slowly. */
+    @Volatile
+    var queued = 0L
+
+    override val queuedBytes: Long get() = queued
+
     override val incoming: ReceiveChannel<ByteArray> get() = toPhone
     override val closed: Deferred<TransportException> get() = ended
 

@@ -135,7 +135,10 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   stands in for the camera permission, since a connected test's APK is installed with every permission
   granted; the camera's prompt is answered by `PromptRegistry`, an `ActivityResultRegistry` in
   `src/sharedTest`, and the clip is `FakeClip`; the chat's are the fake session and cache (`FakeChatSession`,
-  `FakeChatStore` in `feature-chat/src/sharedTest`) behind `ChatSession` and `ChatStore`. `check` builds
+  `FakeChatStore` in `feature-chat/src/sharedTest`) behind `ChatSession` and `ChatStore`, and, beyond its
+  screen, `ChatOutside`: the activities it starts, its permissions, the camera's screen and the attach
+  sheet's grid, whose system Photo Picker tile the rig's `PickerRegistry` answers. The embedded Photo Picker
+  is the system's surface, which no test or screenshot draws. `check` builds
   them, so they pass every gate; run them with `./gradlew :feature-onboarding:connectedDebugAndroidTest`,
   `:feature-chats:connectedDebugAndroidTest` and `:feature-chat:connectedDebugAndroidTest`, one Gradle run
   each, on an emulator (`README.md`), settled first
@@ -178,6 +181,10 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   type-resolving tasks `build` runs (`detektDebug`, `detektRelease`, `detektDebugUnitTest`,
   `detektDebugAndroidTest`) find what a bare `detekt` does not, `InjectDispatcher` and
   `ImplicitDefaultLocale` among them, so check with them.
+- A call that needs an SDK extension (the embedded Photo Picker's, extension 15 of API 34) sits under a
+  positive check inline in the same function, `if (SdkExtensions.getExtensionVersion(...) >= 15)`, and the
+  function that builds what needs it carries `@RequiresExtension`: lint reads no other form, and a helper
+  or an early return reads to it as no check at all.
 - A permission the app starts to request lands in `policy/permissions.txt` in the same change, with
   the design section that asks for it; CI's `policy` job fails a release APK whose permissions differ
   from that file's in either direction (`scripts/check_release_policy.sh`).

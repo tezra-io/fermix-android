@@ -20,6 +20,10 @@ lifecycle = "2.11.0"
 # 1.6.2 (2026-08-26) and 3.1.1 (2026-07-29) are the newest; zxing-cpp asks for camera-core 1.5.2, 1.6.2 meets it.
 camerax = "1.6.2"
 zxingCpp = "3.1.1"
+# The attach sheet's grid (design section 8.5, D18): the embedded Photo Picker's Compose host, which draws the
+# system's picker inside the sheet from SDK extension 15. 1.0.0-alpha02 (2026-07-01) is the newest release; the
+# library has no stable one yet.
+photopicker = "1.0.0-alpha02"
 # The instrumented tests (CI/CD design section 3, `ui`): AndroidX Test's runner and its JUnit 4 runner class,
 # beside Compose's test rule from the BOM. That rule brings Espresso 3.5.0, which fails on API 36 before a
 # test runs (it calls InputManager.getInstance, gone from Android 16); 3.7.0, of the same release as the
@@ -91,6 +95,7 @@ androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.r
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-compose = { module = "androidx.camera:camera-compose", version.ref = "camerax" }
 zxing-cpp-android = { module = "io.github.zxing-cpp:android", version.ref = "zxingCpp" }
+androidx-photopicker-compose = { module = "androidx.photopicker:photopicker-compose", version.ref = "photopicker" }
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
 androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }

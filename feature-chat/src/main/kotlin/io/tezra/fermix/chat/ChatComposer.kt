@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -25,12 +26,21 @@ import kotlinx.coroutines.sync.withLock
 const val DRAFT_DEBOUNCE_MS = 400L
 
 /**
+ * A change the chat made to the field, not the owner's typing: the [value] it wrote, counted by [revision], which
+ * the composer's field writes into what the owner types in (Composer's Field).
+ */
+data class FieldWrite(
+    val revision: Int = 0,
+    val value: TextFieldValue = TextFieldValue(""),
+)
+
+/**
  * The composer's text path (design section 13.6): the field, restored from the chat's draft as it opens and
  * kept [DRAFT_DEBOUNCE_MS] after each change and as the screen leaves ([keep], on [background], which
  * outlives the screen); the slash palette, open while the field holds a command's word or the owner asked
  * for it (long-press send, Ctrl+K); and send, a `command` for the daemon's commands and a `msg` otherwise,
- * which empties the field once the session took it. A blank field sends nothing: nothing is disabled, and
- * the mic that takes its place is Task 13's.
+ * which empties the field once the session took it. A blank field sends nothing: nothing is disabled, and the
+ * mic takes send's place (ChatVoice).
  */
 class ChatComposer(
     private val requests: ChatRequests,
@@ -40,6 +50,7 @@ class ChatComposer(
     private val commands: () -> List<CommandDescriptor>,
 ) {
     private val text = MutableStateFlow(TextFieldValue(""))
+    private val write = MutableStateFlow(FieldWrite())
     private val asked = MutableStateFlow(false)
     private val keeping = Mutex()
 
@@ -48,6 +59,9 @@ class ChatComposer(
     private val restored = MutableStateFlow(false)
 
     val field: StateFlow<TextFieldValue> = text.asStateFlow()
+
+    /** The latest change the chat, not the owner, made to the field. */
+    val written: StateFlow<FieldWrite> = write.asStateFlow()
 
     /** Whether the palette shows. */
     val palette: StateFlow<Boolean> =
@@ -69,9 +83,17 @@ class ChatComposer(
         text.value = value
     }
 
+    /** The attach sheet's caption, which is the field's words, written into the composer's field as well. */
+    fun caption(value: TextFieldValue) {
+        text.value = value
+        write.update { FieldWrite(it.revision + 1, value) }
+    }
+
     /** Edit on a queued bubble: its words back in the field, the caret at their end. */
     fun replace(words: String) {
-        text.value = TextFieldValue(words, TextRange(words.length))
+        val value = TextFieldValue(words, TextRange(words.length))
+        text.value = value
+        write.update { FieldWrite(it.revision + 1, value) }
     }
 
     fun openPalette() {
@@ -110,10 +132,15 @@ class ChatComposer(
                 }
             if (!taken) return@launch
             onTaken()
-            asked.value = false
-            if (text.value.text == words) replace("")
-            keep()
+            emptyIf(words)
         }
+    }
+
+    /** A request captioned [words] went: the field empties unless the owner typed on, and is kept. */
+    fun emptyIf(words: String) {
+        asked.value = false
+        if (text.value.text == words) replace("")
+        keep()
     }
 
     /**

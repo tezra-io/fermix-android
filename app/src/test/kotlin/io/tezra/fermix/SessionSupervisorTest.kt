@@ -13,7 +13,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -70,8 +72,12 @@ class SessionSupervisorTest {
                 },
             )
 
-        /** Starts the supervisor on the test's own scheduler, as the app does on its I/O dispatcher. */
-        fun start() = supervisor.start(StandardTestDispatcher(scope.testScheduler))
+        /**
+         * Starts the supervisor on the test's own scheduler, as the app does on its I/O dispatcher, each session's
+         * upload in flight as [uploadingOf] says.
+         */
+        fun start(uploadingOf: (Session) -> Flow<Boolean> = { it.uploading }) =
+            supervisor.start(StandardTestDispatcher(scope.testScheduler), uploadingOf)
 
         fun session(id: String): Session = checkNotNull(supervisor.sessions.value[id]) { "no session for $id" }
     }
@@ -351,6 +357,63 @@ class SessionSupervisorTest {
             own.cancel()
             runCurrent()
             assertTrue(held.all { it.state.value == SessionState.Closed })
+        }
+
+    @Test
+    fun `a session with an upload in flight past the grace is spared until its upload ends, and the rest are not`() =
+        runTest {
+            val rig = Rig(this, listOf(first, second))
+            val upload = MutableStateFlow(false)
+            rig.start { session -> if (session === rig.supervisor.sessions.value[first.id]) upload else flowOf(false) }
+            rig.supervisor.inSight.value = true
+            runCurrent()
+            upload.value = true
+            runCurrent()
+            assertEquals(setOf(first.id), rig.supervisor.uploading.value)
+            rig.supervisor.inSight.value = false
+            advanceTimeBy(BACKGROUND_GRACE_MILLIS + 1)
+            runCurrent()
+            assertNotEquals(SessionState.Suspended, rig.session(first.id).state.value)
+            assertEquals(SessionState.Suspended, rig.session(second.id).state.value)
+            upload.value = false
+            runCurrent()
+            assertEquals(emptySet<String>(), rig.supervisor.uploading.value)
+            assertEquals(SessionState.Suspended, rig.session(first.id).state.value)
+            assertEquals(emptyList<String>(), rig.faults)
+        }
+
+    @Test
+    fun `an upload still in flight when the hold ends is put aside with its session, and logged`() =
+        runTest {
+            val rig = Rig(this, listOf(first))
+            rig.start { flowOf(true) }
+            rig.supervisor.inSight.value = true
+            runCurrent()
+            rig.supervisor.inSight.value = false
+            advanceTimeBy(BACKGROUND_GRACE_MILLIS + UPLOAD_HOLD_MILLIS - 1)
+            runCurrent()
+            assertNotEquals(SessionState.Suspended, rig.session(first.id).state.value)
+            advanceTimeBy(2)
+            runCurrent()
+            assertEquals(SessionState.Suspended, rig.session(first.id).state.value)
+            assertEquals(1, rig.faults.count { "still in flight" in it }, "faults: ${rig.faults}")
+        }
+
+    @Test
+    fun `back in sight during the upload hold, nothing is put aside`() =
+        runTest {
+            val rig = Rig(this, listOf(first))
+            rig.start { flowOf(true) }
+            rig.supervisor.inSight.value = true
+            runCurrent()
+            rig.supervisor.inSight.value = false
+            advanceTimeBy(BACKGROUND_GRACE_MILLIS + 1)
+            runCurrent()
+            rig.supervisor.inSight.value = true
+            advanceTimeBy(UPLOAD_HOLD_MILLIS * 2)
+            runCurrent()
+            assertNotEquals(SessionState.Suspended, rig.session(first.id).state.value)
+            assertEquals(emptyList<String>(), rig.faults)
         }
 
     @Test

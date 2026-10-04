@@ -82,7 +82,7 @@ internal fun bridgedItems(
     val landed = ascending.mapNotNull(::userRequest).toSet()
     return inputs.bridged.filter { it.clientMsgId !in landed }.map { item ->
         val sent = inputs.live.accepted[item.clientMsgId] ?: inputs.nowWall
-        val message = outboxMessage(item, Delivery.DELIVERED).copy(wallMs = sent)
+        val message = outboxMessage(item, Delivery.DELIVERED, inputs).copy(wallMs = sent, uploadLine = null)
         ChatItem.Message(outboxKey(item.clientMsgId), message)
     }
 }

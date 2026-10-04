@@ -121,3 +121,15 @@ whose version matches `version.properties`.
   computer only, opening in a Custom Tab. The model chip and its "Model" sheet switch the chat's model,
   `/model` too. Search finds messages through the computer's index, or the phone's while offline, from
   the bar or Ctrl+F, says when the computer's search fails, and jumps to each hit with its words marked.
+- **Photos, files and voice notes.** The composer's + opens the attach sheet: photos from the system's
+  Photo Picker, files, the camera and the clipboard, with a caption, "Send as files" and the size limit
+  said inline; pasted and keyboard images are kept as they land. Photos leave the phone as JPEGs with no
+  location or camera data. Uploads show a ring, or a bar under a document or a voice note, survive a
+  dropped connection, a rotation or a fold, start again when the computer stops answering, and keep going
+  for a while when the app leaves the screen ("Sending to {computer}"); messages reach the computer in the
+  order they were written, an upload ahead of them or not. Images from the computer show in grids and open
+  in a full-screen viewer with zoom, share and save; documents open in another app. Holding the mic records
+  a voice note: slide left to cancel, up to lock; a call, leaving the app or the system taking the touch
+  keeps it as a draft, which only a tap sends, and a rotation mid-hold locks it. A draft stays with its
+  chat until it is sent or discarded, even after the app closes. Notes play in the chat with their
+  transcript and their own waveform. The app now asks for the microphone (`RECORD_AUDIO`).

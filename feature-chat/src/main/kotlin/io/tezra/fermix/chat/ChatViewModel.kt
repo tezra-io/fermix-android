@@ -9,6 +9,7 @@ import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.UploadProgress
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -43,6 +44,14 @@ private data class Held(
     val bridged: List<OutboxItem>,
     val live: ChatLive,
     val unreadAt: ULong?,
+)
+
+/** What the list reads besides its rows: what was sent, what was seen, an older page asked for, the uploads. */
+private data class Asked(
+    val sent: Map<String, ClientEvent>,
+    val seen: ULong?,
+    val older: OlderAsked?,
+    val uploads: Map<String, UploadProgress>,
 )
 
 /** What was decided as the chat opened: the row the unread divider stands above, none for no divider. */
@@ -111,7 +120,7 @@ class ChatViewModel(
     val requests = ChatRequests(session, viewModelScope, parts.profileId, parts.newId, parts.log)
     val approvals = ChatApprovals(session, viewModelScope, parts.log)
     val models = ChatModels(requests, session, viewModelScope, parts.profileId, parts.newId, parts.log)
-    val thumbnails = ChatThumbnails(session, parts.store, parts.scratch, parts.log)
+    val blobs = ChatBlobs(session, parts)
     val jumps = ChatJumps(parts.store, session, limit, viewModelScope, parts.log)
     val search =
         ChatSearch(
@@ -135,18 +144,43 @@ class ChatViewModel(
                     .orEmpty()
             },
         )
+    private val maxBytes: StateFlow<Long> =
+        record
+            .map { it?.caps?.maxMediaBytes ?: Long.MAX_VALUE }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, Long.MAX_VALUE)
+    val attach = ChatAttach(parts, requests, composer, viewModelScope, maxBytes)
+    val voice = ChatVoice(parts, requests, viewModelScope)
+    val playback = ChatPlayback(parts, viewModelScope)
+    val notes = ChatNotes(voice, playback, blobs, parts.io)
+    private val uploads: StateFlow<Map<String, UploadProgress>> =
+        session
+            .flatMapLatest { it?.uploads ?: flowOf(emptyMap()) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** What the attachments and voice notes show; whether the microphone is off is the screen's to say. */
+    val media: StateFlow<MediaUi> =
+        combine(
+            attach.ui,
+            voice.ui,
+            playback.playing,
+            blobs.colours,
+            combine(voice.bars, playback.bars, voice.lengths, playback.lengths, ::Notes),
+        ) { attached, recording, playing, colours, notes ->
+            MediaUi(attached, recording, playing, colours, notes.read + notes.bars, notes.played + notes.recorded)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, MediaUi())
 
     val state: StateFlow<ChatScreenState?> =
         combine(
             factsOf(record, link, delayedBanner(link, parts.network), live),
             combine(rows, outbox, bridged, live, opened, ::heldOf),
             link,
-            combine(requests.sent, seenUpTo, olderAsked, ::Triple),
+            combine(requests.sent, seenUpTo, olderAsked, uploads, ::Asked),
             models.switchPending,
-        ) { facts, held, link, (sent, seen, asked), switching ->
+        ) { facts, held, link, asked, switching ->
             if (facts == null || held == null) return@combine null
-            val inputs = inputsOf(parts, held, link is Link.Up, sent)
-            val state = chatScreenState(facts, inputs, seen, limit.value, loadingOlder = asked != null)
+            val transcripts = record.value?.caps?.transcripts == true
+            val inputs = inputsOf(parts, held, link is Link.Up, asked).copy(transcripts = transcripts)
+            val state = chatScreenState(facts, inputs, asked.seen, limit.value, loadingOlder = asked.older != null)
             state.copy(switchPending = switching && state.turnRuns)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -222,11 +256,15 @@ class ChatViewModel(
         parts.presence.report(listedUpTo)
     }
 
-    /** Edit on a queued bubble: its words back in the field, once the item left the outbox unsent. */
+    /**
+     * Edit on a queued bubble: its words back in the field and its attachments in the tray (design section 13.6),
+     * once the item left the outbox unsent.
+     */
     fun edit(message: ShownMessage) {
         val id = requireNotNull(message.clientMsgId) { "only an outbox item is edited" }
         viewModelScope.launch {
-            if (requests.withdraw(id)) composer.replace(message.text) else stayed(parts.log, "Edit", id)
+            val left = attach.takeBack(message.attachments) { requests.withdraw(id) }
+            if (left) composer.replace(message.text) else stayed(parts.log, "Edit", id)
         }
     }
 
@@ -248,6 +286,9 @@ class ChatViewModel(
     override fun onCleared() {
         parts.presence.report(null)
         composer.keep()
+        attach.release()
+        voice.stop()
+        playback.stop()
     }
 
     /** Bridges the owner's messages `accepted` took out of the outbox to their rows (bridgedAfter). */
@@ -277,6 +318,17 @@ private fun olderBefore(
     fold: Older,
     held: List<TimelineRow>,
 ): ULong? = (fold as? Older.Before)?.seq ?: held.minOfOrNull { it.serverSeq }?.takeIf { it > 1uL }
+
+/**
+ * The voice notes' bars and lengths, by cache name: those this process recorded ([bars], [recorded]), which win,
+ * and those the player read from a note's file ([read], [played]).
+ */
+private data class Notes(
+    val bars: Map<String, List<Float>>,
+    val read: Map<String, List<Float>>,
+    val recorded: Map<String, Long>,
+    val played: Map<String, Long>,
+)
 
 /** What says whether an older page asked for has landed. */
 private data class OlderFacts(
@@ -335,7 +387,7 @@ private fun inputsOf(
     parts: ChatParts,
     held: Held,
     connected: Boolean,
-    sent: Map<String, ClientEvent>,
+    asked: Asked,
 ): ChatInputs =
     ChatInputs(
         rows = held.rows,
@@ -344,8 +396,9 @@ private fun inputsOf(
         live = held.live,
         connected = connected,
         unreadAt = held.unreadAt,
-        requests = sent,
+        requests = asked.sent,
         profileId = parts.profileId,
         nowWall = parts.clock.wallMs(),
         zone = parts.zone(),
+        uploads = asked.uploads,
     )

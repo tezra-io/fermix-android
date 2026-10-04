@@ -10,6 +10,11 @@ import io.tezra.fermix.attest.HardwareGate
 import io.tezra.fermix.chat.ChatClock
 import io.tezra.fermix.chat.ChatLive
 import io.tezra.fermix.chat.ChatParts
+import io.tezra.fermix.chat.PhoneClip
+import io.tezra.fermix.chat.PhoneMedia
+import io.tezra.fermix.chat.PhonePlayer
+import io.tezra.fermix.chat.PhoneRecorder
+import io.tezra.fermix.chat.RoomChatFiles
 import io.tezra.fermix.chat.RoomChatStore
 import io.tezra.fermix.chat.SessionChat
 import io.tezra.fermix.chats.ChatsParts
@@ -71,7 +76,8 @@ private const val INSTANCES_DIRECTORY = "instances"
  * notification follows, [pairingWait] (onboarding's) and [inBackground] (the activity's). Blocking work,
  * the files and the Keystore, runs on [io]; a ceremony and the sessions run on [work]. Unpairing asks a
  * daemon to forget the phone through [sendUnpair], `unpair` over the session's live connection, which a test
- * replaces to see who asks.
+ * replaces to see who asks; whether a session has an upload in flight is [uploadingOf]'s to say, Session.uploading,
+ * which a test replaces to have one.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppServices(
@@ -79,6 +85,7 @@ class AppServices(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val work: CoroutineDispatcher = Dispatchers.Default,
     sendUnpair: suspend (Session) -> Boolean = { askToForget(it, ::logFault) },
+    private val uploadingOf: (Session) -> Flow<Boolean> = { it.uploading },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + io)
     private val sessionScope = CoroutineScope(SupervisorJob() + work)
@@ -144,7 +151,7 @@ class AppServices(
         scope.launch {
             launchCheck(instances, keys::exists)
             checkedState.value = true
-            supervisor.start(io)
+            supervisor.start(io, uploadingOf)
             launch { namedRecords().collect { (records, agents) -> conversations.sync(records, agents) } }
             settings.settings.collect { withContext(Dispatchers.Main) { lockGate.lockSetting(it.appLock) } }
         }
@@ -213,9 +220,9 @@ class AppServices(
 
     /**
      * A chat's parts: [instanceId]'s session while the supervisor holds one, the app's fold of its events, its
-     * [profileId]'s cache, the network, where it reports itself on screen, the clocks, the app's scope, which
-     * keeps its draft as it leaves, and the cache directory a fetched thumbnail lands in before the media cache
-     * takes it.
+     * [profileId]'s cache and staged uploads, the network, where it reports itself on screen, the clocks, the app's
+     * scope, which keeps its draft as it leaves, the phone's media, clipboard, microphone and player, and the cache
+     * directory a fetched blob or a made attachment lands in before the media cache or the outbox takes it.
      */
     fun chatParts(
         instanceId: String,
@@ -237,6 +244,11 @@ class AppServices(
             background = scope,
             newId = { UUID.randomUUID().toString() },
             log = ::logFault,
+            files = RoomChatFiles(databases, instanceId, profileId),
+            media = PhoneMedia(context, ::logFault),
+            clip = PhoneClip(context),
+            recorder = PhoneRecorder(context, ::logFault),
+            player = PhonePlayer(),
             scratch = { File.createTempFile("fetch", null, context.cacheDir) },
         )
 

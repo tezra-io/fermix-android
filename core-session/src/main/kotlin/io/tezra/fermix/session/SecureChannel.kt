@@ -49,10 +49,13 @@ internal class SecureChannel(
     private var receivedSeq = 0uL
     private val assembler = EventPartAssembler()
 
+    /** Bytes the link holds unwritten (Link.queuedBytes). */
+    val queuedBytes: Long get() = link.queuedBytes
+
     /**
      * Sends [event] at the next seq, with [raw] as its tail: a protocol v2 `pair_request` carries its
-     * attestation chain there, and no event of a paired session carries one. A link that is closing takes
-     * nothing; its reader then sees the link end and says why, so nothing here waits on the answer.
+     * attestation chain there, and an `attach_chunk` its bytes. A link that is closing takes nothing; its
+     * reader then sees the link end and says why, so nothing here waits on the answer.
      */
     fun send(
         event: ClientEvent,

@@ -1,11 +1,13 @@
 package io.tezra.fermix.chat
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -13,6 +15,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -22,9 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -188,8 +197,9 @@ private fun Pill(
 }
 
 /**
- * The line under the owner's bubble (the canon's `.state`): queued, pending, or not sent in the error colour; at
- * the end of the column, as wide as the bubble may be, so a line that wraps stays under it, flush to its end.
+ * The line under the owner's bubble (the canon's `.state`): queued, pending, or not sent in the error colour with
+ * its ⚠; at the end of the column, as wide as the bubble may be, so a line that wraps stays under it, flush to its
+ * end, the glyph beside its first words.
  */
 @Composable
 internal fun StateLine(
@@ -198,14 +208,61 @@ internal fun StateLine(
 ) {
     val colors = LocalFermixColors.current
     val tint = if (error) colors.err else colors.inkSecondary
-    Row(
+    Box(
         modifier = Modifier.fillMaxWidth(FermixSpacing.USER_BUBBLE_MAX_WIDTH).padding(top = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.CenterEnd,
     ) {
-        if (error) Icon(painterResource(R.drawable.ic_chat_warn), null, tint = tint, modifier = Modifier.size(16.dp))
-        Text(words, style = FermixType.labelSmall, color = tint, textAlign = TextAlign.End)
+        if (error) {
+            GlyphLine(words, R.drawable.ic_chat_warn, leads = true, tint)
+        } else {
+            Text(words, style = FermixType.labelSmall, color = tint, textAlign = TextAlign.End)
+        }
     }
+}
+
+/** The inline glyph's place: 16 dp, and the 4 dp between it and the words. */
+private val GLYPH = 16.dp
+private val GLYPH_GAP = 4.dp
+
+private const val GLYPH_ID = "glyph"
+
+/**
+ * A state line's [words] in [tint] with its 16 dp glyph [icon], before them when it [leads] and after them
+ * otherwise, set in the text itself, so a line that wraps in large type keeps the glyph beside its words; flush to
+ * the end. The glyph keeps its 16 dp at any font scale.
+ */
+@Composable
+internal fun GlyphLine(
+    words: String,
+    @DrawableRes icon: Int,
+    leads: Boolean,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val place =
+        with(density) { Placeholder((GLYPH + GLYPH_GAP).toSp(), GLYPH.toSp(), PlaceholderVerticalAlign.TextCenter) }
+    val side = if (leads) Alignment.CenterStart else Alignment.CenterEnd
+    val glyph =
+        InlineTextContent(place) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = side) {
+                Icon(painterResource(icon), null, tint = tint, modifier = Modifier.size(GLYPH))
+            }
+        }
+    val text =
+        buildAnnotatedString {
+            if (leads) appendInlineContent(GLYPH_ID)
+            append(words)
+            if (!leads) appendInlineContent(GLYPH_ID)
+        }
+    Text(
+        text,
+        style = FermixType.labelSmall,
+        color = tint,
+        textAlign = TextAlign.End,
+        inlineContent = mapOf(GLYPH_ID to glyph),
+        modifier = modifier,
+    )
 }
 
 /** A time of day in the owner's own form. */

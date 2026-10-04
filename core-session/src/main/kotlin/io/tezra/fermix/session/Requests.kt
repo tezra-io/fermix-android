@@ -28,24 +28,34 @@ internal class Requests(
 ) {
     private val store: SessionStore get() = core.parts.store
 
-    suspend fun submit(request: ClientEvent) {
+    /**
+     * [request], with the [attachments] its `msg` uploads first (Uploads), into the outbox, then on its way if a
+     * connection is up and reconciled.
+     */
+    suspend fun submit(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment> = emptyList(),
+    ) {
         core.requireOpen()
-        val item = OutboxItem(request)
+        val item = OutboxItem(request, attachments = attachments)
         val profile = (request as? ClientEvent.Msg)?.profileId ?: (request as? ClientEvent.Command)?.profileId
         require(profile == core.instance.profileId) { "a request for profile $profile in a session of another" }
-        // The codec holds the request to protocol v2's rules; one it refuses is never stored.
+        // The codec holds the request and each attach_begin to protocol v2's rules; one it refuses is never stored.
         encodeClientEvent(SESSION_VERSION, 1uL, request)
+        attachments.forEach { encodeClientEvent(SESSION_VERSION, 1uL, it.begin()) }
         val items = store.outbox()
         check(items.size < MAX_OUTBOX) { "the outbox holds $MAX_OUTBOX requests already" }
         require(items.none { it.clientMsgId == item.clientMsgId }) { "${item.clientMsgId} is in the outbox already" }
         store.enqueue(item)
-        core.live?.offer(item)
+        core.live?.offer(store.outbox())
     }
 
     /**
      * "Run again" (design section 13.5): [failed] goes again as [newClientMsgId], whose `retry_of` names
      * it. The caller passes the request itself, since `accepted` took it out of the outbox before its run
-     * failed; one refused before `accepted` is still there, failed, and leaves now.
+     * failed; one refused before `accepted` is still there, failed, and leaves now, its attachments going with
+     * the new one, those the daemon holds as they are and the others from `attach_begin`, with its restarts
+     * counted afresh. One accepted names blobs the daemon took already.
      */
     suspend fun retry(
         failed: ClientEvent,
@@ -62,8 +72,9 @@ internal class Requests(
                 is ClientEvent.Command -> failed.copy(clientMsgId = newClientMsgId)
                 else -> error("an outbox item holds a msg or a command")
             }
-        submit(again)
+        submit(again, held?.attachments.orEmpty())
         if (held != null) store.dequeue(clientMsgId)
+        core.forgetUploads(clientMsgId)
     }
 
     /**
@@ -74,6 +85,7 @@ internal class Requests(
      */
     suspend fun accepted(event: ServerEvent.Accepted) {
         store.dequeue(event.clientMsgId)
+        core.forgetUploads(event.clientMsgId)
         core.emit(SessionEvent.Accepted(event.clientMsgId, event.duplicate))
         val opens = !event.duplicate && event.clientMsgId !in core.commands
         if (opens) core.turns { it.apply(TurnEvent.Accepted(event.clientMsgId)) }
@@ -86,7 +98,12 @@ internal class Requests(
     suspend fun remove(clientMsgId: String): Boolean {
         core.requireOpen()
         require(clientMsgId.isNotEmpty()) { "a removal names its request" }
-        return store.withdraw(clientMsgId)
+        val withdrawn = store.withdraw(clientMsgId)
+        if (!withdrawn) return false
+        core.forgetUploads(clientMsgId)
+        // A msg it held back, as it uploaded or waited, goes now.
+        core.live?.offer(store.outbox())
+        return true
     }
 
     /**
@@ -131,9 +148,18 @@ internal class Requests(
         val clientMsgId = outcome.clientMsgId
         val failure = RequestFailure(outcome.error ?: REQUEST_FAILED, FAILED_WHILE_AWAY)
         when {
-            outcome.status != RequestState.FAILED -> store.dequeue(clientMsgId)
-            answer -> answerFailed(clientMsgId, failure)
-            else -> core.emit(SessionEvent.RequestFailed(clientMsgId, failure, markFailedIfHeld(clientMsgId, failure)))
+            outcome.status != RequestState.FAILED -> {
+                store.dequeue(clientMsgId)
+                core.forgetUploads(clientMsgId)
+            }
+
+            answer -> {
+                answerFailed(clientMsgId, failure)
+            }
+
+            else -> {
+                core.emit(SessionEvent.RequestFailed(clientMsgId, failure, markFailedIfHeld(clientMsgId, failure)))
+            }
         }
     }
 

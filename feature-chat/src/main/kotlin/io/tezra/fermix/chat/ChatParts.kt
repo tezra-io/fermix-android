@@ -6,7 +6,10 @@ import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
 import io.tezra.fermix.data.countFrom
 import io.tezra.fermix.data.oldest
+import io.tezra.fermix.data.releaseStagedUploads
 import io.tezra.fermix.data.row
+import io.tezra.fermix.data.voiceDraft
+import io.tezra.fermix.data.withStagedUploads
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.ModelEntry
 import io.tezra.fermix.protocol.ServerEvent
@@ -14,16 +17,20 @@ import io.tezra.fermix.session.ApprovalAnswer
 import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.FetchedMedia
 import io.tezra.fermix.session.OneShot
+import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionState
 import io.tezra.fermix.session.TimelineRow
+import io.tezra.fermix.session.UploadProgress
 import io.tezra.fermix.session.answerApproval
 import io.tezra.fermix.session.fetchMedia
 import io.tezra.fermix.session.pullModels
 import io.tezra.fermix.session.search
 import io.tezra.fermix.transport.NetworkFacts
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
@@ -38,7 +45,14 @@ interface ChatSession : ChatCalls {
     val state: StateFlow<SessionState>
     val diagnostics: StateFlow<List<Diagnostic>>
 
-    suspend fun send(request: ClientEvent): Boolean
+    /** Each attachment's upload by its `attach_id`, for its bubble's ring and line (Session.uploads). */
+    val uploads: StateFlow<Map<String, UploadProgress>>
+
+    /** [request], with the [attachments] its `msg` uploads first, into the outbox (Session.send). */
+    suspend fun send(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment> = emptyList(),
+    ): Boolean
 
     suspend fun retry(
         failed: ClientEvent,
@@ -72,10 +86,11 @@ interface ChatCalls {
     /** Every `models` page of one pull (Session.pullModels). */
     suspend fun pullModels(): OneShot<List<ModelEntry>>
 
-    /** The blob [ref] into [into], through the daemon alone (Session.fetchMedia). */
+    /** The blob [ref] into [into], through the daemon alone, its first chunk to [firstChunk] (Session.fetchMedia). */
     suspend fun fetchMedia(
         ref: String,
         into: File,
+        firstChunk: (ByteArray) -> Unit = {},
     ): OneShot<FetchedMedia>
 }
 
@@ -92,9 +107,12 @@ class SessionChat(
     ChatCalls by SessionCalls(session, log) {
     override val state: StateFlow<SessionState> get() = session.state
     override val diagnostics: StateFlow<List<Diagnostic>> get() = session.diagnostics
+    override val uploads: StateFlow<Map<String, UploadProgress>> get() = session.uploads
 
-    override suspend fun send(request: ClientEvent): Boolean =
-        session.unlessEnded("send", log) { session.send(request) } != null
+    override suspend fun send(
+        request: ClientEvent,
+        attachments: List<OutboxAttachment>,
+    ): Boolean = session.unlessEnded("send", log) { session.send(request, attachments) } != null
 
     override suspend fun retry(
         failed: ClientEvent,
@@ -141,8 +159,9 @@ internal class SessionCalls(
     override suspend fun fetchMedia(
         ref: String,
         into: File,
+        firstChunk: (ByteArray) -> Unit,
     ): OneShot<FetchedMedia> =
-        session.unlessEnded("fetchMedia", log) { session.fetchMedia(ref, into) } ?: OneShot.Offline
+        session.unlessEnded("fetchMedia", log) { session.fetchMedia(ref, into, firstChunk) } ?: OneShot.Offline
 }
 
 /**
@@ -270,6 +289,71 @@ class RoomChatStore(
 }
 
 /**
+ * A chat's files beside its database (design section 8.5): each attachment's file staged until its item leaves the
+ * outbox, and a cached blob copied out to a file a player or another app opens. The profile's for the app, a fake
+ * for the tests.
+ */
+interface ChatFiles {
+    /** Moves [file] in as [attachId]'s staged source: the path the outbox item names; none once the chat is gone. */
+    suspend fun stage(
+        file: File,
+        attachId: String,
+    ): String?
+
+    /**
+     * Deletes each of [paths] the chat staged for a send its session never took, unless an outbox item names it;
+     * nothing once the chat is gone, its staged files with it.
+     */
+    suspend fun release(paths: List<String>)
+
+    /** Copies the cached blob [sha256] into [into]: whether the media cache held it. */
+    suspend fun export(
+        sha256: String,
+        into: File,
+    ): Boolean
+
+    /**
+     * The file the chat's voice note records into and its unsent draft stays in, beside its staged uploads, so a
+     * draft outlives the chat and the process (design section 13.6, "Drafts persist per chat"); none once the chat
+     * is gone, its draft with it.
+     */
+    suspend fun voiceDraft(): File?
+}
+
+/**
+ * The app's [ChatFiles]: [instanceId]'s [profileId] in [profiles], staged through ProfileDatabases' staged uploads
+ * and copied out of its media cache, each a use a removal waits for; its voice draft in the profile's directory.
+ */
+class RoomChatFiles(
+    private val profiles: ProfileDatabases,
+    private val instanceId: String,
+    private val profileId: String,
+) : ChatFiles {
+    override suspend fun stage(
+        file: File,
+        attachId: String,
+    ): String? =
+        (profiles.withStagedUploads(instanceId, profileId) { it.stage(file, attachId).path } as? Use.Ran)?.value
+
+    override suspend fun release(paths: List<String>) {
+        profiles.releaseStagedUploads(instanceId, profileId, paths)
+    }
+
+    override suspend fun export(
+        sha256: String,
+        into: File,
+    ): Boolean {
+        val copied =
+            profiles.withMediaCache(instanceId, profileId) { cache ->
+                cache.get(sha256)?.copyTo(into, overwrite = true) != null
+            }
+        return (copied as? Use.Ran)?.value == true
+    }
+
+    override suspend fun voiceDraft(): File? = (profiles.voiceDraft(instanceId, profileId) as? Use.Ran)?.value
+}
+
+/**
  * The clocks a chat reads: [monoMs] the monotonic one the working indicator and Info's durations count on,
  * shared with the app's fold of the session's events (ChatLive), and [wallMs] the wall clock a bubble's time
  * is read on.
@@ -293,8 +377,10 @@ fun interface ChatPresence {
  * What a chat runs on, all of it the app's: the [records], [instanceId]'s session while it has one, the app's
  * fold of its events ([live]), its [store], the phone's [network], the [presence] it reports, its [clock],
  * the [background] scope its draft is kept on as it leaves, new client_msg_ids, where it tells what the owner
- * asked and could not have ([log]), the owner's zone, and where a blob is fetched to before the media cache
- * takes it ([scratch]).
+ * asked and could not have ([log]), the owner's zone, and where a blob is fetched or an attachment made before
+ * the media cache or the outbox takes it ([scratch]). [files], [media], [clip], [recorder] and [player] are the
+ * phone's for attachments and voice notes (design section 8.5), fakes in the tests; [io] is where their file work
+ * runs.
  */
 data class ChatParts(
     val instanceId: String,
@@ -309,6 +395,12 @@ data class ChatParts(
     val background: CoroutineScope,
     val newId: () -> String,
     val log: (String, Throwable?) -> Unit,
+    val files: ChatFiles,
+    val media: MediaPipeline,
+    val clip: ChatClip,
+    val recorder: VoiceRecorder,
+    val player: VoicePlayer,
     val zone: () -> ZoneId = ZoneId::systemDefault,
     val scratch: () -> File = { File.createTempFile("fetch", null) },
+    val io: CoroutineDispatcher = Dispatchers.IO,
 )

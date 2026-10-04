@@ -8,9 +8,9 @@ private const val OWNER_ROLE = "user"
 
 /**
  * The events beside a turn and the timeline (Dispatch): a blob's frames to the fetch that streams it, or to
- * the app; approvals to the session's cards and the app; reactions and link previews into the store, then
- * to the app; a search's page and a pull's models to the one-shot that asked; and model changes to the app,
- * each as a typed event.
+ * the app; an upload's answers to the upload on its way (Uploads); approvals to the session's cards and the
+ * app; reactions, link previews and transcripts into the store, then to the app; a search's page and a pull's
+ * models to the one-shot that asked; and model changes to the app, each as a typed event.
  */
 internal class SideEvents(
     private val core: SessionCore,
@@ -26,7 +26,8 @@ internal class SideEvents(
             is ServerEvent.MediaChunk -> if (!live.fetches.chunk(event, raw)) core.emit(SessionEvent.Server(event))
             is ServerEvent.MediaEnd -> if (!live.fetches.end(event)) core.emit(SessionEvent.Server(event))
             is ServerEvent.Approval, is ServerEvent.ApprovalResolved -> approval(event)
-            is ServerEvent.Reaction, is ServerEvent.LinkPreview -> onRow(event)
+            is ServerEvent.Reaction, is ServerEvent.LinkPreview, is ServerEvent.Transcript -> onRow(event)
+            is ServerEvent.AttachStatusEvent -> if (!live.uploads.status(event)) core.emit(SessionEvent.Server(event))
             is ServerEvent.SearchResults, is ServerEvent.Models, is ServerEvent.ModelChanged -> answer(event)
             else -> return false
         }
@@ -69,8 +70,9 @@ internal class SideEvents(
 
     /**
      * What the daemon puts on a row it sent already: a reaction on the owner's message, kept in its metadata as
-     * the mutation feed keeps it, or a link preview, kept with the row's previews as its history carries them.
-     * The store keeps it on the row it caches; one it does not cache gets it from its history.
+     * the mutation feed keeps it; a link preview, kept with the row's previews as its history carries them; or
+     * a voice note's transcript, its row's content from then on (design section 7, the `transcript` row). The
+     * store keeps it on the row it caches; one it does not cache gets it from its history or the mutation feed.
      */
     private suspend fun onRow(event: ServerEvent.Known) {
         val store = core.parts.store
@@ -84,6 +86,11 @@ internal class SideEvents(
                 val card = LinkPreviewCard(event.url, event.site, event.title, event.description, event.imageRef)
                 val stored = store.addLinkPreview(event.inReplyTo, card)
                 core.emit(SessionEvent.LinkPreview(event.inReplyTo, card, stored))
+            }
+
+            is ServerEvent.Transcript -> {
+                val stored = store.applyTranscript(event.clientMsgId, event.text)
+                core.emit(SessionEvent.Transcript(event.clientMsgId, event.text, stored))
             }
 
             else -> {

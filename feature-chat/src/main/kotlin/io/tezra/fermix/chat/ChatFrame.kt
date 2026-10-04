@@ -103,12 +103,19 @@ internal fun Dock(
     FermixColumn(ColumnWidth.Wide) {
         Column(modifier = sheet.navigationBarsPadding().imePadding()) {
             if (!ui.palette) ComposerHint(state.model, state.switchPending)
-            Composer(
-                ui.field,
-                ComposerLook(state.header.record.title, state.turnRuns && ui.field.text.isBlank(), state.model),
-                actions.composer,
-                inSheet = ui.palette,
-            )
+            val nothingToSend =
+                ui.field.text.isBlank() &&
+                    ui.media.attach.picked
+                        .isEmpty()
+            val look =
+                ComposerLook(
+                    state.header.record.title,
+                    stops = state.turnRuns && nothingToSend,
+                    chip = state.model,
+                    media = ui.media,
+                    written = ui.written,
+                )
+            Composer(ui.field, look, actions.composer, inSheet = ui.palette)
         }
     }
 }
