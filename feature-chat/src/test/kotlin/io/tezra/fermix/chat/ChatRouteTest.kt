@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.SavedStateHandle
 import com.github.takahirom.roborazzi.RoborazziActivity
 import io.tezra.fermix.design.FermixTheme
 import io.tezra.fermix.session.SessionEvent
@@ -73,7 +74,7 @@ class ChatRouteTest {
                 )
             }
         val parts = fakeParts(sample(), session, store, background).copy(live = MutableStateFlow(failed))
-        val model = ChatViewModel(parts)
+        val model = ChatViewModel(parts, SavedStateHandle())
         rule.setContent {
             FermixTheme { ChatRoute(model, ChatNavigation(onBack = {}, onInstance = {}, showing = { true })) }
         }

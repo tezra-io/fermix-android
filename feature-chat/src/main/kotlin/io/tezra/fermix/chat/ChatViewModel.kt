@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.tezra.fermix.data.Instance
@@ -86,11 +87,12 @@ private data class OlderAsked(
  * not, and the read frontier as the chat opened, and does not move while it is open; reaching the bottom marks
  * the newest row read once the session took it, never backwards. The screen
  * reports the newest row it lists while it is on screen ([listed]), so the announcer answers ON_SCREEN only
- * for a row the list holds.
+ * for a row the list holds. The tray's own files are kept in its [saved] state (ChatAttach).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     private val parts: ChatParts,
+    saved: SavedStateHandle,
 ) : ViewModel() {
     private val session = parts.session.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val record: StateFlow<Instance?> =
@@ -144,11 +146,13 @@ class ChatViewModel(
                     .orEmpty()
             },
         )
-    private val maxBytes: StateFlow<Long> =
+
+    // None until the chat's record is read; a record whose daemon sent no caps holds nothing to a limit.
+    private val maxBytes: StateFlow<Long?> =
         record
-            .map { it?.caps?.maxMediaBytes ?: Long.MAX_VALUE }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, Long.MAX_VALUE)
-    val attach = ChatAttach(parts, requests, composer, viewModelScope, maxBytes)
+            .map { read -> read?.let { it.caps?.maxMediaBytes ?: Long.MAX_VALUE } }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val attach = ChatAttach(parts, requests, composer, viewModelScope, maxBytes, saved)
     val voice = ChatVoice(parts, requests, viewModelScope)
     val playback = ChatPlayback(parts, viewModelScope)
     val notes = ChatNotes(voice, playback, blobs, parts.io)
@@ -265,6 +269,30 @@ class ChatViewModel(
         viewModelScope.launch {
             val left = attach.takeBack(message.attachments) { requests.withdraw(id) }
             if (left) composer.replace(message.text) else stayed(parts.log, "Edit", id)
+        }
+    }
+
+    /**
+     * Another app's share landing here (design section 13.6, "Share into Fermix"): its items into the tray up to the
+     * ten, each copied into a file of the chat's own as it lands, and its words at the end of the draft, cut to what
+     * one message carries. Nothing is sent: only the owner's Send sends.
+     */
+    fun share(shared: Shared) {
+        attach.add(shared.uris, PickedFrom.SHARE)
+        val words = shared.words ?: return
+        viewModelScope.launch {
+            composer.restored.first { it }
+            val field = composer.field.value.text
+            val landed = withSharedWords(field, words, parts.profileId)
+            if (landed != field) composer.replace(landed)
+            composer.keep()
+            val cut =
+                when {
+                    landed == field -> "None of a share's words fit what one message carries; the draft is as it was"
+                    !landed.endsWith(words) -> "A share's words were cut to what one message carries"
+                    else -> null
+                }
+            if (cut != null) parts.log(cut, null)
         }
     }
 

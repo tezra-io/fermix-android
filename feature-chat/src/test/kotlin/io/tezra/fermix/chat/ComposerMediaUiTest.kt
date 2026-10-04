@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.SavedStateHandle
 import com.github.takahirom.roborazzi.RoborazziActivity
 import io.tezra.fermix.design.FermixTheme
 import kotlinx.coroutines.CoroutineScope
@@ -71,7 +72,7 @@ class ComposerMediaUiTest {
         (parts.media as FakePipeline).describe = { uri, from ->
             Picked(uri, uri, PickedKind.FILE, "image/png", uri.substringAfterLast('/'), 1_000L, from)
         }
-        val model = ChatViewModel(parts)
+        val model = ChatViewModel(parts, SavedStateHandle())
         rule.setContent {
             FermixTheme { ChatRoute(model, ChatNavigation(onBack = {}, onInstance = {}, showing = { true })) }
         }
@@ -103,7 +104,7 @@ class ComposerMediaUiTest {
     fun `leaving the foreground stops a recording into a draft and sends nothing`() {
         val store = FakeChatStore()
         val session = FakeChatSession(store)
-        val model = ChatViewModel(partsOf(store, session))
+        val model = ChatViewModel(partsOf(store, session), SavedStateHandle())
         recordingOn(model)
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         assertTrue("leaving kept no draft", model.voice.ui.value is VoiceUi.Draft)
@@ -112,7 +113,7 @@ class ComposerMediaUiTest {
 
     @Test
     fun `a rotation leaves the recording going`() {
-        val model = ChatViewModel(partsOf(FakeChatStore()))
+        val model = ChatViewModel(partsOf(FakeChatStore()), SavedStateHandle())
         recordingOn(model)
         rule.activityRule.scenario.recreate()
         assertTrue("a rotation stopped the take", model.voice.ui.value is VoiceUi.Recording)

@@ -20,6 +20,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import io.tezra.fermix.chats.ChatsViewModel
 import io.tezra.fermix.chats.LockScreen
+import io.tezra.fermix.chats.ShareSheet
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.onboarding.OnboardingViewModel
@@ -41,18 +42,20 @@ private const val SCREENS = "screens"
  * the root never flickers from Welcome to Chats and never shows before the lock; then the last chat is
  * restored, or the one an intent names. While the lock holds, the screens are not drawn at all, so nothing
  * of them shows under "Fermix is locked" or reaches TalkBack, and what they keep for a rotation they keep
- * across the lock.
+ * across the lock. Another app's share waits behind the lock too, then asks "Send to which Fermix?" or lands.
  */
 @Composable
 internal fun FermixApp(
     services: AppServices,
     hooks: ActivityHooks,
 ) {
+    val list = viewModel { ChatsViewModel(services.chatsParts()) }
     val models =
         AppModels(
             onboarding = viewModel { OnboardingViewModel(services.onboardingParts()) },
             navigator = viewModel { AppNavigator(services.settings, services.instances.instances) },
-            chats = viewModel { ChatsViewModel(services.chatsParts()) },
+            chats = list,
+            share = viewModel { shareModel(services, list) },
         )
     val checked by services.checked.collectAsState()
     val lockKnown by services.lockGate.known.collectAsState()
@@ -72,6 +75,7 @@ internal fun FermixApp(
             val top = stack.last()
             LaunchedEffect(top, locked) { hooks.fit(top, locked) }
             if (!locked) saved.SaveableStateProvider(SCREENS) { Screens(stack, services, models) }
+            if (!locked) ShareFlow(services, models)
         }
         if (locked) {
             LockScreen(onUnlock = hooks.unlock)
@@ -88,6 +92,16 @@ private fun chatsRoot(instances: InstanceStore): Flow<Boolean> =
     combine(instances.instances, instances.repairNotices) { records, repairs ->
         records.isNotEmpty() || repairs.isNotEmpty()
     }
+
+/**
+ * The activity's share (design section 13.6): what the share entry hands over, behind the lock's [Sight] and among the
+ * paired that take a share as the Chats list's rows read them (shareTargetsOf).
+ */
+private fun shareModel(
+    services: AppServices,
+    chats: ChatsViewModel,
+): ShareModel =
+    ShareModel(services.lockGate.sight, chats.ui.map { shareTargetsOf(it?.rows) }, services.shares, ::logShare)
 
 /** Restores the last chat once the records are known, then acts on each intent as it comes. */
 @Composable
@@ -107,6 +121,53 @@ private fun FollowIntents(
             null -> return@LaunchedEffect
         }
         intents.value = null
+    }
+}
+
+/**
+ * A share once the lock is passed (design section 13.6): "Send to which Fermix?" over the app while it asks, and the
+ * share landing in the chat it goes to.
+ */
+@Composable
+private fun ShareFlow(
+    services: AppServices,
+    models: AppModels,
+) {
+    val state by models.share.state.collectAsState()
+    when (val now = state) {
+        is ShareState.Landing -> LandShare(now, services, models)
+        is ShareState.Pending -> if (now.asked) AskShare(models)
+        ShareState.None -> Unit
+    }
+}
+
+/** "Send to which Fermix?" over the paired chats, as the Chats list has them, those a share may go to (shareRowsOf). */
+@Composable
+private fun AskShare(models: AppModels) {
+    val ui by models.chats.ui.collectAsState()
+    val rows = ui?.rows ?: return
+    ShareSheet(
+        rows = shareRowsOf(rows),
+        onPick = { row -> models.share.picked(ChatKey(row.record.id, row.profileId)) },
+        onDismiss = models.share::dismissed,
+    )
+}
+
+/**
+ * [landing] into its chat's model, the one its screen draws, once: its items into the tray and its words into the
+ * draft, nothing sent; then the chat shows over the list.
+ */
+@Composable
+private fun LandShare(
+    landing: ShareState.Landing,
+    services: AppServices,
+    models: AppModels,
+) {
+    val model = chatModel(services, landing.chat)
+    LaunchedEffect(landing) {
+        if (!models.share.landed(landing)) return@LaunchedEffect
+        model.share(landing.shared)
+        models.navigator.showPaired(landing.chat)
     }
 }
 

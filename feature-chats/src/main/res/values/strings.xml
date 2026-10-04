@@ -36,6 +36,9 @@
     <string name="chats_pair_again">Pair again</string>
     <string name="chats_remove">Remove</string>
 
+    <!-- A generic share's question (sections 13.6 and 13.9). -->
+    <string name="chats_share_title">Send to which Fermix?</string>
+
     <!-- The app lock (sections 13.7 and 13.9). -->
     <string name="chats_locked">Fermix is locked</string>
     <string name="chats_unlock">Unlock</string>

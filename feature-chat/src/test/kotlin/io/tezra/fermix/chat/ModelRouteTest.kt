@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.lifecycle.SavedStateHandle
 import com.github.takahirom.roborazzi.RoborazziActivity
 import io.tezra.fermix.design.FermixTheme
 import io.tezra.fermix.protocol.ClientEvent
@@ -44,7 +45,7 @@ class ModelRouteTest {
         store: FakeChatStore,
         session: FakeChatSession,
     ): ChatViewModel {
-        val model = ChatViewModel(fakeParts(withModel(), session, store, background))
+        val model = ChatViewModel(fakeParts(withModel(), session, store, background), SavedStateHandle())
         rule.setContent {
             FermixTheme { ChatRoute(model, ChatNavigation(onBack = {}, onInstance = {}, showing = { true })) }
         }

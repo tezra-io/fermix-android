@@ -22,6 +22,10 @@
 #   8. no camera is required, as the pasted link is the other way in (section 13.3, step 2): no feature
 #      the manifest declares or CAMERA implies names a camera as required, and camera.any is declared
 #      not required, so that Play offers the app to a phone without one
+#   9. the components the merged manifest exports are exactly policy/exported.txt's, each with the
+#      permission it is behind and each of its filters whole, its actions, categories and data and the
+#      filter's own attributes (AGENTS.md): a library that exports one fails it as surely as the app's
+#      own manifest, and so does a category, a scheme or a type added to an exported filter
 #
 # It reads the APK with aapt2, unzip and jq, and prints every check that fails, with what it expected
 # and what it found, then exits 1 with the number of checks that failed. Each check prints what it finds
@@ -38,6 +42,7 @@ shopt -s inherit_errexit
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PERMISSIONS_FILE="$ROOT_DIR/policy/permissions.txt"
+EXPORTED_FILE="$ROOT_DIR/policy/exported.txt"
 VENDORED_DIR="$ROOT_DIR/contracts/mobile"
 BUILD_TOOLS_VERSION="36.0.0"
 # The tools the checks run besides aapt2.
@@ -129,6 +134,70 @@ check_permissions() {
   [ "$status" -eq 1 ] || return 0
   violation "permissions: expected exactly those $PERMISSIONS_FILE lists, found others" \
     "(< listed only, > requested only):"
+  echo "$difference"
+}
+
+# The components the manifest tree on stdin exports, sorted, one per line: "<kind> <name> <permission>
+# <filter>...", "-" for no permission or no filter. A filter is each attribute of its elements, in order and
+# comma-separated: "action=<name>" and "category=<name>", "data.<attribute>=<value>" for each of a data
+# element's (a scheme, a host, a path, a type), and "filter.<attribute>=<value>" for the filter's own (a
+# priority); "(empty)" for a filter with none. A component is exported by its own exported attribute: from
+# targetSdkVersion 31 one with a filter must say whether it is, and one without is not. Any value but false
+# counts, a resource's among them, so a component whose value this cannot read is listed, never passed over.
+# An element's attributes sit one step under it; a filter ends at the next element as far out as it is.
+exported_components() {
+  awk '
+    function end_filter() {
+      if (filter) filters = filters (filters == "" ? "" : " ") (items == "" ? "(empty)" : items)
+      filter = 0
+    }
+    function flush() {
+      end_filter()
+      if (kind != "" && exported != "" && exported != "false") {
+        print kind, name, (permission == "" ? "-" : permission), (filters == "" ? "-" : filters)
+      }
+      kind = ""
+    }
+    function quoted() { match($0, /="[^"]*"/); return substr($0, RSTART + 2, RLENGTH - 3) }
+    # The attribute this line sets, as "<name>=<value>", its namespace and resource id dropped.
+    function attribute(  key, value) {
+      key = $2; sub(/\(0x.*$/, "", key); sub(/^.*:/, "", key)
+      value = $2; sub(/^[^=]*=/, "", value)
+      return key "=" ($0 ~ /="/ ? quoted() : value)
+    }
+    function item(  set) {
+      set = attribute()
+      if (element == "intent-filter") return "filter." set
+      if (element ~ /^(action|category)$/ && set ~ /^name=/) return element substr(set, 5)
+      return element "." set
+    }
+    { indent = match($0, /[^ ]/) - 1 }
+    $1 == "E:" && kind != "" && indent <= depth { flush() }
+    $1 == "E:" && $2 ~ /^(activity|activity-alias|service|receiver|provider)$/ {
+      kind = $2; depth = indent; name = ""; exported = ""; permission = ""; filters = ""; filter = 0; next
+    }
+    kind == "" { next }
+    $1 == "E:" && filter && indent <= at { end_filter() }
+    $1 == "E:" && $2 == "intent-filter" { filter = 1; at = indent; items = "" }
+    $1 == "E:" { element = $2; element_at = indent; next }
+    $1 == "A:" && indent == depth + 2 && $2 ~ /android:name\(/ { name = quoted() }
+    $1 == "A:" && indent == depth + 2 && $2 ~ /android:permission\(/ { permission = quoted() }
+    $1 == "A:" && indent == depth + 2 && $2 ~ /android:exported\(/ { sub(/.*=/, "", $2); exported = $2 }
+    $1 == "A:" && filter && indent == element_at + 2 { items = items (items == "" ? "" : ",") item() }
+    END { flush() }' | LC_ALL=C sort
+}
+
+# 9. The exported components, each with its permission and its filters whole, against the policy file,
+# whose lines are components, apart from blank lines and # comments.
+check_exported() {
+  local manifest=$1 found listed difference status=0
+  found="$(exported_components <<<"$manifest")"
+  listed="$(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$EXPORTED_FILE" | LC_ALL=C sort)"
+  difference="$(diff <(lines "$listed") <(lines "$found"))" || status=$?
+  [ "$status" -le 1 ] || fatal "diff of the exported components failed with status $status"
+  [ "$status" -eq 1 ] || return 0
+  violation "exported components: expected exactly those $EXPORTED_FILE lists, found others" \
+    "(< listed only, > exported only):"
   echo "$difference"
 }
 
@@ -358,6 +427,7 @@ run_checks() {
   check_manifest "$badging" "$manifest"
   check_features "$badging"
   check_permissions "$apk"
+  check_exported "$manifest"
   check_backup "$apk" "$manifest" "$resources"
   check_contents "$apk" "$work"
 }
@@ -376,6 +446,7 @@ main() {
   local apk=$1 report failed
   [ -f "$apk" ] || fatal "no APK at $apk"
   [ -f "$PERMISSIONS_FILE" ] || fatal "no permissions file at $PERMISSIONS_FILE"
+  [ -f "$EXPORTED_FILE" ] || fatal "no exported components file at $EXPORTED_FILE"
   [ -n "${AAPT2:-}" ] || [ -n "${ANDROID_HOME:-}" ] || fatal "ANDROID_HOME names no SDK, and AAPT2 no aapt2"
   AAPT2="${AAPT2:-$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/aapt2}"
   readonly AAPT2

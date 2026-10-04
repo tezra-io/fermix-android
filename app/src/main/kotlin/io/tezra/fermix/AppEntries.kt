@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
@@ -109,10 +110,7 @@ private fun ChatEntry(
     LaunchedEffect(trust) {
         if (trust != null) models.navigator.replace(key, trust)
     }
-    val model =
-        viewModel(key = "chat:${key.instanceId}:${key.profileId}") {
-            ChatViewModel(services.chatParts(key.instanceId, key.profileId))
-        }
+    val model = chatModel(services, key)
     val navigation =
         remember(key, models) {
             ChatNavigation(
@@ -123,6 +121,19 @@ private fun ChatEntry(
         }
     ChatRoute(model, navigation)
 }
+
+/**
+ * [key]'s chat model, kept by the activity for as long as it is (no back stack entry keeps its own), with the state
+ * a process death leaves it: its screen and a share landing in it get the same one.
+ */
+@Composable
+internal fun chatModel(
+    services: AppServices,
+    key: ChatKey,
+): ChatViewModel =
+    viewModel(key = "chat:${key.instanceId}:${key.profileId}") {
+        ChatViewModel(services.chatParts(key.instanceId, key.profileId), createSavedStateHandle())
+    }
 
 /** A trust state's screen: "Pair again" pairs from the root and merges into the row; "Remove" removes it. */
 @Composable

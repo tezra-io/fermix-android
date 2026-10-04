@@ -5,6 +5,13 @@ import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.showsDevTag
 
 /**
+ * The category a conversation's shortcut carries so that the share sheet offers it as a Direct Share target (design
+ * section 13.6, "Share into Fermix"): the app's `shortcuts.xml` names it in its `<share-target>`, with the types a
+ * share may carry and the share entry that takes them.
+ */
+const val SHARE_CATEGORY = "io.tezra.fermix.category.SHARE_TARGET"
+
+/**
  * One (instance, profile)'s conversation (design section 9.1): its conversation shortcut and its
  * notification channel, both under [id], named and tinted as its row: its [title], the host-owned [agent]'s
  * name when that is not "Fermix", and the DEV tag when [dev] (section 9.2), so that two daemons of one

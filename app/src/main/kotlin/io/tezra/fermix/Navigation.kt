@@ -102,6 +102,9 @@ class AppNavigator(
     val above: StateFlow<List<NavKey>> = aboveState.asStateFlow()
     private var restored = false
 
+    /** Whether a share put its chat on top, which the restore then leaves there (showPaired). */
+    private var shareShown = false
+
     init {
         viewModelScope.launch {
             records.collect { list ->
@@ -113,7 +116,8 @@ class AppNavigator(
 
     /**
      * Once per ViewModel: the chat [link] names, or else the chat open when the owner last left, if its
-     * instance is still paired; then the chat on top is kept from here on.
+     * instance is still paired, unless a share put its chat on top as the records and the settings were read, or
+     * before; then the chat on top is kept from here on.
      */
     suspend fun restore(link: ChatKey?) {
         if (restored) return
@@ -125,7 +129,7 @@ class AppNavigator(
                 .lastChat
                 ?.let { ChatKey(it.instanceId, it.profileId) }
         val chat = (link ?: last)?.takeIf { it.instanceId in ids }
-        if (chat != null) aboveState.value = listOf(chat)
+        if (chat != null && !shareShown) aboveState.value = listOf(chat)
         viewModelScope.launch {
             aboveState
                 .map { stack -> stack.filterIsInstance<ChatKey>().lastOrNull() }
@@ -142,6 +146,15 @@ class AppNavigator(
     /** A chat from a link: on the Chats list, in place of whatever was above it; one no record has is ignored. */
     suspend fun showChat(chat: ChatKey) {
         if (records.first().any { it.id == chat.instanceId }) aboveState.value = listOf(chat)
+    }
+
+    /**
+     * A share's chat, of a record just read to be paired: on the Chats list, in place of whatever was above it, and
+     * kept there by a restore that has not written yet: a share that starts the activity lands as the restore reads.
+     */
+    fun showPaired(chat: ChatKey) {
+        shareShown = true
+        aboveState.value = listOf(chat)
     }
 
     /** [from], on top, gives way to [to]: a chat to its trust state's screen. */

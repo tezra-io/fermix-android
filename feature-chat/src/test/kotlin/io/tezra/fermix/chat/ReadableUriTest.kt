@@ -63,6 +63,16 @@ private val ROWS =
         // The ContentResolver compares a scheme exactly: an upper-case one is none it reads as a provider's or a file.
         content(MEDIA, PickedFrom.PASTE, readable = false, scheme = "CONTENT"),
         content(OWN, PickedFrom.PHOTOS, readable = false, scheme = "Content"),
+        // A share is another app's item like any other: its provider's, never one of the app's own.
+        content(MEDIA, PickedFrom.SHARE, readable = true),
+        content(NOTES, PickedFrom.SHARE, readable = true),
+        content(OWN, PickedFrom.SHARE, readable = false),
+        content("0@$OWN", PickedFrom.SHARE, readable = false),
+        content(OWN_STARTUP, PickedFrom.SHARE, readable = false),
+        content(MEDIA, PickedFrom.SHARE, readable = false, scheme = "CONTENT"),
+        file(Where.IN_CACHE, PickedFrom.SHARE, readable = false),
+        file(Where.OUTSIDE, PickedFrom.SHARE, readable = false),
+        Row("intent", "scan", PickedFrom.SHARE, Where.NONE, readable = false),
         // A file URI from outside the chat, wherever it lies.
         file(Where.IN_CACHE, PickedFrom.PASTE, readable = false),
         file(Where.OUTSIDE, PickedFrom.PASTE, readable = false),
@@ -116,7 +126,8 @@ class ReadableUriTest {
 
     @Test
     fun `a file URI from outside the chat is refused without asking where it lies`() {
-        val outside = listOf(PickedFrom.PHOTOS, PickedFrom.FILES, PickedFrom.PASTE, PickedFrom.KEYBOARD)
+        val outside =
+            listOf(PickedFrom.PHOTOS, PickedFrom.FILES, PickedFrom.PASTE, PickedFrom.KEYBOARD, PickedFrom.SHARE)
         for (from in outside) {
             var asked = false
             val readable = mayRead("file", null, from, own = { false }, inCache = { true.also { asked = true } })

@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -75,7 +76,7 @@ class ChatAttachTest {
         val viewModels = ViewModelStore()
         val model: ChatViewModel =
             ViewModelProvider
-                .create(viewModels, viewModelFactory { initializer { ChatViewModel(parts) } })
+                .create(viewModels, viewModelFactory { initializer { ChatViewModel(parts, SavedStateHandle()) } })
                 .get(ChatViewModel::class)
         val ui: AttachUi get() = model.attach.ui.value
     }

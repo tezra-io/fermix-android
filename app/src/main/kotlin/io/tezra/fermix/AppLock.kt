@@ -17,6 +17,21 @@ private const val TAG = "FermixAppLock"
 /** What the lock asks for (design section 13.7): a strong biometric, or the phone's own screen lock. */
 private const val UNLOCK_WITH = BIOMETRIC_STRONG or DEVICE_CREDENTIAL
 
+/** How the app is seen, for what waits behind the lock: a share (design section 13.6). */
+enum class Sight {
+    /** The settings have not yet said whether the lock is on. */
+    UNKNOWN,
+
+    /** The app is out of sight. */
+    AWAY,
+
+    /** The app is in sight, and locked. */
+    LOCKED,
+
+    /** The app is in sight, and open. */
+    OPEN,
+}
+
 /**
  * The app lock's gate (design section 13.7), app-wide: with the lock on, the app is locked when it comes
  * into sight after the process started or after [graceMillis] out of sight, and stays so until an unlock
@@ -24,7 +39,8 @@ private const val UNLOCK_WITH = BIOMETRIC_STRONG or DEVICE_CREDENTIAL
  * it when the app comes into and goes out of sight, on the elapsed-time clock, and the settings tell it
  * whether the lock is on; until they have once ([known]), nothing of the app shows. A phone that cannot
  * hold the lock ([canLock]: no strong biometric and no screen lock, as after its owner removed the screen
- * lock) is never locked, and a lock it holds opens at the next sight, so the owner is never locked out.
+ * lock) is never locked, and a lock it holds opens at the next sight, so the owner is never locked out. How the
+ * app is seen ([sight]) is said once each change is whole.
  */
 class LockGate(
     private val canLock: () -> Boolean,
@@ -37,6 +53,9 @@ class LockGate(
 
     /** Whether the settings have said once whether the lock is on. */
     val known: StateFlow<Boolean> = knownState.asStateFlow()
+
+    private val sightState = MutableStateFlow(Sight.UNKNOWN)
+    val sight: StateFlow<Sight> = sightState.asStateFlow()
 
     private var enabled = false
     private var inSight = false
@@ -58,6 +77,7 @@ class LockGate(
             lockedState.value = false
         }
         lockIfDue()
+        seen()
     }
 
     /**
@@ -70,23 +90,36 @@ class LockGate(
         leftAt = null
         if (away != null && now - away > graceMillis) due = true
         lockIfDue()
+        seen()
     }
 
     /** The app went out of sight at [now], elapsed milliseconds. */
     fun wentOutOfSight(now: Long) {
         inSight = false
         leftAt = now
+        seen()
     }
 
     /** The owner proved who they are. */
     fun unlocked() {
         due = false
         lockedState.value = false
+        seen()
     }
 
     /** A due lock holds while the phone can hold it, and a lock it can no longer hold opens. */
     private fun lockIfDue() {
         if (enabled && due && inSight) lockedState.value = canLock()
+    }
+
+    private fun seen() {
+        sightState.value =
+            when {
+                !knownState.value -> Sight.UNKNOWN
+                !inSight -> Sight.AWAY
+                lockedState.value -> Sight.LOCKED
+                else -> Sight.OPEN
+            }
     }
 }
 

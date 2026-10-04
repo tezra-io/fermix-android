@@ -35,11 +35,17 @@ sealed interface AppIntent {
     data object AddFermix : AppIntent
 }
 
-/** What [intent] asks, none for the launcher's plain start or anything the app does not take. */
-fun appIntentOf(intent: Intent?): AppIntent? {
-    if (intent?.action == ACTION_ADD_FERMIX) return AppIntent.AddFermix
-    return chatOfLink(intent?.dataString)?.let(AppIntent::OpenChat)
-}
+/**
+ * What [intent] asks, none for the launcher's plain start, anything the app does not take, or an intent the system
+ * replays as the owner opens the app's task from Recents (fromHistory): what it asked was acted on once, and the chat
+ * the app keeps comes back on its own. No intent is a share: the share entry hands one over in the process.
+ */
+fun appIntentOf(intent: Intent?): AppIntent? =
+    when {
+        intent == null || fromHistory(intent) -> null
+        intent.action == ACTION_ADD_FERMIX -> AppIntent.AddFermix
+        else -> chatOfLink(intent.dataString)?.let(AppIntent::OpenChat)
+    }
 
 /** The explicit intent that opens a chat: the deep link, to this app's activity alone. */
 fun chatIntent(
@@ -57,6 +63,8 @@ fun chatIntent(
  * the owner leaves with an upload in flight (section 12.5). The app lock's
  * gate hears when the app comes into and goes out of sight, and the system's prompt asks for the unlock as
  * the lock comes, once per time the app is in sight; "Unlock" asks again after a prompt the owner closed.
+ * A share comes from the share entry (ShareTarget), which hands it over and brings the activity forward, with the
+ * read grants of the share's URIs, which the activity holds until it is destroyed.
  */
 class MainActivity : ComponentActivity() {
     private val services: AppServices get() = (application as FermixApplication).services
@@ -122,11 +130,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** The activity's three ViewModels: onboarding's, the app's own screens' and the Chats list's. */
+/** The activity's four ViewModels: onboarding's, the app's own screens', the Chats list's and a share's. */
 internal class AppModels(
     val onboarding: OnboardingViewModel,
     val navigator: AppNavigator,
     val chats: ChatsViewModel,
+    val share: ShareModel,
 )
 
 /** What the composition asks of its activity. */

@@ -185,8 +185,12 @@ jobs:
             */src/test/screenshots/
 
   # Section 3's ui: the instrumented tests of every module that has them, :feature-onboarding's,
-  # :feature-chats' and :feature-chat's, on an emulator at API 35 and 36, as a phone and as a folding
-  # phone. They need no daemon and no camera: a fake pairing control, a fake session and a stub preview
+  # :feature-chats', :feature-chat's, :push's and the app's, on an emulator at API 35 and 36, as a phone and
+  # as a folding phone. The app's share media-store images and words through the share entry (section 13.6),
+  # one image the shell's, another uid's, read through its share's grant; refuse a file: URI and the app's
+  # own provider; leave out an item whose provider fails; and set a screen lock for the app lock's test,
+  # which they take away again. The app under test is signed with a debug key made for this run (C5). They
+  # need no daemon and no camera: a fake pairing control, a fake session and a stub preview
   # stand in (AGENTS.md). Onboarding up to Scan and on to Paired, every failure screen, the Chats list's
   # and a message's long-press menus, the chat's hardware keys, Copy and its announcement, a rotation and a
   # fold that lose nothing on onboarding, the Chats list, the Instance screen and a chat (section 13.11, rule 3;
@@ -265,12 +269,29 @@ jobs:
             exit 1
           fi
 
+      # C5: the app under test is signed with a key made for this run, as the build job's debug build is.
+      - name: Make a throwaway debug key
+        run: |
+          store="$RUNNER_TEMP/ci-debug.jks"
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          keytool -genkeypair -noprompt -keystore "$store" -alias ci-debug \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Fermix Android CI, O=Tezra, C=US" \
+            -storepass "$password" -keypass "$password"
+          {
+            echo "FERMIX_DEBUG_STORE_FILE=$store"
+            echo "FERMIX_DEBUG_STORE_PASSWORD=$password"
+            echo "FERMIX_DEBUG_KEY_ALIAS=ci-debug"
+            echo "FERMIX_DEBUG_KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
       # Built before the emulator starts, so a compile error is never taken for a boot that failed.
       - name: Build the app under test and its tests
         run: |
           ./gradlew --warning-mode fail --console=plain \
             :feature-onboarding:assembleDebugAndroidTest :feature-chats:assembleDebugAndroidTest \
-            :feature-chat:assembleDebugAndroidTest :push:assembleDebugAndroidTest
+            :feature-chat:assembleDebugAndroidTest :push:assembleDebugAndroidTest :app:assembleDebugAndroidTest
 
       # The action runs the pre-launch script once the AVD is made, before the emulator starts, and the
       # script line by line, each after the emulator booted; each marks how far it got. A cold boot can
@@ -299,6 +320,7 @@ jobs:
             ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
             ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }}
             ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest
+            ./gradlew --warning-mode fail --console=plain :app:connectedDebugAndroidTest
 
       # How far the first run got: booted and settled, made its AVD but never booted or never settled
       # (no-boot), or failed before the AVD was made (no-avd). Only no-boot runs the tests once more.
@@ -337,6 +359,7 @@ jobs:
             ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
             ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }}
             ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest
+            ./gradlew --warning-mode fail --console=plain :app:connectedDebugAndroidTest
 
       - name: Upload the test reports
         if: always()

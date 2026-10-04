@@ -5,29 +5,33 @@ import io.tezra.fermix.session.MAX_ATTACHMENTS
 
 /**
  * Where a picked item came from (design section 8.5, "Sources"); [OUTBOX] is an attachment an outbox item's Edit
- * returned to the composer (design section 13.6). A camera's capture, a paste's and the keyboard's copies and an
- * outbox item's copy are files the chat made, which it deletes once they leave the tray ([ownsFile]).
+ * returned to the composer (design section 13.6), and [SHARE] one another app shared into the chat (section 13.6,
+ * "Share into Fermix"). A camera's capture, a paste's, the keyboard's and a share's copies and an outbox item's copy
+ * are files the chat made, which it deletes once they leave the tray ([ownsFile]).
  */
-enum class PickedFrom { PHOTOS, CAMERA, FILES, PASTE, KEYBOARD, OUTBOX }
+enum class PickedFrom { PHOTOS, CAMERA, FILES, PASTE, KEYBOARD, OUTBOX, SHARE }
 
 /** What a picked item is, which decides how it goes; [VOICE] is the owner's voice note, back from the outbox. */
 enum class PickedKind { IMAGE, VIDEO, AUDIO, FILE, VOICE }
 
 /**
- * Whether an item from [from] is read through a grant that ends long before Send, with the clip that held it or the
- * keyboard's commit: it is copied into a file of the chat's own as it lands in the tray.
+ * Whether an item from [from] is read through a grant that ends long before Send, with the clip that held it, the
+ * keyboard's commit or the activity a share came to: it is copied into a file of the chat's own as it lands in the
+ * tray.
  */
-fun copiedOnLanding(from: PickedFrom): Boolean = from == PickedFrom.PASTE || from == PickedFrom.KEYBOARD
+fun copiedOnLanding(from: PickedFrom): Boolean =
+    from == PickedFrom.PASTE || from == PickedFrom.KEYBOARD || from == PickedFrom.SHARE
 
 /**
  * Whether the chat reads a URI of [scheme] and [authority], as android.net.Uri parses them, as it lands in the tray
  * from [landing], or, none, held in it already (design section 8.5, "Sources"). The Photo Picker's, the documents
- * UI's, the clipboard's and the keyboard's items are other apps': a `content:` URI whose authority, without the
- * `user@` prefix the ContentResolver strips up to its last `@`, names no provider of the app's own package ([own]),
- * whose checks the app would pass with its own rights. A camera's capture and Edit's copy are files the chat made:
- * a `file:` URI whose canonical path lies under the app's cache ([inCache], asked only of such a URI). An item held
- * is either, a paste's and the keyboard's being the chat's copies by then. Any other scheme is refused, a scheme
- * compared exactly, as the ContentResolver compares it: `CONTENT:` and `FILE:` are neither.
+ * UI's, the clipboard's, the keyboard's and a share's items are other apps': a `content:` URI whose authority,
+ * without the `user@` prefix the ContentResolver strips up to its last `@`, names no provider of the app's own
+ * package ([own]), whose checks the app would pass with its own rights. A camera's capture and Edit's copy are
+ * files the chat made: a `file:` URI whose canonical path lies under the app's cache ([inCache], asked only of such a
+ * URI). An item held is either, a paste's, the keyboard's and a share's being the chat's copies by then. Any other
+ * scheme is refused, a scheme compared exactly, as the ContentResolver compares it: `CONTENT:` and `FILE:` are
+ * neither.
  */
 internal fun mayRead(
     scheme: String?,
@@ -41,7 +45,7 @@ internal fun mayRead(
     return when (landing) {
         null -> provider || made()
         PickedFrom.CAMERA, PickedFrom.OUTBOX -> made()
-        PickedFrom.PHOTOS, PickedFrom.FILES, PickedFrom.PASTE, PickedFrom.KEYBOARD -> provider
+        PickedFrom.PHOTOS, PickedFrom.FILES, PickedFrom.PASTE, PickedFrom.KEYBOARD, PickedFrom.SHARE -> provider
     }
 }
 

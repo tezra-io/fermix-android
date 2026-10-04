@@ -12,6 +12,7 @@ import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -136,7 +137,7 @@ internal fun ChatTestActivity.cardPhrase(elapsedMs: Long): String? {
 open class ChatTestActivity : ComponentActivity() {
     internal val rig: ChatTestRig by viewModels()
     internal val model: ChatViewModel by viewModels {
-        viewModelFactory { initializer { ChatViewModel(chatParts()) } }
+        viewModelFactory { initializer { ChatViewModel(chatParts(), createSavedStateHandle()) } }
     }
 
     /** What the chat runs on: the rig's fakes. */

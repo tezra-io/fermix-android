@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- "Add Fermix" as an app shortcut (design section 9.4): the activity starts a pairing from the Chats list. -->
+<!--
+  "Add Fermix" as an app shortcut (design section 9.4): the activity starts a pairing from the Chats list. The share
+  entry is the share target of the conversation shortcuts that carry its category (Direct Share, section 13.6):
+  a share to one lands in that chat's tray, the shortcut's id looked up among the paired records.
+-->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:enabled="true"
@@ -10,4 +14,11 @@
             android:targetClass="io.tezra.fermix.MainActivity"
             android:targetPackage="io.tezra.fermix" />
     </shortcut>
+    <share-target android:targetClass="io.tezra.fermix.ShareTarget">
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+        <data android:mimeType="text/plain" />
+        <data android:mimeType="*/*" />
+        <category android:name="io.tezra.fermix.category.SHARE_TARGET" />
+    </share-target>
 </shortcuts>

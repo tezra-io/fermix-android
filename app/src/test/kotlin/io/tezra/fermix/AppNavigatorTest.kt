@@ -9,11 +9,14 @@ import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -118,6 +121,32 @@ class AppNavigatorTest {
             assertEquals(emptyList<Any>(), restored.above.value)
             restored.showChat(ChatKey(first.id, "main"))
             assertEquals(emptyList<Any>(), restored.above.value)
+        }
+
+    @Test
+    fun `a share's chat shown while the restore reads, or before it, stays on top of the chat kept`() =
+        runTest(main) {
+            val settings = settings()
+            settings.setLastChat(ChatRef(first.id, "main"))
+            val shared = ChatKey(second.id, "main")
+            // The records as the app's DataStore reads them: not there yet as the restore asks for them.
+            val read = MutableStateFlow<List<Instance>?>(null)
+            val during = AppNavigator(settings, read.filterNotNull())
+            val restoring = launch { during.restore(link = null) }
+            runCurrent()
+            during.showPaired(shared)
+            read.value = listOf(first, second)
+            restoring.join()
+            assertEquals(listOf(shared), during.above.value)
+            // The chat on top is kept from then on: the share's.
+            val kept = settings.settings.first { it.lastChat?.instanceId == second.id }.lastChat
+            assertEquals(ChatRef(second.id, "main"), kept)
+
+            settings.setLastChat(ChatRef(first.id, "main"))
+            val before = AppNavigator(settings, MutableStateFlow(listOf(first, second)))
+            before.showPaired(shared)
+            before.restore(link = null)
+            assertEquals(listOf(shared), before.above.value)
         }
 
     @Test

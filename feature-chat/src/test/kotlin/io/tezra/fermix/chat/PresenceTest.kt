@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.github.takahirom.roborazzi.RoborazziActivity
 import io.tezra.fermix.design.FermixTheme
@@ -66,7 +67,7 @@ class PresenceTest {
         val store = FakeChatStore(rows = listOf(agentRow(2, "b", minutes = 1), userRow(1, "a")))
         val presence = FakePresence()
         val parts = fakeParts(sample(), FakeChatSession(store), store, background)
-        val model = ChatViewModel(parts.copy(presence = presence))
+        val model = ChatViewModel(parts.copy(presence = presence), SavedStateHandle())
         val lifecycle = MovedLifecycle().apply { registry.currentState = Lifecycle.State.RESUMED }
         var focused by mutableStateOf(true)
         rule.setContent {

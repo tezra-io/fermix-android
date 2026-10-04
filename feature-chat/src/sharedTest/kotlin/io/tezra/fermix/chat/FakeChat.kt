@@ -243,11 +243,15 @@ class FakePresence : ChatPresence {
     }
 }
 
-/** What the chat told its log, in order. */
+/** What the chat told its log, in order: each line, and each throwable a line came with ([thrown]). */
 class FakeLog {
     val lines = MutableStateFlow<List<String>>(emptyList())
+    val thrown = MutableStateFlow<List<Throwable>>(emptyList())
 
-    val log: (String, Throwable?) -> Unit = { message, _ -> lines.update { it + message } }
+    val log: (String, Throwable?) -> Unit = { message, failure ->
+        lines.update { it + message }
+        if (failure != null) thrown.update { it + failure }
+    }
 }
 
 /**

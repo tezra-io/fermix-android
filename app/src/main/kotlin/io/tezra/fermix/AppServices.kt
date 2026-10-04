@@ -97,7 +97,7 @@ class AppServices(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + io)
     private val sessionScope = CoroutineScope(SupervisorJob() + work)
-    private val databases = ProfileDatabases(context, File(context.noBackupFilesDir, INSTANCES_DIRECTORY))
+    internal val databases = ProfileDatabases(context, File(context.noBackupFilesDir, INSTANCES_DIRECTORY))
     val instances = InstanceStore(instanceDataStore(File(context.noBackupFilesDir, RECORDS_FILE), scope), databases)
 
     /**
@@ -198,6 +198,12 @@ class AppServices(
 
     /** Whether the activity is out of sight, which is when the pairing wait needs its notification. */
     val inBackground = MutableStateFlow(true)
+
+    /**
+     * A share the share entry took (ShareTarget), until the activity takes it (ShareModel): handed over in the
+     * process, never through an intent, so nothing another app sends the activity is taken for a share.
+     */
+    val shares = MutableStateFlow<Share?>(null)
 
     /**
      * Starts reading the network, then, off the main thread, drops the records whose keys a restore left

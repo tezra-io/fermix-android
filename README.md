@@ -30,7 +30,7 @@ design/                 the design language as code, its fonts, previews and scr
 data/                   the instance records, each profile's database and media cache, the launch check (io.tezra.fermix.data)
 push/                   a push's envelope, keys, trial decryption and plaintext, and its diagnostics lines (io.tezra.fermix.push)
 gradle/                 the version catalog, the dependency checksums and the wrapper
-policy/                 permissions.txt, the permissions the release APK requests, exactly
+policy/                 permissions.txt and exported.txt, the permissions the release APK requests and the components it exports, exactly
 scripts/                verify_protocol_contract.sh, check_release_policy.sh
 version.properties      versionName and versionCode
 ```
@@ -734,7 +734,8 @@ write, or on its long-press's "Remove". `TrustScreen` is "This phone was unpaire
 with "Unlock", and `AppLockScreen` the "Lock with biometrics" switch, off and explained on a phone with no
 screen lock. `ChatsViewModel` reads the
 records, the sessions, the turns and each instance's main profile, and moves, renames, unpairs and
-removes. `ConversationSync` keeps one long-lived conversation shortcut and one notification channel per
+removes. `ConversationSync` keeps one long-lived conversation shortcut, in the share category
+(`SHARE_CATEGORY`) so the share sheet offers it as a Direct Share target, and one notification channel per
 (instance, profile), id `{instance}:{profile}`, named as its row reads (`conversationName`: the title,
 the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row, through
 `ConversationSurface`: `PlatformConversations` on the phone, a fake in the JVM tests. Each row's
@@ -742,7 +743,8 @@ conversation is made with it, published again when it is renamed or its agent is
 the first sync after a start removes what a removal cut short. The JVM tests cover the row rules, a row's
 time in the locale it is handed, a last message's plain words, the sync, and on Robolectric a conversation's name, a
 `1002` row reading "Protocol error" and nothing of being unpaired, a revoked row naming who unpaired it,
-the long-press menu, its place over the held row and the tap, and the empty state. Every
+the long-press menu, its place over the held row and the tap, the empty state, and "Send to which Fermix?"
+(`ShareSheet`), its rows as the list draws their titles. Every
 screen is a preview at the twelve windows, with references under `feature-chats/src/test/screenshots`.
 Its instrumented tests (below) long-press a row on a device and keep a rename dialog's half-typed name
 through a rotation and a fold, on the list and on the Instance screen.
@@ -946,15 +948,22 @@ documents UI (`OpenMultipleDocuments`), Camera the chat's own CameraX capture on
 images come through the field's content receiver (IME `commitContent`). None of them needs a media
 permission. Each enters through one check, `mayRead`: an item from Photos, Files, Paste or the keyboard is
 another app's `content:` URI whose authority, without its `user@` prefix, names no provider of this app's own
-package (`PackageManager.resolveContentProvider`), which the app would read with its own rights, and the
+package (`ownsProvider`: the providers the app's package declares, as the package manager lists them), which the
+app would read with its own rights, and the
 camera's is a `file:` URI the chat made under its cache; any other scheme or authority is refused, logged by
 its scheme and authority alone, never its path, and never lands in the tray, and the clipboard hands Paste
 nothing else (`PhoneClip`). The tray's reads, a send's and its thumbnails, take those two and no other. The
 check knows a provider, not a grant: a row the app saved into the media store itself (Save), which other apps
 cannot read, is read by the app as its owner when another app puts its URI on the clipboard or a keyboard
-commits it, and shows in the tray before Send. A paste's and the keyboard's items are copied into the chat's
-own files as they land, the keyboard's commit held until then, since their read grant ends long before Send; one whose grant is already
-gone is logged and left out. The sheet's grid keeps at least 160 dp, and what the window leaves beside it,
+commits it, and shows in the tray before Send. A paste's, the keyboard's and a share's items are copied into the
+chat's own files as they land, the keyboard's commit held until then, since their read grant ends long before Send;
+one whose grant is already gone is logged and left out. Such a copy is bounded: an item past the room the tray
+has, or whose provider says it is past `caps.max_media_bytes`, is never copied, and the copy stops a byte past
+the limit (`copyAtMost`), the item left out and named on the tray's line. A provider's failure carried across
+the binder, as it describes or hands over an item, leaves that item out, logged by the exception's class. The
+tray's copies are kept in the chat's saved state (`KeptTray`), so after a process death the chat comes back with
+the copies whose files are still there, and only those: a picker's grant ended with the process. The sheet's
+grid keeps at least 160 dp, and what the window leaves beside it,
 with the sheet's other items (a capture, files, a paste) in a tray at its foot; the Photos tile shows its
 own picks. The picks wait in the tray over the field, 56 dp thumbnails each with its ✕, an 18 dp badge in
 a 48 dp target, a file's extension sized in dp; the files the chat made for the tray, a camera's capture,
@@ -1022,7 +1031,12 @@ a refused send, and one unreadable let go, a recording stopped into a draft as t
 foreground and going on through a rotation, its length and bars, the player's one note and the notes it
 cannot open or read, the outbox's ring and lines, "Retry sending"'s new ids, the layouts and the viewer's
 pages, a shared copy's directory and name and where they may lie, a copy refused before any is evicted, and the
-oldest copies evicted without following a link (`SharedFileTest`), where Save puts a blob, a type bounded
+oldest copies evicted without following a link (`SharedFileTest`), a landing copy stopped a byte past its limit
+however long its stream, and whole with no limit (`BoundedCopyTest`), a share's items landing past the ten,
+past the limit as their provider says it or as their stream shows it, an image past it landing whole and going as
+the smaller JPEG while one past its own bound never lands, a share before the chat's record waiting for its limit
+and dropped once the wait ends, a refusal logged by its class alone, words that do not fit leaving the draft as it
+was, and through a provider that fails (`ChatShareTest`), where Save puts a blob, a type bounded
 (`mediaTypeOf`, a 1 MiB one among them), the one check's table of scheme, source,
 authority and path (`ReadableUriTest`), and the module's scan for a network client; `data`'s tests keep the
 voice draft in its profile's directory, gone with its instance, a send's staged files let go unless an item
@@ -1201,11 +1215,15 @@ screens above it (`AppNavigator`: a chat, the Instance screen, a trust state in 
 App lock setting), and onboarding's on top. A screen whose instance is gone leaves; the chat on top is
 kept and restored when the app starts again, unless an intent names another. The intents it acts on
 are a chat's deep link, `fermix://chat/{instanceId}/{profileId}`, which notifications and conversation
-shortcuts send, and the static shortcut's "Add Fermix". No filter declares the link, but the activity is
-exported for the launcher, so any app can send it one in an explicit intent; all it can do is open the
-chat of a Fermix already paired. It fits the window to the
-top screen (`fitWindow`): `FLAG_SECURE` while an onboarding screen shows, or the Instance screen with the
-daemon's key fingerprint (section 12.4), or the app is locked (`secureWindow`), and white system bars with no contrast scrim over the scan's camera, which is dark in
+shortcuts send, and the static shortcut's "Add Fermix"; another app's share reaches it from the share entry
+(below), in the process, never on its intent. No filter declares the link, but the activity is exported for the
+launcher, so any app can send it one in an explicit intent; all it can do is open the chat of a Fermix already
+paired. An intent the system replays as the app's task is brought back from Recents
+(`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`) is acted on never again. The activity is `singleTop`, so a launcher tap
+brings the app back with what it had open over it (the Files picker, a Custom Tab, a permission's prompt). It
+fits the window to the top screen (`fitWindow`): `FLAG_SECURE` while an onboarding screen shows, or the Instance
+screen with the daemon's key fingerprint (section 12.4), or the app is locked (`secureWindow`), and white system
+bars with no contrast scrim over the scan's camera, which is dark in
 both modes as the canon's `.phone.bleed` draws it, the theme's bars everywhere else. With the app lock
 on (`LockGate`), the app locks when it comes into sight after the process starts or after 5 s away (a
 rotation or a fold is no return), and nothing shows before the gate has read the setting. While locked
@@ -1279,6 +1297,77 @@ each is registered again; a record owed a `push_unregister` keeps its time, so t
 makes no token at launch (`firebase_messaging_auto_init_enabled` false), so a phone whose notifications
 are all off never reaches FCM.
 
+Another app's share comes in through the share entry (design section 13.6, "Share into Fermix"), the activity
+`ShareTarget`, exported with `SEND` and `SEND_MULTIPLE` filters for `image/*`, `video/*`, `text/plain` and
+`*/*`; the app's shortcuts name it as the conversation shortcuts' `<share-target>`, so Direct Share offers each
+paired chat, and no `ChooserTargetService` is involved. The entry has no window (`Theme.NoDisplay`), no
+affinity and no place in Recents: it starts in the sharing app's task, reads the share, hands it to the app in
+the process (`AppServices.shares`, which the activity's `ShareModel` takes once), brings the app's one activity
+forward in the app's own task with an intent shaped as the launcher's (`shareForward`, `MAIN` and `LAUNCHER`,
+no data and no extra), and finishes. When it holds read grants it sends that forward twice (`shareForwards`):
+first with none, then with the grants (below), which the activity takes as a new intent. The intent that starts a
+task stays the task's own, which Recents starts again once the activity is gone, and a start naming a grant the
+app no longer holds fails and takes the task out of Recents; so a task a share starts keeps the launcher's own
+intent, Recents starts it again as the launcher would and replays nothing of a share, and an entry the system
+replays from Recents all the same takes nothing. The forward clears the activities over the app's own in its task (the Files picker, a
+permission's prompt), as a link does. The app's screens are no activities: a chat over the list gives way to the
+share's chat, but a share that lands while onboarding shows, "Add Fermix" with a Fermix paired, lands under it, its
+chat showing once onboarding ends; whether a share should end a pairing under way is the owner's to decide. A
+Direct Share that starts the activity, its process gone, lands as the activity restores the chat kept from before,
+and the share's chat stays on top (`AppNavigator.showPaired`). The entry takes
+nothing but a share, and the activity no share: a share sent to the activity itself, or a chat's link or "Add
+Fermix" sent to the entry, is nothing. `shareOf` reads the intent's `EXTRA_STREAM` (a
+URI, or a list for `SEND_MULTIPLE`), its `EXTRA_TEXT` as plain words and its `EXTRA_SHORTCUT_ID`, each as the
+type it must be, and nothing else of it; no extra is passed on to another activity or used as an intent.
+`sharedOf` weighs the first ten URIs (`MAX_ATTACHMENTS`) by the one check, `mayRead`, as another app's
+`content:` URI only: a `file:` URI, one of the app's own providers, with or without a `user@` prefix, and any
+other scheme are refused, logged by scheme and authority alone; the rest past the ten are never looked at, and
+their count is logged. The words are cut to 4,096 characters as they are read and to what one `msg` carries as
+they land (`withSharedWords`), on a character's edge, and stay words: a link, a `/command` or an intent among
+them is never followed, and nothing runs without Send. A share of which nothing lands, or that carries nothing the
+app reads, is dropped and logged. Where it goes
+is `shareRouteOf`: a Direct Share's shortcut id is looked up among the paired records' conversations and opens
+that chat, the list beneath it; an id that names none asks "Send to which Fermix?" (`ShareSheet`), and never
+opens a chat made up from it; a generic share goes straight into the one paired Fermix's chat, or asks among
+several. Only a Fermix the phone still trusts is a share's: one revoked or whose identity changed
+(`Link.needsTrust`) is neither a row of the sheet (`shareRowsOf`) nor the one a share goes straight into
+(`shareTargetsOf`); its conversation shortcut is still a Direct Share target, as the conversations carry no link
+state, and a share to it asks among the others. With none the phone trusts, the share is dropped and logged ("no
+Fermix the phone still trusts is paired"), and nothing on screen says so, as the design has no words for that
+case: Welcome shows with none paired, and the Chats list as it was while a Fermix in a trust state or a "Re-pair
+this Fermix" row is all it holds. The
+share waits in the activity's `ShareModel`, through a rotation, for the lock and the pick (`shareAfter`): with
+the app lock on, the lock comes first (`LockGate.sight`), the sheet is never drawn over the lock screen, and a
+share is lost once the app leaves with the lock not passed. Each URI's read grant came to the entry, and would
+end as it finishes, so the second forward names each URI the entry holds a grant to in its `ClipData`, with
+`FLAG_GRANT_READ_URI_PERMISSION`; the activity's record holds the grant from then on until it is destroyed (a
+grant the platform will not hand on is logged, and its item then fails to land and is logged). Each item is
+read and copied into the chat's own file as it lands in the chat's tray, after the lock and the pick; nothing is
+kept of a share before it lands, and a process death before then loses it. Items join what the tray holds, up
+to ten: an item past the ten the tray has room for is never copied, nor one whose provider says it is past
+`caps.max_media_bytes`, and the copy itself stops a byte past that limit (`copyAtMost`), so an item whose
+provider understated its size is deleted as it passes, never held in full; the tray's own line names the first
+item too big to go. An image's copy is held instead to the larger of that limit and 128 MiB
+(`IMAGE_LANDING_MAX_BYTES`, the app's own bound, as the design names none), from a share as from a paste or the
+keyboard: it goes as a JPEG made from the copy at Send and held to the limit as it is made, as a picked image
+does, and with "Send as files" its own bytes are held to the limit in the tray, as a picked image's are. The limit
+is the chat's record's, and a share that lands in a chat whose model has not read its record yet waits for it, ten
+seconds at most (`LIMIT_WAIT_MILLIS`), past which nothing of it is copied, logged. A provider that fails as its
+item is described or copied, with an exception carried across the binder, drops that item, logged by the
+exception's class alone, and the app goes on; a refusal or a grant gone is logged so too, as the platform's own
+words for it name the URI whole, its path among it. Words go at the end of the draft, on a line of their own,
+once the stored draft is back, and words none of which fit what one `msg` carries after the draft leave the draft
+as it was, logged;
+the draft is the composer's, so a draft of shared words that begins with one of the daemon's commands is, as
+one typed would be, that command once Send is tapped. Nothing is sent until the owner taps Send, and a send in
+flight, a rotation and a process death after the copy keep the tray.
+
+The launcher icon is adaptive (`mipmap-anydpi/ic_launcher.xml`, and `ic_launcher_round.xml` as the manifest's
+`roundIcon`): the canvas white background, the two-dot mark as the foreground, and the mark in one colour as the
+monochrome layer that Android 13's themed icons draw. minSdk 35 reads only the adaptive icon, so no legacy
+bitmap is shipped. The notifications' small icon, `ic_notification`, is that monochrome mark at 24 dp, and the
+app draws in the design's own colours, never the wallpaper's (`LauncherIconTest` reads all three).
+
 The app's tests run on
 Robolectric through the application convention, over the app's own services and the bundled SQLite: the
 supervisor's one session per instance, its grace and its timer, a return within the grace never
@@ -1290,11 +1379,22 @@ alias and its refusals without a key, a route or the files a removal deleted, an
 for its own failure; the announcer's answers, about its own chat alone, each row kept; the session events
 kept, and one after a removal writing nothing, the Instance screen of a removed Fermix doing nothing, a row's unread count, each dropped Fermix's "Re-pair this Fermix" row kept by its id whatever its
 title, and the Notifications switch's policy; the lock's gate, a rotation and a phone that cannot lock
-among them; the trust screens' keys; the navigator's restore, its deep links and its pruning; the window's
+among them; the trust screens' keys; the navigator's restore, a share's chat it leaves on top, its deep links and its pruning; the window's
 flag on Welcome and on the Instance screen, its clearing on the Chats list and its return when the lock
 holds, with the list gone and the prompt up; a dropped Fermix's "Re-pair this Fermix" row as the root; a
 paired Fermix as a row with its long-press menu; the intents the activity takes, and a chat's link
-reaching the running app; the App lock switch turning on once a screen lock is set; the bars over the
+reaching the running app; a share's intent read as its types say, a replay from Recents taken for nothing, and
+the forward's launcher shape and its grants, the launcher's own intent sent first and the grants handed on after
+it, and a share of nothing logged (`ShareIntentTest`); the entry handing a share over, bringing the
+activity forward and finishing, and doing nothing else (`ShareTargetTest`); its route, a Fermix the phone no
+longer trusts never among its targets, and the lock first (`ShareRouteTest`); the share taken from the entry
+once (`ShareModelTest`); and the running app taking one (`ShareFlowTest`): words landing in
+the one paired chat, "Send to which Fermix?" through a rotation and its pick, a Direct Share naming no paired
+Fermix asking, the lock first, the sheet never drawn over it, and the share lost once the app leaves locked, and
+nothing with none paired; a Direct Share that starts the activity opening its chat over the one kept from before
+(`ShareColdStartTest`); the entry, an activity with no window, affinity or place in Recents, its filters, its
+share target and the activity's `singleTop`, as the manifest and the shortcuts declare them (`ShareEntryTest`); the
+launcher's adaptive icon and its layers (`LauncherIconTest`); the App lock switch turning on once a screen lock is set; the bars over the
 scan in light mode and back after it; a second tap on a failure screen as it leaves dropped; the pairing-wait
 service started as the app leaves Verify and not otherwise, and ending itself; and the upload hold, a session
 with an upload in flight spared past the grace until its upload ends or the hold passes, and the upload
@@ -1343,6 +1443,7 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 ./gradlew :feature-onboarding:connectedDebugAndroidTest   # the instrumented tests, on the device adb sees (below)
 ./gradlew :feature-chats:connectedDebugAndroidTest        # ... and the Chats list's
 ./gradlew :feature-chat:connectedDebugAndroidTest         # ... and the chat's
+./gradlew :app:connectedDebugAndroidTest                  # ... and the app's share, on an app with nothing paired
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
@@ -1360,7 +1461,10 @@ false with no network security config to override it, no `PROPERTY_COMPAT_ALLOW_
 the older platforms' full backup (design section 6.4) in every configuration of the rules, an override
 such as `res/xml-v36/` included, the requested permissions exactly those in `policy/permissions.txt`,
 no camera required (no feature the manifest declares or `CAMERA` implies names a camera as required, and
-`android.hardware.camera.any` is declared not required, as the pasted link is the other way in), and no
+`android.hardware.camera.any` is declared not required, as the pasted link is the other way in), the
+exported components exactly those in `policy/exported.txt`, each with the permission it is behind and its
+filters whole, their actions, categories and data and the filter's own attributes, so a `BROWSABLE` category, a
+scheme or a type added to an exported filter fails it, the libraries' merged in among the app's, and no
 test material: no entry named as a file of `contracts/mobile/`, under a `fixtures/` directory, or
 with a key store's, a key's or a fixture's extension, no entry holding the bytes of a vendored file
 under any name, and no entry holding a key of the vendored vectors (every private and public key, psk,
@@ -1373,7 +1477,8 @@ and what it searched for, then exits 1; a missing or failing tool, grep included
 reference stop it at once with status 2. Its `aapt2` is build tools
 36.0.0's, the Android Gradle plugin's default, which `gradle/libs.versions.toml` notes beside `agp`.
 CI's `policy` job builds the release with a key made for the run and runs it. A permission the app
-starts to request lands in `policy/permissions.txt` in the same change.
+starts to request lands in `policy/permissions.txt` in the same change, and a component it or a library
+starts to export, or an action, a category or data one starts to take, in `policy/exported.txt`.
 
 Warnings are errors everywhere: Kotlin (`allWarningsAsErrors`, and for the build scripts
 `org.gradle.kotlin.dsl.allWarningsAsErrors` in `gradle.properties` and `build-logic/gradle.properties`),
@@ -1418,7 +1523,23 @@ AndroidX Test's runner, Compose's test rule and Espresso 3.7 (Compose's own 3.5 
 a `fermix.android.library` module that has a `src/androidTest` gets AndroidX Test's runner and its JUnit 4
 runner class. `check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the
 tests to every gate; running them needs a device. Today `feature-onboarding`, `feature-chats`,
-`feature-chat` and `push` have them, and they need no daemon and no camera. `push`'s `KeystorePushTest`
+`feature-chat`, `push` and the app have them, and they need no daemon and no camera; the application convention
+gives the app the same as a Compose library's once it has a `src/androidTest`. The app's `ShareDeviceTest`
+shares through the share entry as the system's share sheet starts it. Another app's image is one the device's
+shell, a uid of its own, puts in the media store and shares with `am start --grant-read-uri-permission`, which
+the app cannot read without that grant: with two paired it asks "Send to which Fermix?", keeps asking through a
+rotation, and lands, copied byte for byte through the grant the entry handed on, in the tray of the chat picked.
+The rest share images the app saved itself, which it reads as their owner with no grant: one with two paired,
+which asks and lands as the other app's does; twelve, of which ten land; words, which land in the composer; a
+`file:` URI and the app's own provider, which never reach the tray; a provider that fails as its item is read
+(`content://settings/global`), after which the app takes the next share; and, with a screen lock it sets and
+takes away again, the app lock shown first, the share landing once the PIN is typed into the system's prompt.
+Another shares the shell's image into a task it starts, finishes the activity and brings the task back as a tap
+on its card in Recents does (`ActivityManager.AppTask.moveToFront`): the activity comes back, as the task's own
+intent names no grant the app no longer holds. A last test opens the Files picker over the activity, goes home and
+taps the launcher: the picker is still what shows, over the same activity. Nothing is sent in any of them. It pairs records no session can open and removes
+them, so it needs an app with nothing paired: clear the app's data (`adb shell pm clear io.tezra.fermix`) on a
+device that used it. `push`'s `KeystorePushTest`
 generates an X25519 agree key in the device's AndroidKeyStore and opens a push sealed for it at test time,
 once more with the screen locked behind a PIN it sets and clears again, and logs the trial's time under its
 tag, an emulator's and not a phone's TEE. `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
@@ -1482,7 +1603,8 @@ row the test, running as the app, owns, so that read is the app's by ownership, 
 `PhoneReadsDeviceTest` asks `PhoneMedia` and the tray's thumbnail directly: a file under the chat's cache lands
 from the camera alone, never from Photos, Files, Paste or the keyboard, and the media store's photo from those and
 never from the camera; a camera's capture as it lands, a
-send's copy and the tray's thumbnail each refuse a `file:` URI of the planted file, the same through a link
+send's copy, a landing copy (`copyAtMost`, which copies the capture whole, or a byte past a limit of one) and the
+tray's thumbnail each refuse a `file:` URI of the planted file, the same through a link
 the cache holds and a file in a sibling `cache2/`, and the chat's own provider's URI, with a SecurityException
 that names no path and nothing copied, while a file the chat made under its cache is read by each, and a
 path with a lone surrogate is weighed, never thrown on. A test
@@ -1557,7 +1679,9 @@ ANDROID_SERIAL="$serial" ./gradlew :feature-chats:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chats.FoldingPhone || exit 1
 ANDROID_SERIAL="$serial" ./gradlew :feature-chat:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chat.FoldingPhone || exit 1
-ANDROID_SERIAL="$serial" ./gradlew :push:connectedDebugAndroidTest
+ANDROID_SERIAL="$serial" ./gradlew :push:connectedDebugAndroidTest || exit 1
+adb -s "$serial" shell pm clear io.tezra.fermix   # nothing paired for the app's share tests; a first run has none to clear
+ANDROID_SERIAL="$serial" ./gradlew :app:connectedDebugAndroidTest
 ```
 
 `-feature -QuickbootFileBacked` keeps the guest's 2 GB of RAM out of a file: a host that pins
@@ -1586,8 +1710,9 @@ CI's `ui` job runs them on API 35 and 36, as `medium_phone` (the fold test left 
 `pixel_fold` (the fold required), four runs side by side on `ubuntu-24.04` with KVM opened by a udev
 rule, through `reactivecircus/android-emulator-runner` (pinned by commit). The runner's cmdline-tools
 are 12.0, which know no `pixel_fold`, so the job replaces them with 20.0, checked by its sha256, and
-looks the profile up before any emulator starts. It builds the test APK before the emulator starts, so a
-compile error is never taken for a boot that failed. The action's pre-launch script marks the AVD made,
+looks the profile up before any emulator starts. It signs the app under test with a debug key made for the
+run, as the build job does, and builds the test APKs before the emulator starts, so a compile error is never
+taken for a boot that failed. The action's pre-launch script marks the AVD made,
 and the script settles the emulator (`scripts/settle_emulator.sh`) and marks the boot before the tests:
 only when the AVD was made and the emulator never booted or never settled do the tests run once more,
 and a setup that failed before the AVD existed is not retried. The job's summary

@@ -27,6 +27,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Fermix"
@@ -36,7 +37,7 @@
           singleTop: a chat's deep link from a notification or a shortcut reaches the activity showing, as a new
           intent. No filter declares the link, so no browser or link offers it, but the activity is exported for
           the launcher, so any app can send it an explicit ACTION_VIEW with one; all such a link does is open
-          the chat of a Fermix already paired, and anything else is ignored (appIntentOf).
+          the chat of a Fermix already paired, and anything else, a share among it, is ignored (appIntentOf).
         -->
         <activity
             android:name=".MainActivity"
@@ -46,10 +47,38 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- "Add Fermix" as an app shortcut (design section 9.4). -->
+            <!--
+              "Add Fermix" as an app shortcut (design section 9.4), and the share entry as the share target of the
+              conversation shortcuts (Direct Share, section 13.6).
+            -->
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
+        </activity>
+
+        <!--
+          The share entry (design section 13.6, "Share into Fermix"): another app's share of an image, a video, any
+          file or words, one or several, offered by the system's share sheet and by Direct Share. It takes a share
+          and nothing else (ShareTarget): each URI enters through mayRead as another app's content: URI, at most ten
+          land, its words are words, and nothing is sent until the owner sends. It has no window and finishes as it
+          hands the share to the app's one activity, so it never shows in Recents, and an empty affinity keeps it out
+          of the app's own task, which only the activity roots.
+        -->
+        <activity
+            android:name=".ShareTarget"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
 
         <service

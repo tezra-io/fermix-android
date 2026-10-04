@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
@@ -79,7 +80,7 @@ class ChatVoiceTest {
 
         private fun modelIn(store: ViewModelStore): ChatViewModel =
             ViewModelProvider
-                .create(store, viewModelFactory { initializer { ChatViewModel(parts) } })
+                .create(store, viewModelFactory { initializer { ChatViewModel(parts, SavedStateHandle()) } })
                 .get(ChatViewModel::class)
     }
 

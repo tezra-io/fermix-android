@@ -27,9 +27,10 @@ private const val WHITE = 0xFFFFFFFF.toInt()
 private const val OPAQUE = 255
 
 /**
- * The phone's conversations (design section 9.1): a long-lived conversation shortcut per (instance,
- * profile), its icon the tinted avatar, opening [intentFor]'s intent; and a notification channel of the
- * same id, named as the row reads ([conversationName]), at high importance, as a chat's messages are.
+ * The phone's conversations (design sections 9.1 and 13.10, item 11): a long-lived conversation shortcut per
+ * (instance, profile), its icon the tinted avatar, opening [intentFor]'s intent, and a Direct Share target in the
+ * share sheet ([SHARE_CATEGORY]), whose share comes to the app's share entry naming the shortcut; and a notification
+ * channel of the same id, named as the row reads ([conversationName]), at high importance, as a chat's messages are.
  * Removal takes both away.
  */
 class PlatformConversations(
@@ -64,6 +65,7 @@ class PlatformConversations(
                 .setPerson(person)
                 .setIcon(Icon.createWithAdaptiveBitmap(avatar(conversation.tint)))
                 .setIntent(intentFor(conversation))
+                .setCategories(setOf(SHARE_CATEGORY))
                 .build()
         shortcuts.pushDynamicShortcut(shortcut)
     }

@@ -210,7 +210,7 @@ private fun Modifier.held(
 private const val REPAIR_TINT = "Slate"
 
 @Composable
-private fun RowLayout(
+internal fun RowLayout(
     avatar: @Composable () -> Unit,
     modifier: Modifier,
     meta: @Composable () -> Unit,
@@ -232,7 +232,7 @@ private fun RowLayout(
 }
 
 @Composable
-private fun Title(row: ChatRow) {
+internal fun Title(row: ChatRow) {
     val colors = LocalFermixColors.current
     val agent = row.agent
     val title =

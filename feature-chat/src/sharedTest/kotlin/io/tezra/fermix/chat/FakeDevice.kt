@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.net.URI
@@ -65,9 +66,11 @@ class FakeChatFiles(
 /**
  * The phone's media as the tests set it: a URI describes as [describe] says, an image of 1,000 bytes by default;
  * an item's bytes are [bytes]' for its URI, a file's own for a file's URI, or its URI's own; an image that goes as
- * a JPEG comes out "image/jpeg" under a ".jpg" name; a URI in [unreadable] throws an IOException, and one in
- * [refused] a SecurityException, as a read grant that ended does. Every prepare is recorded, with whether it went
- * as a file.
+ * a JPEG comes out "image/jpeg" under a ".jpg" name, its bytes [jpeg]'s of the image's; a URI in [unreadable] throws
+ * an IOException, one in [refused] a SecurityException, as a read grant that ended does, its words the platform's,
+ * which name the URI whole, and one in [faulty] an IllegalStateException, as another app's provider that fails does
+ * across the binder. Every prepare is recorded, with whether it went as a file, and every landing copy ([copied])
+ * with the bytes it wrote, which the app's own bounded copy writes.
  */
 class FakePipeline : MediaPipeline {
     var describe: (String, PickedFrom) -> Picked? = { uri, from ->
@@ -76,9 +79,14 @@ class FakePipeline : MediaPipeline {
     var bytes: Map<String, ByteArray> = emptyMap()
     var unreadable: Set<String> = emptySet()
     var refused: Set<String> = emptySet()
+    var faulty: Set<String> = emptySet()
     var colour: Int? = PLACEHOLDER
 
+    /** An image's JPEG made of its bytes: the same bytes, unless a test makes it smaller. */
+    var jpeg: (ByteArray) -> ByteArray = { it }
+
     val prepared = MutableStateFlow<List<Pair<String, Boolean>>>(emptyList())
+    val copied = MutableStateFlow<List<Pair<String, Long>>>(emptyList())
     val shaded = MutableStateFlow<List<Int>>(emptyList())
 
     override suspend fun describe(
@@ -86,18 +94,28 @@ class FakePipeline : MediaPipeline {
         from: PickedFrom,
     ): Picked? = describe.invoke(uri, from)
 
+    override suspend fun copyAtMost(
+        picked: Picked,
+        into: File,
+        maxBytes: Long,
+    ): Long {
+        readable(picked)
+        val source = ByteArrayInputStream(bytesOf(picked))
+        val written = into.outputStream().use { copyAtMost(source, it, maxBytes) }
+        copied.update { it + (picked.uri to written) }
+        return written
+    }
+
     override suspend fun prepare(
         picked: Picked,
         asFile: Boolean,
         into: File,
     ): Prepared {
-        if (picked.uri in unreadable) throw IOException("${picked.uri} cannot be read")
-        if (picked.uri in refused) throw SecurityException("no grant reads ${picked.uri}")
+        readable(picked)
         prepared.update { it + (picked.uri to asFile) }
-        val file = picked.uri.takeIf { it.startsWith("file:") }?.let { File(URI(it)) }
-        into.writeBytes(bytes[picked.uri] ?: file?.readBytes() ?: picked.uri.toByteArray())
-        val jpeg = picked.kind == PickedKind.IMAGE && !asFile
-        return if (jpeg) {
+        val asJpeg = picked.kind == PickedKind.IMAGE && !asFile
+        into.writeBytes(if (asJpeg) jpeg(bytesOf(picked)) else bytesOf(picked))
+        return if (asJpeg) {
             Prepared(
                 "image/jpeg",
                 picked.name.substringBeforeLast('.') + ".jpg",
@@ -110,6 +128,21 @@ class FakePipeline : MediaPipeline {
     override fun dominantColour(bytes: ByteArray): Int? {
         shaded.update { it + bytes.size }
         return colour
+    }
+
+    /** Throws as the phone would for [picked]: an IOException, a SecurityException or a provider's fault. */
+    private fun readable(picked: Picked) {
+        if (picked.uri in unreadable) throw IOException("${picked.uri} cannot be read")
+        if (picked.uri in refused) {
+            throw SecurityException("Permission Denial: reading uri ${picked.uri} requires a grant")
+        }
+        check(picked.uri !in faulty) { "the provider of ${picked.uri} failed" }
+    }
+
+    /** [picked]'s bytes: [bytes]' for its URI, a file's own for a file's URI, or its URI's own. */
+    private fun bytesOf(picked: Picked): ByteArray {
+        val file = picked.uri.takeIf { it.startsWith("file:") }?.let { File(URI(it)) }
+        return bytes[picked.uri] ?: file?.readBytes() ?: picked.uri.toByteArray()
     }
 
     companion object {

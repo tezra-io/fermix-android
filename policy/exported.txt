@@ -1,0 +1,17 @@
+# The components the release APK exports, one per line, exactly (scripts/check_release_policy.sh, check 9;
+# AGENTS.md): "<kind> <name> <permission> <filter>...", "-" for no permission, each filter whole as the merged
+# manifest has it: its elements' attributes comma-separated in order, "action=<name>", "category=<name>",
+# "data.<attribute>=<value>" and the filter's own "filter.<attribute>=<value>". A component exported, or an action, a
+# category, a scheme or a type added to one, from the app or from a library, is a change here in the same commit,
+# with what it accepts.
+
+# The launcher's start of the app's one activity; any app may send it an explicit intent, and all it acts on is
+# a chat's link naming a paired Fermix and "Add Fermix" (appIntentOf).
+activity io.tezra.fermix.MainActivity - action=android.intent.action.MAIN,category=android.intent.category.LAUNCHER
+# The share entry (design section 13.6): it takes a share of an image, a video, any file or words, and nothing else;
+# no BROWSABLE, so no web page's link reaches it.
+activity io.tezra.fermix.ShareTarget - action=android.intent.action.SEND,action=android.intent.action.SEND_MULTIPLE,category=android.intent.category.DEFAULT,data.mimeType=image/*,data.mimeType=video/*,data.mimeType=text/plain,data.mimeType=*/*
+# Firebase Messaging's: FCM's delivery of a push, from Google Play services alone.
+receiver com.google.firebase.iid.FirebaseInstanceIdReceiver com.google.android.c2dm.permission.SEND action=com.google.android.c2dm.intent.RECEIVE
+# androidx's profile installer, behind DUMP, which only the shell and the system hold.
+receiver androidx.profileinstaller.ProfileInstallReceiver android.permission.DUMP action=androidx.profileinstaller.action.INSTALL_PROFILE action=androidx.profileinstaller.action.SKIP_FILE action=androidx.profileinstaller.action.SAVE_PROFILE action=androidx.profileinstaller.action.BENCHMARK_OPERATION

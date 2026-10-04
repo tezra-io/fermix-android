@@ -1,5 +1,6 @@
 package io.tezra.fermix
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -110,5 +111,33 @@ class LockGateTest {
         gate.wentOutOfSight(now = 3_000)
         gate.cameIntoSight(now = 4_000)
         assertTrue(gate.locked.value, "the screen lock is back, and the unlock it waited for never came")
+    }
+
+    @Test
+    fun `the gate says how the app is seen once its setting is known, away, locked or open`() {
+        val gate = gate()
+        assertEquals(Sight.UNKNOWN, gate.sight.value)
+        gate.cameIntoSight(now = 0)
+        assertEquals(Sight.UNKNOWN, gate.sight.value)
+        gate.lockSetting(on = true)
+        assertEquals(Sight.LOCKED, gate.sight.value)
+        gate.unlocked()
+        assertEquals(Sight.OPEN, gate.sight.value)
+        gate.wentOutOfSight(now = 1_000)
+        assertEquals(Sight.AWAY, gate.sight.value)
+        gate.cameIntoSight(now = 2_000 + BACKGROUND_GRACE_MILLIS)
+        assertEquals(Sight.LOCKED, gate.sight.value)
+        gate.lockSetting(on = false)
+        assertEquals(Sight.OPEN, gate.sight.value)
+    }
+
+    @Test
+    fun `a phone that cannot hold the lock is open as it comes into sight`() {
+        able = false
+        val gate = gate()
+        gate.lockSetting(on = true)
+        assertEquals(Sight.AWAY, gate.sight.value)
+        gate.cameIntoSight(now = 0)
+        assertEquals(Sight.OPEN, gate.sight.value)
     }
 }

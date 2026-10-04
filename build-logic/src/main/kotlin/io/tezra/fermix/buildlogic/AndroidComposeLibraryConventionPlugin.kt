@@ -74,6 +74,9 @@ class AndroidComposeLibraryConventionPlugin : Plugin<Project> {
  */
 internal const val INSTRUMENTED_TEST_APK = "assembleDebugAndroidTest"
 
+/** AndroidX Test's runner, which every module's instrumented tests run on. */
+internal const val INSTRUMENTATION_RUNNER = "androidx.test.runner.AndroidJUnitRunner"
+
 /**
  * Instrumented tests in `src/androidTest` (CI/CD design section 3, `ui`): AndroidX Test's runner, its
  * JUnit 4 runner class, and Compose's test rule, on the Espresso that runs on API 36.
@@ -82,7 +85,15 @@ private fun Project.configureInstrumentedTests(
     android: LibraryExtension,
     libs: VersionCatalog,
 ) {
-    android.defaultConfig.testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    android.defaultConfig.testInstrumentationRunner = INSTRUMENTATION_RUNNER
+    addComposeInstrumentedTests(libs)
+}
+
+/**
+ * What instrumented tests that draw run on: AndroidX Test's runner and its JUnit 4 runner class, Compose's test
+ * rule and Espresso, for a Compose library's and the app's.
+ */
+internal fun Project.addComposeInstrumentedTests(libs: VersionCatalog) {
     val bom = dependencies.platform(libs.library("androidx-compose-bom"))
     dependencies.addProvider("androidTestImplementation", bom)
     dependencies.addProvider("androidTestImplementation", libs.library("androidx-compose-ui-test-junit4"))

@@ -3,9 +3,11 @@ package io.tezra.fermix.buildlogic
 import com.android.build.api.dsl.ApplicationExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.named
 
 /**
  * The phone app: Compose, the shared Android settings, the version from version.properties,
@@ -14,7 +16,9 @@ import org.gradle.kotlin.dsl.getByType
  * activity's lifecycle and its foreground service, with the bundled SQLite library its screens' databases
  * open on. Google's services plugin reads the Firebase project from `google-services.json` into the app's
  * resources (design section 10): the stub with a placeholder project in `app/`, or a developer's or the
- * release's own file in `app/src/<build type>/`, which the plugin reads first and git never takes.
+ * release's own file in `app/src/<build type>/`, which the plugin reads first and git never takes. Instrumented
+ * tests in [INSTRUMENTED_TEST_SOURCES], when the app has any, run on what a Compose library's run on, and `check`
+ * builds their APK ([INSTRUMENTED_TEST_APK]).
  */
 class AndroidApplicationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -34,6 +38,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             // The app's tests draw the Chats list, which reads the data module's Room databases on the
             // bundled SQLite driver, as a Room module's tests do (BundledSqliteNative.kt).
             val sqliteNative = registerSqliteNative(libs)
+            val instrumented = file(INSTRUMENTED_TEST_SOURCES).isDirectory
 
             extensions.configure<ApplicationExtension> {
                 configureAndroidCommon()
@@ -41,6 +46,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 defaultConfig.targetSdk = TARGET_SDK
                 defaultConfig.versionCode = version.code
                 defaultConfig.versionName = version.name
+                if (instrumented) defaultConfig.testInstrumentationRunner = INSTRUMENTATION_RUNNER
                 configureSigning(debugKey, releaseKey)
                 // A named receiver, not an Action lambda, for detekt's type resolution: see
                 // refuseDebugPackagingWithoutKey in Signing.kt.
@@ -63,6 +69,10 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             }
             addJUnit5()
             addRobolectric(libs)
+            if (instrumented) {
+                addComposeInstrumentedTests(libs)
+                tasks.named<Task>("check") { dependsOn(INSTRUMENTED_TEST_APK) }
+            }
             configureKotlinAndroid()
             lintReleaseInCheck()
             if (debugKey == null) refuseDebugPackagingWithoutKey(signing.propertiesFile)

@@ -14,6 +14,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.ByteBuffer
 
 /**
@@ -28,6 +30,9 @@ const val JPEG_QUALITY = 85
 
 /** The longest edge a first chunk decodes at for its placeholder colour: enough pixels to average. */
 private const val SHADE_EDGE_PX = 32
+
+/** What a landing copy reads at a time, at most. */
+private const val COPY_BUFFER_BYTES = 64 * 1024
 
 /**
  * The types a file the chat made is named by, by its extension: a camera's capture and an outbox item's copy. A
@@ -67,6 +72,23 @@ class PhoneMedia(
                 val mime = context.contentResolver.getType(parsed) ?: mimeOf(name)
                 Picked(uri, uri, pickedKindOf(mime), mime, name, size, from)
             }
+        }
+
+    /**
+     * [picked]'s own bytes into [into], at most [maxBytes] and one more, once the chat may read it as the tray holds it
+     * (readableUri): a SecurityException if not.
+     */
+    override suspend fun copyAtMost(
+        picked: Picked,
+        into: File,
+        maxBytes: Long,
+    ): Long =
+        withContext(io) {
+            val parsed = readableUri(context, picked.uri, landing = null)
+            val input =
+                context.contentResolver.openInputStream(parsed)
+                    ?: throw IOException("a ${outsideOf(parsed)} could not be opened")
+            input.use { from -> into.outputStream().use { copyAtMost(from, it, maxBytes) } }
         }
 
     /** [picked] made ready once the chat may read it as the tray holds it (readableUri): a SecurityException if not. */
@@ -186,7 +208,7 @@ class PhoneClip(
 
 /**
  * Whether the chat reads [uri] as it lands from [landing], or held in the tray (none): mayRead, its facts asked of
- * the phone, the app's own providers through PackageManager.resolveContentProvider, and a file's place by its
+ * the phone, the app's own providers as its manifest declares them (ownsProvider), and a file's place by its
  * canonical path under the app's cache, which reads the filesystem and is asked only where a file may be read: a
  * camera's capture as it lands and an item held, both off the main thread.
  */
@@ -218,16 +240,24 @@ internal fun readableUri(
     return parsed
 }
 
-/** A URI as a refusal names it: its scheme and its authority, never its path, which can say what the phone holds. */
-internal fun outsideOf(uri: Uri): String = "${uri.scheme} URI of ${uri.authority.orEmpty().ifEmpty { "no authority" }}"
+/** A URI as a refusal names it: its scheme and its authority, never its path (outsideOf). */
+internal fun outsideOf(uri: Uri): String = outsideOf(uri.scheme, uri.authority)
 
-/** Whether [authority] names a provider of the app's own package, which the app reads with its own rights. */
-private fun ownsProvider(
+/**
+ * Whether [authority] names a provider of the app's own package, which the app reads with its own rights: one its
+ * manifest declares, each provider's authorities split as the manifest lists them.
+ */
+fun ownsProvider(
     context: Context,
     authority: String,
 ): Boolean {
-    val provider = context.packageManager.resolveContentProvider(authority, PackageManager.ComponentInfoFlags.of(0))
-    return provider?.packageName == context.packageName
+    val flags = PackageManager.PackageInfoFlags.of(PackageManager.GET_PROVIDERS.toLong())
+    val providers =
+        context.packageManager
+            .getPackageInfo(context.packageName, flags)
+            .providers
+            .orEmpty()
+    return providers.any { provider -> authority in provider.authority.orEmpty().split(';') }
 }
 
 /** [width] × [height] scaled down to at most [edge] on the long edge, never up; at least a pixel each way. */
@@ -239,6 +269,31 @@ internal fun cappedSize(
     val long = maxOf(width, height, 1)
     if (long <= edge) return maxOf(width, 1) to maxOf(height, 1)
     return maxOf(width * edge / long, 1) to maxOf(height * edge / long, 1)
+}
+
+/**
+ * [from]'s bytes into [into], at most [max] and one more, which tells a stream past [max]: how many it wrote. Each read
+ * asks for no more than that bound leaves and must take a byte or end the stream (a read of none and no end is an
+ * IOException), so the loop ends within [max] + 1 reads, however much another app's provider would hand over.
+ */
+internal fun copyAtMost(
+    from: InputStream,
+    into: OutputStream,
+    max: Long,
+): Long {
+    require(max >= 0) { "a copy of at most $max bytes" }
+    val buffer = ByteArray(COPY_BUFFER_BYTES)
+    var copied = 0L
+    while (copied <= max) {
+        // What the bound leaves, and one more, counted without overflow when the limit is Long.MAX_VALUE (no caps).
+        val left = max - copied
+        val read = from.read(buffer, 0, if (left < buffer.size) left.toInt() + 1 else buffer.size)
+        if (read < 0) break
+        if (read == 0) throw IOException("a stream handed over no bytes and did not end")
+        into.write(buffer, 0, read)
+        copied += read
+    }
+    return copied
 }
 
 /** The type [name]'s extension says among [FILE_TYPES], or bytes. */

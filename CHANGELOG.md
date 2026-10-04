@@ -155,3 +155,15 @@ whose version matches `version.properties`.
   takes its notification with it. The phone registers for push when its notifications can show, again
   every 7 days and on a new token, and unregisters when they cannot, a new token included. The app now
   holds `WAKE_LOCK` and `com.google.android.c2dm.permission.RECEIVE`, from Firebase Messaging.
+- **Share into Fermix.** Another app's images, videos, files and words come in through the system's
+  share sheet and Direct Share, whose targets are the paired chats' conversation shortcuts: one paired Fermix
+  takes a share straight into its chat, several ask "Send to which Fermix?", and a Direct Share opens the chat it
+  names, even as it starts the app; a Fermix revoked or whose identity changed is never listed on the sheet nor
+  taken straight into, though its Direct Share target stays and asks among the others. Items land in the chat's
+  tray, copied as they land, up to ten, and words at the end of the draft; nothing is sent until Send. An item
+  past the daemon's limit is never copied in full, but an image, which goes as a smaller JPEG, is copied up to
+  128 MiB as a picked one goes; a provider that fails drops its item and not the app, a `file:` URI or one of the
+  app's own is refused, the app lock comes first, a share is never taken again from Recents, a task a share
+  started comes back from Recents, and the tray survives a rotation and a process death. The launcher icon has a
+  round variant beside its themed monochrome layer. The release policy check holds the exported components to
+  `policy/exported.txt`, each filter whole.

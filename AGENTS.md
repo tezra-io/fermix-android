@@ -14,10 +14,13 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 app/                  the application module, io.tezra.fermix: AppServices, the SessionSupervisor (one
                       session per instance, put aside 5 s out of sight), the RowAnnouncer, the
                       notifications' one owner (Notifications), FCM's service, PushInbox and
-                      PushRegistrations, the app lock's gate, the navigator and its deep links, and the
-                      activity; google-services.json is the placeholder project's
-build-logic/          convention plugins: fermix.android.application (the app, with its JVM and
-                      Robolectric tests), fermix.android.library,
+                      PushRegistrations, the app lock's gate, the navigator and its deep links, the
+                      share entry (ShareTarget) and a share's route (Shares.kt), the launcher icon, and
+                      the activity;
+                      its share tests on a device in src/androidTest; google-services.json is the
+                      placeholder project's
+build-logic/          convention plugins: fermix.android.application (the app, with its JVM,
+                      Robolectric and instrumented tests), fermix.android.library,
                       fermix.android.library.compose (Compose and the Roborazzi screenshot tests),
                       fermix.android.library.room (Room under KSP, the bundled SQLite, and its
                       desktop build for the JVM tests), fermix.jvm.library, fermix.quality (detekt
@@ -71,7 +74,8 @@ feature-chat/         design sections 8 and 13.5 to 13.7 as a screen, io.tezra.f
                       instrumented tests in src/androidTest, the fake session and cache both test sets
                       compile in src/sharedTest
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
-policy/               permissions.txt: the permissions the release APK requests, exactly
+policy/               permissions.txt and exported.txt: the permissions the release APK requests and
+                      the components it exports, exactly
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
                       settle_emulator.sh (the ui job's wait for a booted emulator's home screen)
 .github/workflows/    ci.yml: contract, build, unit, screens, ui, policy, and gate, the one required check
@@ -150,8 +154,10 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   sheet's grid, whose system Photo Picker tile the rig's `PickerRegistry` answers. The embedded Photo Picker
   is the system's surface, which no test or screenshot draws. `check` builds
   them, so they pass every gate; run them with `./gradlew :feature-onboarding:connectedDebugAndroidTest`,
-  `:feature-chats:connectedDebugAndroidTest` and `:feature-chat:connectedDebugAndroidTest`, one Gradle run
-  each, on an emulator (`README.md`), settled first
+  `:feature-chats:connectedDebugAndroidTest`, `:feature-chat:connectedDebugAndroidTest`,
+  `:push:connectedDebugAndroidTest` and `:app:connectedDebugAndroidTest`, one Gradle run each, on an emulator
+  (`README.md`), the app's on an app with nothing paired, as its share tests pair records of their own and
+  remove them, and set a screen lock and take it away again, settled first
   by `scripts/settle_emulator.sh`, and on CI's own Google APIs images when the run is evidence for CI. A
   test that needs the window's focus (a key event, the clipboard) waits for it with `awaitWindowFocus`. A
   test that changes the device (the animator scale, the rotation, a fold) puts it back however it ends.
@@ -220,6 +226,41 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   definition); a link that opens nothing, a reference's among them, draws as its words with no link on
   them (`LiteralMarkup`); and a link's touch target is its words alone, so the words beside it stay the
   message's (`InlineLinks`).
+- The app's exported components are these four, as the merged release manifest has them, and no other: the
+  activity, `MainActivity`, for the launcher (`MAIN`/`LAUNCHER`), which acts only on a chat's
+  `fermix://chat/{instance}/{profile}` link naming a paired Fermix and on "Add Fermix", and never on an intent
+  replayed from Recents; the share entry, the activity `ShareTarget`, with no window, no affinity and no place
+  in Recents, whose filters take `SEND` and `SEND_MULTIPLE` of `image/*`, `video/*`, `text/plain` and `*/*`,
+  and which does nothing but take a share (a share sent to the activity itself is nothing); Firebase's
+  `FirebaseInstanceIdReceiver`, behind `com.google.android.c2dm.permission.SEND`; and androidx's
+  `ProfileInstallReceiver`, behind `android.permission.DUMP`. `scripts/check_release_policy.sh` holds the
+  release APK to exactly these, each with its permission and its filters whole (their actions, categories and
+  data, and the filter's own attributes), as `policy/exported.txt` lists them: a component exported, or an
+  action, a category (`BROWSABLE` lets a web page's link fire it) or data added to one, by the app or a library, is
+  a change there and here in the same commit, after reading the merged release manifest.
+- The activity stays `singleTop`: `singleTask` would clear what it has open over it (the Files picker, a
+  Custom Tab, a permission's prompt) at a launcher tap. A share reaches it from the entry in the process
+  (`AppServices.shares`), on an intent shaped as the launcher's (`shareForward`), never on the share's own intent:
+  first with no grant, then with the read grants the entry holds in its `ClipData` (`shareForwards`). The intent
+  that starts a task stays the task's own, which Recents starts again once the activity is gone, and a start that
+  names a grant the app no longer holds fails and drops the task from Recents, so no intent that carries a grant
+  ever starts the app's task (`ShareDeviceTest` brings such a task back with `AppTask.moveToFront`).
+- A share enters through `mayRead`, as a paste does: each URI another app shares is read only as another app's
+  `content:` URI, at its entry (`sharedOf`) and again as it lands (`readableUri` with `PickedFrom.SHARE`); a
+  `file:` URI, the app's own providers (`ownsProvider`, with or without a `user@` prefix) and any other scheme
+  are refused, logged by scheme and authority alone. At most ten are weighed, each copied into the chat's own
+  file as it lands, while the grant the activity took from the entry holds. A landing copy is bounded, once the
+  chat's record has given the daemon's limit (waited for, bounded): an item past the room the tray has, or whose
+  provider says it is past what its copy may hold, is never copied, and the copy stops a byte past that
+  (`copyAtMost`); what a copy may hold is the limit, or for an image, which goes as a JPEG made from it, the larger
+  of the limit and the app's own `IMAGE_LANDING_MAX_BYTES`. A provider's `RuntimeException` carried across the
+  binder, from describing or copying an item, drops that item, logged by its class alone (its message is the
+  provider's), never the app, and a `SecurityException` there is logged by its class alone too (the platform's
+  message names the URI whole). Its words are words, bounded to what one `msg` carries; a Direct Share's shortcut
+  id is looked up among the paired records, never made into a chat; only a Fermix the phone still trusts is a
+  share's target, on the sheet and by its route alike (`shareRowsOf`, `shareTargetsOf`); no extra of a share's intent is passed on or used as an intent; with the
+  app lock on the lock comes first, the sheet is never drawn over it, and a share is lost once the app leaves
+  with the lock not passed; and nothing is sent until the owner taps Send.
 - In `src/sharedTest`, detekt's `TooManyFunctions` applies, as its default excludes only `test` and
   `androidTest`: a fake of a wide interface delegates a part (`SessionStore, RowEdits by NoRowEdits`). The
   type-resolving tasks `build` runs (`detektDebug`, `detektRelease`, `detektDebugUnitTest`,
