@@ -780,7 +780,22 @@ with a short unit) in mono to the right, past four columns in columns as wide as
 card's room when they need less and pan when they need more, a cell past three lines opening whole. A job's
 tag stands above an answer's first part and the cursor after its last, whatever they are, and an answer made
 only of cards shows its time under the last one. Raw HTML never renders: a tag, an HTML block and an
-image show as the text they are. The owner's bubble has the clock until `accepted`, then one tick, its
+image show as the text they are. A link in a message opens a web address or nothing (`MessageLinks`, the
+chat's `UriHandler`, `opens`): `http` and `https`, in any case, of at most 2,048 bytes, a link preview's
+address's bound, open in the Custom Tab in the instance's tint, as a link preview does; any other scheme,
+`tel:`, `content:`, `file:`, `intent:` and `fermix:` among them, and a longer web address, are never
+handed to the system, the tap logged by the scheme alone. An inline, angle or reference link to one, an
+email address and a bare `www.`, which names no scheme, draw as their words with no link on them, nor
+on an autolink among them, marked up as a link's words are (`LiteralMarkup`); a destination in angle
+brackets is an autolink to the parser, so its words carry no link either. A tap hands on the address its
+link carries: in the renderer's table of addresses (`DefinedLinks`), which once turned a bare address
+into the destination of a later link with those words, a destination that is a label in brackets is no
+definition, so no address a link carries is a label, and its reference draws as written. The renderer also
+keys a link's first words, when they are a label in brackets, to the link's address as it draws them, so
+a reference drawn after `[[r] more](https://…)` carries that link's address, one that opens, rather than
+its definition's. A link's touch target is its words alone (`InlineLinks`): Compose grows a smaller target
+to 48 dp, which reached the lines above and below it, so a tap there opened it and a long-press opened
+it instead of the message's menu. The owner's bubble has the clock until `accepted`, then one tick, its
 time floated on its last line when it fits; a queued one is at 55 % under "queued · sends after this
 reply", a pending one says "Queued", a refused one keeps the clock with "Not sent. Tap to retry sending."
 under it in the error colour, an error card with "Retry sending", and a tap menu of "Try again" and
@@ -875,6 +890,11 @@ sheet's rows, a pick's quiet id, the search's debounce, pages, failures, bound, 
 the jumps that fill every page between; on Robolectric the card's custom actions and live region, its one
 TalkBack stop, its height through the countdown at widths from 240 to 412 dp and its one-line buttons at 200
 % type, an expired card with nothing to press, a preview's tap, its Custom Tab's address and tint, a
+message's link by its scheme, upper-case, blank-led, bracketed and over-long ones among them, opened in
+the tinted tab or logged by its scheme, drawn as a link or as its words marked up as a web link's are,
+a reference's and an autolink among closed words among them, a definition naming a label in brackets
+drawing its reference as written, and its tap handing on the address it carries, sealed or streaming, as
+a reference after a link whose words begin with its label carries that link's (`MessageLinksTest`), a
 reaction's description and its chip growing down at 200 % type, a late preview that moves no row, Ctrl+F and
 the search field's caret, and the chip, the sheet, a pick, the palette's and the typed `/model` through
 `ChatRoute`. The instrumented tests keep the countdown and the buttons through a rotation and a fold, read
@@ -945,9 +965,12 @@ attachment, OGG/Opus through `MediaRecorder` (`PhoneVoice`). A call, another app
 chat leaving the foreground, or the system taking the touch from the finger stops it into a draft,
 "Recording stopped — send or discard", and a release after that sends nothing: only a tap sends a draft; a
 rotation or a fold does not stop it, and a hold the window change took from the finger locks the take
-hands-free. A take records into its profile's `voice-draft.ogg` (`ProfileDatabases.voiceDraft`), so a draft
-outlives the chat and the process and comes back when the chat opens, one unreadable deleted and logged; it
-goes once its session takes the note, and a send its session refused keeps it a draft. A sent note is its
+hands-free. A hold while a call rings or is under way starts nothing and says nothing: the system
+refuses the take audio focus, which is logged ("The microphone could not record"), and the composer
+stays as it was, as the design has no words for a take that did not start (the owner's to give). A take
+records into its profile's `voice-draft.ogg` (`ProfileDatabases.voiceDraft`), so a draft outlives the
+chat and the process and comes back when the chat opens, one unreadable deleted and logged; it goes
+once its session takes the note, and a send its session refused keeps it a draft. A sent note is its
 bubble, at most 78 % of the column: play, the 40-bar waveform, which gives up width first, played solid, its
 length, the speed chip (1× · 1.5× · 2×) on one line and its transcript, "Transcribing…" until
 `transcript` comes; a note this process did not record draws the bars read from its file with its length
@@ -1317,7 +1340,15 @@ the app going on each time, keep a locked recording, its bars and its timer, and
 and keep the viewer open on its image through a rotation (`ViewerDeviceTest`). `MediaPipelineDeviceTest`
 runs the phone's own image pipeline on a photo with GPS and a camera's EXIF, and on a 4,000 × 3,000 photo
 that goes up at 2,048 × 1,536; `PhoneVoiceDeviceTest` the phone's own recorder and player, an OGG/Opus note
-whose length and levels are read back, and a take another app's audio focus stops. `PhoneChatTestActivity` is
+whose length and levels are read back, and a take another app's audio focus stops, each with the chat's
+test activity resumed, as the chat records only on screen: Android 15's focus hardening refuses audio focus
+to an app that is not on top and whose process lacks the audio capability (`FOREGROUND_AUDIO_CONTROL`),
+and an instrumented process with no activity runs in the foreground-service state without it; Android
+16 only logs that refusal. `LinkDeviceTest` taps an answer's links where they are drawn: `tel:`,
+`fermix://pair?…`, the chat's own provider's `content:`, `file:`, `intent:` and a reference link's
+`tel:` start no activity, and a web address starts the Custom Tab's intent at it, in the instance's
+tint; and taps the words on the lines above and below a web address, a quarter of a line from it,
+which start nothing, and long-presses them, which opens the message's menu. `PhoneChatTestActivity` is
 the same host on the phone's own clipboard and media (`PhoneClip`, `PhoneMedia`), and `PhoneSourcesDeviceTest`
 puts what another app would on the clipboard: Paste refuses a `file:` URI of a file planted in the app's
 `noBackupFilesDir` or of a copy under the chat's cache, and a `content:` URI of the chat's own FileProvider,
@@ -1349,6 +1380,32 @@ for api in 35 36; do
   done
 done
 ```
+
+The development machine's local pair at API 35 sits beside Android Studio's `Medium_Phone_API_36.1` and
+`Pixel_Fold_API_36.1`: cmdline-tools 20.0, the zip CI pins, checked against the sha256 its "Command-line tools
+20.0" step names (`.github/workflows/ci.yml`), whose top directory `cmdline-tools/` becomes
+`$ANDROID_HOME/cmdline-tools/latest`, then CI's API 35 image and the two profiles under these names:
+
+```bash
+zip=commandlinetools-linux-14742923_latest.zip
+work="$(mktemp -d)"
+curl -fsSL -o "$work/$zip" "https://dl.google.com/android/repository/$zip"
+echo "04453066b540409d975c676d781da1477479dde3761310f1a7eb92a1dfb15af7  $work/$zip" | sha256sum -c -
+unzip -q "$work/$zip" -d "$work"
+mkdir -p "$ANDROID_HOME/cmdline-tools"
+mv "$work/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+sdkmanager "system-images;android-35;google_apis;x86_64"
+image="system-images;android-35;google_apis;x86_64"
+echo no | avdmanager create avd -n Medium_Phone_API_35 -d medium_phone -k "$image"
+echo no | avdmanager create avd -n Pixel_Fold_API_35 -d pixel_fold -k "$image"
+```
+
+CI's matrix has an API 35 row, and API 35 enforces what 36.1 lets through (audio focus refused to an app
+with nothing on screen, which only API 35 failed), so a change to anything a device test touches runs on
+both levels, the phone and the fold of each, before it is pushed: four runs, one emulator at a time. In the
+script below, `-avd` then names `Medium_Phone_API_35`, `Pixel_Fold_API_35`, `Medium_Phone_API_36.1` or
+`Pixel_Fold_API_36.1` in place of CI's `ui_35_medium_phone`.
 
 Locally, run the tests as a script, with `emulator` and `adb` on the PATH; its trap and its exits end
 the shell that runs it, so it is not for pasting into a terminal:
@@ -1390,8 +1447,13 @@ the home screen to have the focus, as a cold boot can leave a system dialog hold
 dialogs, and it fails naming the window that has the focus. A fold test (each module's `@FoldingPhone`)
 folds the phone and waits for its screen drawn again; a Pixel Fold locks as it folds, and the test
 activity shows over the lock screen (`showWhenLocked` in `src/androidTest/AndroidManifest.xml`), as the
-lock can come after the activity is made again. On a device whose `cmd device_state` cannot close it,
-its assumption skips it, and AGP's report counts that skip among the failures while the task passes, so
+lock can come after the activity is made again. The chat's draft-keeping window-change test waits,
+bounded, for the row it scrolled to to be displayed: over the window a rotation makes again, the soft
+keyboard a typed draft brought up stays (Android 15) or comes back (16) until that window takes the
+focus, which Compose's idle does not know, and while it is up a phone on its side has no room for
+the list. It was so on the phone (API 35 and 36.1 alike); the fold test shares the wait, and its one
+failure was never reproduced. On a device whose `cmd device_state` cannot close it, a fold test's
+assumption skips it, and AGP's report counts that skip among the failures while the task passes, so
 on a phone leave it out with the `notAnnotation` above, one module's annotation per run: of a list,
 AGP hands the runner the class before the first comma alone. On a folding AVD run them with
 `-Pandroid.testInstrumentationRunnerArguments.requireFold=true`, which turns that skip into a failure.

@@ -118,6 +118,10 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   stays on, and the module's tests prove the pin refuses every other certificate.
 - Every module applies one convention plugin. What modules share lives in `build-logic`, never
   copied into module scripts. A convention plugin lands with the first module that applies it.
+- A task that writes Kotlin under a module's directory, `build/` included (KSP, Roborazzi's generated
+  screenshot test), is one the module's lint analyses run after (`lintAfterKotlinWriters`): lint analyses a
+  test component with the whole module directory as a source root and reads every `.kt` file in it, so a
+  writer restored from the build cache beside it once failed the gate with a FileNotFoundException.
 - A dependency arrives with the module that needs it: pinned in `gradle/libs.versions.toml`, with
   `gradle/verification-metadata.xml` regenerated in the same change (`README.md`).
 - The build logic's tests are in `build-logic/src/test`. `./gradlew build` runs them through
@@ -147,6 +151,17 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   test that changes the device (the animator scale, the rotation, a fold) puts it back however it ends.
   What needs a real camera, `QrPreview`'s torch and its unbinding, is the device gate's. Stop an
   emulator with `adb -s <serial> emu kill` and wait for its pid, never by matching a process's name.
+- A test asserts on state only after waiting on that state, bounded — never after an idle that does not
+  know what lands it. Compose's `waitForIdle` on Robolectric drains the main looper alone, so state landed
+  after a hop to `Dispatchers.IO` races the assertion that follows it, and loses on a loaded machine (CI's
+  build job, Task 13c): wait for the state with a bounded `waitUntil` on a node, which idles the looper as it
+  looks, or put the hop on a dispatcher the idle drains, as `ComposerMediaUiTest.partsOf` runs `ChatParts.io`
+  on `Dispatchers.Main` for the tests whose assertions a hop lands (the module's other `ChatRoute` tests
+  assert nothing a hop to `io` lands). A step of the system's is as unknown to it: over the window a rotation
+  makes again, the soft keyboard a typed draft brought up stays, or comes back, until that window takes the
+  focus, on Android 15 and 16 alike, and a phone on its side has no room for the list under it, so
+  `WindowChangeTest` waits, bounded, for the row it asserts on to be displayed. A fold shares that assertion
+  and its wait; the fold's one failure in Task 13 was never reproduced (48 runs before the fix).
 - Screenshots: every preview in a `fermix.android.library.compose` module is a screenshot test, and
   `verifyRoborazziDebug` (in `check`, and CI's `screens` job) compares it with its reference image
   in the module's `src/test/screenshots/`, and fails on a reference no preview drew. A reference
@@ -189,7 +204,13 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   another app's `content:` URI whose authority, without its `user@` prefix, names no provider of the app's own
   package, which the app would read with its own rights, or a `file:` URI the chat made under its cache; a
   refusal is logged by scheme and authority, never by path. A clip's URI is never opened for its text
-  (onboarding's Paste takes the URI's own words).
+  (onboarding's Paste takes the URI's own words). A link from the wire opens a web address or nothing
+  (`MessageLinks`): `http` or `https` of at most 2,048 bytes, a link preview's bound, in the Custom Tab, any
+  other scheme or a longer address never handed to the system, its tap logged by the scheme alone; a tapped
+  address is never looked up to another (`DefinedLinks`: a destination that is a label in brackets is no
+  definition); a link that opens nothing, a reference's among them, draws as its words with no link on
+  them (`LiteralMarkup`); and a link's touch target is its words alone, so the words beside it stay the
+  message's (`InlineLinks`).
 - In `src/sharedTest`, detekt's `TooManyFunctions` applies, as its default excludes only `test` and
   `androidTest`: a fake of a wide interface delegates a part (`SessionStore, RowEdits by NoRowEdits`). The
   type-resolving tasks `build` runs (`detektDebug`, `detektRelease`, `detektDebugUnitTest`,

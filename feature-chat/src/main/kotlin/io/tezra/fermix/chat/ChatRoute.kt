@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -14,6 +15,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
@@ -29,10 +31,11 @@ import kotlinx.coroutines.launch
 /**
  * The Chat screen over [model]: its state, its composer and its actions, search, the "Model" sheet and the
  * jump to a hit while search is open, the draft kept as the screen stops, the platform's clipboard, toast and
- * share sheet for Copy and Share, and a Custom Tab in the instance's tint for a link preview; the attachments,
- * the voice note and the blobs on the phone ([outside]), a recording stopped into a draft as the screen leaves the
- * foreground but not as it turns or folds, the attach sheet over the chat while it is open, and the camera's screen
- * over everything while it is open.
+ * share sheet for Copy and Share, and a Custom Tab in the instance's tint for a link preview and for a message's
+ * web address, the one link of a message it opens (MessageLinks); the attachments, the voice note and the blobs on
+ * the phone ([outside]), a recording stopped into a draft as the screen leaves the foreground but not as it turns
+ * or folds, the attach sheet over the chat while it is open, and the camera's screen over everything while it is
+ * open.
  */
 @Composable
 fun ChatRoute(
@@ -55,6 +58,7 @@ fun ChatRoute(
     }
     val composer = rememberComposerMedia(model, outside)
     val actions = rememberRouteActions(model, navigation, outside, composer, state?.header?.record)
+    val links = rememberMessageLinks(actions.cards.onLink)
     state?.let {
         val ui =
             ChatUi(
@@ -67,7 +71,7 @@ fun ChatRoute(
                 media.copy(micOff = composer.micOff),
                 written,
             )
-        ChatScreen(ui, actions)
+        CompositionLocalProvider(LocalUriHandler provides links) { ChatScreen(ui, actions) }
         if (media.attach.sheet) AttachSheet(media.attach, field, actions.composer, outside.photos)
     }
     ComposerOverlays(model, outside, composer)

@@ -118,9 +118,12 @@ whose version matches `version.properties`.
 - **Cards and controls in the chat.** Approval polls count down and answer with Approve or Deny, as
   buttons or TalkBack actions, then become their receipt, an expired one at once; a reaction shows on the
   owner's message, and up to two link previews under their row, their thumbnails fetched from the
-  computer only, opening in a Custom Tab. The model chip and its "Model" sheet switch the chat's model,
-  `/model` too. Search finds messages through the computer's index, or the phone's while offline, from
-  the bar or Ctrl+F, says when the computer's search fails, and jumps to each hit with its words marked.
+  computer only, opening in a Custom Tab. A link in a message opens there too when it is a web address,
+  and nothing otherwise: a phone number, a file or an app's link is never handed to another app, and the
+  words beside a link are the message's, a long-press on them opening its menu. The model chip and its
+  "Model" sheet switch the chat's model, `/model` too. Search finds messages through the computer's index,
+  or the phone's while offline, from the bar or Ctrl+F, says when the computer's search fails, and jumps
+  to each hit with its words marked.
 - **Photos, files and voice notes.** The composer's + opens the attach sheet: photos from the system's
   Photo Picker, files, the camera and the clipboard, with a caption, "Send as files" and the size limit
   said inline; pasted and keyboard images are kept as they land. Photos leave the phone as JPEGs with no

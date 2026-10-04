@@ -5,10 +5,12 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Looper
 import android.os.SystemClock
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import java.io.File
 import java.util.Collections
@@ -30,9 +32,16 @@ private const val OGG_MAGIC = "OggS"
 /**
  * The phone's microphone and player on a device (design sections 8.5 and 13.5, D15): a take records OGG/Opus, from
  * which the player reads its length and its levels, one every SAMPLE_MS, which draw a note's bars whoever recorded
- * it; another app taking audio focus, as a call does, interrupts the take on the main thread.
+ * it; another app taking audio focus, as a call does, interrupts the take on the main thread. Each take starts with
+ * the chat's test activity resumed, as the chat records only while it is on screen: Android 15's focus hardening
+ * refuses audio focus to an app that is not on top and whose process lacks the audio capability
+ * (FOREGROUND_AUDIO_CONTROL), and an instrumented process with no activity runs in the foreground-service state
+ * without it.
  */
 class PhoneVoiceDeviceTest {
+    @get:Rule
+    val chat = ActivityScenarioRule(ChatTestActivity::class.java)
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val logged: MutableList<String> = Collections.synchronizedList(mutableListOf())

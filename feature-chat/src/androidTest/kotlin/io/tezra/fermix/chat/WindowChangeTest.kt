@@ -4,7 +4,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTextReplacement
@@ -37,9 +39,19 @@ class WindowChangeTest {
         rule.onNodeWithText("row $ANCHOR_ROW").assertIsDisplayed()
     }
 
+    /**
+     * The draft in the field, and the row scrolled to displayed, waited for: the keyboard the draft brought up is over
+     * the window made again until that window takes the focus, a step of the system's that Compose's idle does not
+     * know, and while it is up a phone on its side has no room for the list (Android 15 keeps it up over the window's
+     * first frames; 16 shows it again for the new configuration).
+     */
     private fun assertStillDraftingThere() {
         rule.onNode(hasSetTextAction()).assertTextEquals(DRAFT, includeEditableText = true)
-        rule.onNodeWithText("row $ANCHOR_ROW").assertIsDisplayed()
+        val row = "row $ANCHOR_ROW"
+        rule.waitUntil("$row displayed", STEP_MILLIS) {
+            val placed = rule.onAllNodesWithText(row).fetchSemanticsNodes().isNotEmpty()
+            placed && rule.onNodeWithText(row).isDisplayed()
+        }
     }
 
     /** The card's phrase [THINKING_FOR_MS] in, on screen: a pool's, not the opening "Thinking". */

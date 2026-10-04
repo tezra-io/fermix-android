@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -18,13 +19,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.annotator.AnnotatorSettings
+import com.mikepenz.markdown.annotator.DefaultAnnotatorSettings
 import com.mikepenz.markdown.annotator.annotatorSettings
 import com.mikepenz.markdown.annotator.buildMarkdownAnnotatedString
 import com.mikepenz.markdown.compose.components.MarkdownComponentModel
@@ -52,7 +59,9 @@ import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
+import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.ast.getTextInNode
+import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 
 /**
  * The renderer's look in an answer bubble (design sections 8.3 and 13.1): body 16/24 in the ink, headings as
@@ -106,14 +115,92 @@ private fun padding(): MarkdownPadding =
 
 /**
  * Raw HTML never renders (design section 8.3): an inline tag is its own text, as written, and a markdown image
- * is its source, since the phone fetches nothing a message names; everything else is the renderer's.
+ * is its source, since the phone fetches nothing a message names. A link that opens nothing (opens, MessageLinks),
+ * any but a web address no longer than a link preview's, is its words with no link on them, marked up as the
+ * renderer marks a link's words, [codeSpan] on a code span among them; a reference is looked up in [links], the
+ * table the renderer looks it up in as it draws it. Everything else is the renderer's.
  */
-private val LITERAL_HTML: MarkdownAnnotator =
-    markdownAnnotator(config = markdownAnnotatorConfig(inlineImageAsBlock = false)) { content, child ->
-        val literal = child.type == MarkdownTokenTypes.HTML_TAG || child.type == MarkdownElementTypes.IMAGE
-        if (literal) append(child.getTextInNode(content).toString())
-        literal
+private class LiteralMarkup(
+    codeSpan: SpanStyle,
+    private val links: DefinedLinks,
+) {
+    val annotator: MarkdownAnnotator =
+        markdownAnnotator(config = markdownAnnotatorConfig(inlineImageAsBlock = false)) { content, child ->
+            drawn(content, child)
+        }
+
+    /**
+     * How a closed link's words are marked up: as [annotator] marks a message up, so a tag or an image among them
+     * stays written, but an autolink among them, at any depth, is its words (autolinkWords), as the words of a link
+     * that opens nothing carry no link.
+     */
+    private val words: AnnotatorSettings =
+        DefaultAnnotatorSettings(
+            TextLinkStyles(),
+            codeSpan,
+            markdownAnnotator(config = markdownAnnotatorConfig(inlineImageAsBlock = false)) { content, child ->
+                drawnInWords(content, child)
+            },
+        )
+
+    /** Whether [node], among a closed link's words, was drawn here: an autolink as its words, or as [drawn] says. */
+    private fun AnnotatedString.Builder.drawnInWords(
+        content: String,
+        node: ASTNode,
+    ): Boolean {
+        if (node.type != MarkdownElementTypes.AUTOLINK) return drawn(content, node)
+        buildMarkdownAnnotatedString(content, autolinkWords(node), words)
+        return true
     }
+
+    /** Whether [node] was drawn here, as written or as a closed link's words; false leaves it to the renderer. */
+    private fun AnnotatedString.Builder.drawn(
+        content: String,
+        node: ASTNode,
+    ): Boolean {
+        val written = node.type == MarkdownTokenTypes.HTML_TAG || node.type == MarkdownElementTypes.IMAGE
+        val closed = if (written) null else closedWordsOf(node, content)
+        if (written) append(node.getTextInNode(content).toString())
+        if (closed != null) buildMarkdownAnnotatedString(content, closed, words)
+        return written || closed != null
+    }
+
+    /** A link's words, when the address the renderer would link them to opens nothing; none for any other node. */
+    private fun closedWordsOf(
+        node: ASTNode,
+        content: String,
+    ): List<ASTNode>? =
+        when (node.type) {
+            MarkdownElementTypes.INLINE_LINK -> {
+                closedLinkWords(node, content)
+            }
+
+            MarkdownElementTypes.FULL_REFERENCE_LINK, MarkdownElementTypes.SHORT_REFERENCE_LINK -> {
+                closedReferenceWords(node, content, links)
+            }
+
+            MarkdownElementTypes.AUTOLINK, MarkdownTokenTypes.EMAIL_AUTOLINK, GFMTokenTypes.GFM_AUTOLINK -> {
+                closedAutolink(node, content)
+            }
+
+            else -> {
+                null
+            }
+        }
+}
+
+/**
+ * The view configuration a message's prose is drawn under: a link's touch target is its words alone, not the 48 dp
+ * Compose grows a smaller target to, which reached into the lines above and below a link, so a tap on the words
+ * beside one opened it, and a long-press on them opened it instead of the message's menu (design section 13.7). A
+ * link in running text is exempt from a target's minimum size (WCAG 2.5.8, inline), and TalkBack reaches each link
+ * on its own; the controls of the cards in the prose are 48 dp tall themselves.
+ */
+private class InlineLinks(
+    base: ViewConfiguration,
+) : ViewConfiguration by base {
+    override val minimumTouchTargetSize: DpSize get() = DpSize.Zero
+}
 
 /**
  * The renderer's parts in a bubble: a fence nested in a list or a quote is a code card, or "code…" while it is
@@ -206,11 +293,8 @@ internal fun CodePlaceholder(cursor: Boolean) {
 }
 
 /**
- * An answer's prose: [markdown] as it streams into an append-only state, which starts again when the text was
- * replaced by one that does not extend it ([resets]), or when the part itself no longer extends what the state
- * holds, as when a card was cut out of it; or as it was sealed, parsed at once. A streaming one carries the beam
- * cursor where its text ends (CursorParagraph, CodePlaceholder). Its lines grow by animateContentSize, at once
- * under reduce-motion. Its paragraphs wash [marks], the words search marks while it steps to this bubble.
+ * An answer's prose (MessageProse), under a view configuration that keeps each link's touch target to its words
+ * (InlineLinks).
  */
 @Composable
 internal fun Prose(
@@ -220,6 +304,30 @@ internal fun Prose(
     actions: TextActions,
     marks: List<String> = emptyList(),
 ) {
+    val base = LocalViewConfiguration.current
+    val inline = remember(base) { InlineLinks(base) }
+    CompositionLocalProvider(LocalViewConfiguration provides inline) {
+        MessageProse(markdown, streaming, resets, actions, marks)
+    }
+}
+
+/**
+ * An answer's prose: [markdown] as it streams into an append-only state, which starts again when the text was
+ * replaced by one that does not extend it ([resets]), or when the part itself no longer extends what the state
+ * holds, as when a card was cut out of it; or as it was sealed, parsed at once. A streaming one carries the beam
+ * cursor where its text ends (CursorParagraph, CodePlaceholder). Its lines grow by animateContentSize, at once
+ * under reduce-motion. Its paragraphs wash [marks], the words search marks while it steps to this bubble. A
+ * reference link is looked up in the table its state keeps (DefinedLinks), and the raw HTML and the links that
+ * open nothing, a reference looked up in that same table among them, are drawn as LiteralMarkup says.
+ */
+@Composable
+private fun MessageProse(
+    markdown: String,
+    streaming: Boolean,
+    resets: Int,
+    actions: TextActions,
+    marks: List<String>,
+) {
     val colors = LocalFermixColors.current
     val look = colorsOf(colors)
     val padding = padding()
@@ -227,16 +335,18 @@ internal fun Prose(
     val components = componentsOf(streaming, actions, marks)
     val reduced = LocalReducedMotion.current
     val animations = markdownAnimations(animateTextSize = { if (reduced) this else animateContentSize() })
+    val codeSpan = typography.inlineCode.copy(background = look.inlineCodeBackground).toSpanStyle()
     if (!streaming) {
         // Parsed as it composes: a sealed bubble measures whole on its first frame, so the list's anchor holds.
-        val sealed = rememberMarkdownState(markdown, immediate = true)
+        val links = remember { DefinedLinks() }
+        val sealed = rememberMarkdownState(markdown, referenceLinkHandler = links, immediate = true)
         Markdown(
             sealed,
             look,
             typography,
             Modifier,
             padding,
-            annotator = LITERAL_HTML,
+            annotator = remember(codeSpan, links) { LiteralMarkup(codeSpan, links).annotator },
             components = components,
             animations = animations,
         )
@@ -245,7 +355,8 @@ internal fun Prose(
     val cursor = cursorContent()
     var restarts by remember { mutableIntStateOf(0) }
     key(resets, restarts) {
-        val state = rememberStreamingMarkdownState()
+        val links = remember { DefinedLinks() }
+        val state = rememberStreamingMarkdownState(referenceLinkHandler = links)
         LaunchedEffect(markdown) {
             val held = state.content
             when {
@@ -259,7 +370,7 @@ internal fun Prose(
             typography,
             Modifier,
             padding,
-            annotator = LITERAL_HTML,
+            annotator = remember(codeSpan, links) { LiteralMarkup(codeSpan, links).annotator },
             inlineContent = cursor,
             components = components,
             animations = animations,

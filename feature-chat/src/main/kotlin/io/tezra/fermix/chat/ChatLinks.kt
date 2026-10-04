@@ -19,7 +19,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** The schemes a link preview may open: the web's. Any other is never shown as a preview (shownPreviews). */
+/**
+ * The schemes a link preview or a message's link may open: the web's. Any other is never shown as a preview
+ * (shownPreviews), and a message's opens nothing (MessageLinks).
+ */
 private val WEB_SCHEMES = setOf("http", "https")
 
 /** A thumbnail is decoded at most this wide or tall, in pixels: a 640 dp card on a 3x screen, and no more. */
@@ -28,11 +31,11 @@ private const val THUMBNAIL_MAX_PX = 1_920
 /** A decode halves the picture at most this many times. */
 private const val MAX_HALVINGS = 8
 
-/** Whether [url] is a web address, the only kind a preview opens. */
+/** Whether [url] is a web address, the only kind a preview or a message's link opens, its scheme in any case. */
 fun isWebLink(url: String): Boolean = url.substringBefore(':', "").lowercase() in WEB_SCHEMES
 
 /** The tag a tap that nothing opens is logged under, as onboarding's links are. */
-private const val LOG_TAG = "FermixChat"
+internal const val LINK_TAG = "FermixChat"
 
 /**
  * What a preview's tap does (design section 13.5): its page in a Custom Tab whose toolbar wears the instance's
@@ -60,9 +63,10 @@ private fun openLink(
             .setShowTitle(true)
             .build()
     try {
-        tab.launchUrl(context, url.toUri())
+        // An intent filter matches a scheme as written, and the browsers' are lower-case: "HTTPS:" would open nothing.
+        tab.launchUrl(context, url.toUri().normalizeScheme())
     } catch (nothing: ActivityNotFoundException) {
-        Log.w(LOG_TAG, "nothing on this phone opens a web page", nothing)
+        Log.w(LINK_TAG, "nothing on this phone opens a web page", nothing)
     }
 }
 

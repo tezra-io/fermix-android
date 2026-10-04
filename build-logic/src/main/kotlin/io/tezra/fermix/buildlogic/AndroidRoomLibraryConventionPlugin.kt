@@ -43,9 +43,14 @@ class AndroidRoomLibraryConventionPlugin : Plugin<Project> {
             val android = extensions.getByType<LibraryExtension>()
             // A function value with a named parameter, not an Action lambda (Signing.kt).
             android.testOptions.unitTests.all { test -> loadSqliteNative(test, native) }
+            // KSP writes the DAOs' code under build/, and keeps copies of it there as its local state.
+            lintAfterKotlinWriters { name -> KSP_TASK.matches(name) }
         }
     }
 }
+
+/** KSP's tasks, one per variant and per component: `kspDebugKotlin`, `kspReleaseKotlin`, `kspDebugUnitTestKotlin`. */
+private val KSP_TASK = Regex("ksp.*Kotlin")
 
 /**
  * [ExtractSqliteNative] over sqlite-bundled-jvm, which Gradle resolves and checks against its sha256: a Room

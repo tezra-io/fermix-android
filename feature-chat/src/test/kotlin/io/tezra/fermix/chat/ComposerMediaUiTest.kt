@@ -46,6 +46,16 @@ class ComposerMediaUiTest {
     @After
     fun backgroundEnds() = background.cancel()
 
+    /**
+     * The chat's parts over [store], its file work ([ChatParts.io]) on the main looper: Compose's idle drains that
+     * looper and knows no other thread, so a state landed after a hop to `Dispatchers.IO` (a keyboard's copy, the
+     * voice draft's file found as the chat opens) would race the assertion that follows the idle.
+     */
+    private fun partsOf(
+        store: FakeChatStore,
+        session: FakeChatSession = FakeChatSession(store),
+    ): ChatParts = fakeParts(sample(), session, store, background).copy(io = Dispatchers.Main)
+
     /** The view the focused field takes the keyboard's input through, the first in [root]'s tree. */
     private fun editor(root: View): View? =
         when {
@@ -56,10 +66,7 @@ class ComposerMediaUiTest {
 
     @Test
     fun `an image the keyboard commits goes to the tray, and the field keeps its words`() {
-        val store = FakeChatStore()
-        // The landing copy's file work runs on the main looper, which Compose's idling drains, never on a thread
-        // of its own that the test would have to wait for.
-        val parts = fakeParts(sample(), FakeChatSession(store), store, background).copy(io = Dispatchers.Main)
+        val parts = partsOf(FakeChatStore())
         // Robolectric's ImageDecoder decodes no file, so the copy is described as one that draws no thumbnail.
         (parts.media as FakePipeline).describe = { uri, from ->
             Picked(uri, uri, PickedKind.FILE, "image/png", uri.substringAfterLast('/'), 1_000L, from)
@@ -89,14 +96,14 @@ class ComposerMediaUiTest {
             FermixTheme { ChatRoute(model, ChatNavigation(onBack = {}, onInstance = {}, showing = { true })) }
         }
         rule.runOnIdle { model.voice.start() }
-        assertTrue(model.voice.ui.value is VoiceUi.Recording)
+        assertTrue("the take started: ${model.voice.ui.value}", model.voice.ui.value is VoiceUi.Recording)
     }
 
     @Test
     fun `leaving the foreground stops a recording into a draft and sends nothing`() {
         val store = FakeChatStore()
         val session = FakeChatSession(store)
-        val model = ChatViewModel(fakeParts(sample(), session, store, background))
+        val model = ChatViewModel(partsOf(store, session))
         recordingOn(model)
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         assertTrue("leaving kept no draft", model.voice.ui.value is VoiceUi.Draft)
@@ -105,8 +112,7 @@ class ComposerMediaUiTest {
 
     @Test
     fun `a rotation leaves the recording going`() {
-        val store = FakeChatStore()
-        val model = ChatViewModel(fakeParts(sample(), FakeChatSession(store), store, background))
+        val model = ChatViewModel(partsOf(FakeChatStore()))
         recordingOn(model)
         rule.activityRule.scenario.recreate()
         assertTrue("a rotation stopped the take", model.voice.ui.value is VoiceUi.Recording)

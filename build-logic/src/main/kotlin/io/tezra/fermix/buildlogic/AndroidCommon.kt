@@ -41,6 +41,23 @@ internal fun Project.lintReleaseInCheck() {
     tasks.named<Task>("check") { dependsOn("lintRelease") }
 }
 
+/** Lint's analysis tasks: one per variant and per component, and the release's vital one. */
+private val LINT_ANALYSIS = Regex("lint(Vital)?Analyze.*")
+
+/**
+ * Every lint analysis of the module runs after the tasks that write Kotlin under it, [writers] by name. Lint
+ * analyses a test component apart, with no main source folders, and lint then takes the whole module directory
+ * as a source root (lint 32.4, UastEnvironment.Module), build/ included: its Kotlin index lists every .kt file
+ * there and reads each. A writer that runs, or is restored from the build cache, beside it deletes its files
+ * first, and the index fails on one it listed (FileNotFoundException). Order only: neither makes the other run.
+ */
+internal fun Project.lintAfterKotlinWriters(writers: (String) -> Boolean) {
+    val written = tasks.named { name -> writers(name) }
+    // A function value with a named parameter, not an Action lambda (Signing.kt).
+    val afterWriters: (Task) -> Unit = { analysis -> analysis.mustRunAfter(written) }
+    tasks.named { name -> LINT_ANALYSIS.matches(name) }.configureEach(afterWriters)
+}
+
 /** AGP compiles Kotlin itself (built-in Kotlin); every warning it reports fails the build. */
 internal fun Project.configureKotlinAndroid() {
     extensions.configure<KotlinAndroidProjectExtension> {

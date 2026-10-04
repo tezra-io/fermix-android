@@ -154,7 +154,12 @@ private fun Project.configurePreviewScreenshots(android: LibraryExtension) {
     previews.enable.set(true)
     previews.packages.set(provider { listOf(requireNamespace(android.namespace, path)) })
     previews.robolectricConfig.set(mapOf("sdk" to "[$TARGET_SDK]"))
+    // The generated test is Kotlin under build/.
+    lintAfterKotlinWriters { name -> PREVIEW_TESTS.matches(name) }
 }
+
+/** Roborazzi's task that writes the module's screenshot test: `generateDebugComposePreviewRobolectricTests`. */
+private val PREVIEW_TESTS = Regex("generate.*ComposePreviewRobolectricTests")
 
 /** The module's namespace, the package its previews are looked for in; a module without one fails. */
 internal fun requireNamespace(
