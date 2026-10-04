@@ -13,7 +13,6 @@ import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.NotifiedEntry
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.RoomSessionStore
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.data.stagedUploads
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.push.PushLog
@@ -75,7 +74,7 @@ class NotificationsTest {
     )
 
     private suspend fun TestScope.rig(): Rig {
-        val store = InstanceStore(instanceDataStore(File(folder.root, "instances.json"), backgroundScope), databases)
+        val store = InstanceStore(File(folder.root, "instances.json"), backgroundScope, databases)
         store.upsert(mini.record)
         val records = store.instances.stateIn(backgroundScope, SharingStarted.Eagerly, emptyList())
         records.first { it.isNotEmpty() }

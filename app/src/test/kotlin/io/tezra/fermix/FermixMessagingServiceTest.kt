@@ -27,7 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** How long the app's services may take to take a record and write one, which they do off the main thread. */
+/** How long the app's services may take to take a record, and to rewrite a notification on their own threads. */
 private const val SETTLE_MILLIS = 10_000L
 private const val POLL_MILLIS = 50L
 
@@ -45,19 +45,10 @@ private const val GET_META_DATA = PackageManager.GET_META_DATA.toLong()
 /** The daemon whose push these tests send, and whose device key the phone holds in software. */
 private val DAEMON = PairedDaemon(1, "studio")
 
-/**
- * A daemon of one test alone, its conversation one no other test's app writes: each test's app lives on past
- * its test on Robolectric, and its late writes land in the notification manager the next test reads.
- */
-private val ATTIC = PairedDaemon(4, "attic")
-
-/** The app with the device keys in software, in place of the Keystore, holding [DAEMON]'s and [ATTIC]'s keys. */
+/** The app with the device keys in software, in place of the Keystore, holding [DAEMON]'s key. */
 class SoftKeysApplication : FermixApplication() {
     override fun makeServices(): AppServices =
-        AppServices(
-            this,
-            keys = SoftKeys(mapOf(DAEMON.record.keyAlias to DAEMON.device, ATTIC.record.keyAlias to ATTIC.device)),
-        )
+        AppServices(this, keys = SoftKeys(mapOf(DAEMON.record.keyAlias to DAEMON.device)))
 
     /** [record] stored once the launch check has run, as an approved pairing stores it. */
     fun store(record: Instance) {
@@ -69,32 +60,17 @@ class SoftKeysApplication : FermixApplication() {
         }
     }
 
-    /** [instanceId]'s registration written [at], as a `push_register` writes it. */
+    /** [instanceId]'s registration written [at], as a `push_register` writes it; its record must be there. */
     fun stamp(
         instanceId: String,
         at: Long,
     ) {
-        runBlocking {
-            withTimeout(SETTLE_MILLIS) {
-                services.instances.update(instanceId) { it.copy(fcmRegisteredAt = at) }
-                services.instances.instances.first { records -> records.all { it.fcmRegisteredAt == at } }
-            }
-        }
+        val written = runBlocking { services.instances.update(instanceId) { it.copy(fcmRegisteredAt = at) } }
+        check(written) { "no record is $instanceId" }
     }
 
-    /**
-     * The records once [done] says they are, read afresh every [POLL_MILLIS] up to [SETTLE_MILLIS]: a write
-     * another coroutine makes while one collection waits was seen to reach a fresh read and not the waiting
-     * collector, here on Robolectric's main thread.
-     */
-    fun recordsOnce(done: (List<Instance>) -> Boolean): List<Instance> {
-        repeat((SETTLE_MILLIS / POLL_MILLIS).toInt()) {
-            val records = runBlocking { services.instances.instances.first() }
-            if (done(records)) return records
-            Thread.sleep(POLL_MILLIS)
-        }
-        error("the records never settled in ${SETTLE_MILLIS}ms")
-    }
+    /** The records now: a write that has returned is in them, as the store reads under its write lock. */
+    fun records(): List<Instance> = runBlocking { services.instances.instances.first() }
 }
 
 /**
@@ -173,8 +149,8 @@ class FermixMessagingServiceTest {
 
     @Test
     fun `turning the app lock on, or a chat's previews off, rewrites its showing notification without its words`() {
-        app.store(ATTIC.record)
-        val data = ATTIC.push(messageJson(3, "the secret plan"))
+        app.store(DAEMON.record)
+        val data = DAEMON.push(messageJson(3, "the secret plan"))
         service().onMessageReceived(RemoteMessage.Builder(SENDER).setData(data).build())
         assertTrue("the secret plan" in shownOnce { true }.written())
 
@@ -185,7 +161,7 @@ class FermixMessagingServiceTest {
         runBlocking { app.services.settings.setAppLock(false) }
         shownOnce { "the secret plan" in it.written() }
         runBlocking {
-            app.services.instanceParts().profiles.withDatabase(ATTIC.record.id, MAIN_PROFILE) {
+            app.services.instanceParts().profiles.withDatabase(DAEMON.record.id, MAIN_PROFILE) {
                 it.chat().setPreviews(false)
             }
         }
@@ -194,12 +170,12 @@ class FermixMessagingServiceTest {
     }
 
     /**
-     * [ATTIC]'s conversation notification once [done] says it is, read every [POLL_MILLIS] up to [SETTLE_MILLIS]:
-     * the services rewrite it on their own threads.
+     * [DAEMON]'s conversation notification once [done] says it is, read every [POLL_MILLIS] up to [SETTLE_MILLIS]:
+     * the services rewrite it on their own threads, and the notification manager tells no one.
      */
     private fun shownOnce(done: (Notification) -> Boolean): Notification {
         val manager = app.getSystemService(NotificationManager::class.java)
-        val tag = "${conversationId(ATTIC.record.id, MAIN_PROFILE)}/messages"
+        val tag = "${conversationId(DAEMON.record.id, MAIN_PROFILE)}/messages"
         repeat((SETTLE_MILLIS / POLL_MILLIS).toInt()) {
             val shown = manager.activeNotifications.singleOrNull { posted -> posted.tag == tag }?.notification
             if (shown != null && done(shown)) return shown
@@ -210,8 +186,8 @@ class FermixMessagingServiceTest {
 
     @Test
     fun `the registrations take a denied permission or a blocked channel as notifications that cannot show`() {
-        // A record no test stores, whose channel only this test makes.
-        val record = PairedDaemon(5, "shed").record
+        // A record this test does not store, so the only channel it has is the one this test makes.
+        val record = DAEMON.record
         val canShow = app.services.registrations.parts.canShow
         val manager = app.getSystemService(NotificationManager::class.java)
         assertTrue(canShow(record))
@@ -232,7 +208,7 @@ class FermixMessagingServiceTest {
     fun `messages FCM dropped set every record's full pull`() {
         app.store(DAEMON.record)
         service().onDeletedMessages()
-        assertEquals(listOf(true), app.recordsOnce { true }.map { it.historyPullDue })
+        assertEquals(listOf(true), app.records().map { it.historyPullDue })
     }
 
     @Test
@@ -240,10 +216,11 @@ class FermixMessagingServiceTest {
         app.store(DAEMON.record)
         val service = service()
         // Whether this first one was asked for depends on whether the app has come into sight; the next is news.
+        // Each is taken before the call returns, so the first can clear nothing written after it.
         service.onRegistered("fcm-token-of-this-phone")
         app.stamp(DAEMON.record.id, at = 1_000L)
+        assertEquals(listOf(1_000L), app.records().map { it.fcmRegisteredAt })
         service.onRegistered("fcm-token-rotated")
-        val records = app.recordsOnce { records -> records.all { it.fcmRegisteredAt == null } }
-        assertNull(records.single().fcmRegisteredAt)
+        assertEquals(listOf<Long?>(null), app.records().map { it.fcmRegisteredAt })
     }
 }

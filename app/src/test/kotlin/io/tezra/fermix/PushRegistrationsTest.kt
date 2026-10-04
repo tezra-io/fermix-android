@@ -9,7 +9,6 @@ import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.push.REGISTRATION_MAX_AGE_MS
 import io.tezra.fermix.session.Session
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,7 +64,7 @@ class PushRegistrationsTest {
 
     private suspend fun TestScope.rig(record: Instance = daemon): Rig {
         val databases = ProfileDatabases(context, File(folder.root, "profiles"))
-        val store = InstanceStore(instanceDataStore(File(folder.root, "instances.json"), backgroundScope), databases)
+        val store = InstanceStore(File(folder.root, "instances.json"), backgroundScope, databases)
         store.upsert(record)
         val sessions = MutableStateFlow(mapOf(record.id to idleSession(backgroundScope)))
         val posted = PostedNotifications(context)
@@ -182,7 +181,7 @@ class PushRegistrationsTest {
             rig.reconciled()
             // The switch goes off with no connection up, so the unregister waits for the next.
             rig.sessions.value = emptyMap()
-            rig.store.update(daemon.id) { it.copy(notificationsEnabled = false) }
+            rig.store.changed(daemon.id) { it.copy(notificationsEnabled = false) }
             rig.registrations.apply(rig.record(), on = false)
             token = "fcm-token-rotated"
             rig.registrations.newToken()
@@ -198,14 +197,14 @@ class PushRegistrationsTest {
     fun `the Notifications switch registers and unregisters at once over a live connection`() =
         runTest {
             val rig = rig(daemon.copy(notificationsEnabled = false))
-            rig.store.update(daemon.id) { it.copy(notificationsEnabled = true) }
+            rig.store.changed(daemon.id) { it.copy(notificationsEnabled = true) }
             rig.registrations.apply(
                 rig.store.instances
                     .first()
                     .single(),
                 on = true,
             )
-            rig.store.update(daemon.id) { it.copy(notificationsEnabled = false) }
+            rig.store.changed(daemon.id) { it.copy(notificationsEnabled = false) }
             rig.registrations.apply(
                 rig.store.instances
                     .first()
@@ -229,7 +228,7 @@ class PushRegistrationsTest {
             assertEquals(listOf("register $TOKEN"), sent)
             sent.clear()
 
-            rig.store.update(daemon.id) { it.copy(fcmRegisteredAt = null, pushPlatforms = emptyList()) }
+            rig.store.changed(daemon.id) { it.copy(fcmRegisteredAt = null, pushPlatforms = emptyList()) }
             rig.reconciled()
             assertEquals(emptyList<String>(), sent)
         }
@@ -251,7 +250,7 @@ class PushRegistrationsTest {
             val rig = rig()
             rig.reconciled()
             // The first tap's call reads the record after the second tap wrote it off.
-            rig.store.update(daemon.id) { it.copy(notificationsEnabled = false) }
+            rig.store.changed(daemon.id) { it.copy(notificationsEnabled = false) }
             rig.registrations.apply(rig.record(), on = true)
             assertEquals(listOf("register $TOKEN", "unregister"), sent)
             assertNull(rig.registeredAt())

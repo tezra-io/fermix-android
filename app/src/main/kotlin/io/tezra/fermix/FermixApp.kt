@@ -64,7 +64,7 @@ internal fun FermixApp(
     val locked by services.lockGate.locked.collectAsState()
     val known = chats.takeIf { checked && lockKnown }
     FollowIntents(known, models, hooks.intents)
-    FollowLockSetting(services, hooks)
+    FollowLockSetting(remember(services) { services.settings.settings.map { it.appLock } }, hooks.recents)
     val saved = rememberSaveableStateHolder()
     val canvas = LocalFermixColors.current.canvas
     Box(modifier = Modifier.fillMaxSize().background(canvas)) {
@@ -171,14 +171,17 @@ private fun LandShare(
     }
 }
 
-/** The recents preview is hidden while the app lock is on (design section 13.7). */
+/**
+ * The recents preview is hidden while [appLock], the setting, is on (design section 13.7); [recents] shows it or not.
+ * Until the setting is read the lock is taken as on, so a window made then shows nothing in the recents.
+ */
 @Composable
-private fun FollowLockSetting(
-    services: AppServices,
-    hooks: ActivityHooks,
+internal fun FollowLockSetting(
+    appLock: Flow<Boolean>,
+    recents: (Boolean) -> Unit,
 ) {
-    val appLock by remember(services) { services.settings.settings.map { it.appLock } }.collectAsState(initial = false)
-    LaunchedEffect(appLock) { hooks.recents(!appLock) }
+    val locked by appLock.collectAsState(initial = true)
+    LaunchedEffect(locked) { recents(!locked) }
 }
 
 /** "Add Fermix": a pairing from the root, unless one is under way. */

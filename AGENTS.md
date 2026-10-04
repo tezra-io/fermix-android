@@ -199,6 +199,24 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   only once the run and every request made before it (`send`, `retry`, `markRead`, `remove`, in the caller's
   coroutine) have ended. A pairing's session is the supervisor's only from `adopt`, and "Pair again" merges
   only into a row in a trust state, whose run is over.
+- A DataStore, the records' or the settings', is read and written only through its store, `InstanceStore` or
+  `AppSettingsStore`, which makes it from its file and holds it alone: no other module is handed one or compiles
+  against DataStore. Every read, `first()` or a collection, is taken under the store's write lock
+  (`lockedReads`: `updateData` with a transform that hands back what it was given, which writes nothing),
+  never from DataStore's `data` for its values, and every transform, a read's or a write's, runs in place on
+  the store's thread (`locked`): DataStore runs it in its caller's context while it holds the lock, so one
+  queued for a busy main thread holds every read behind it. DataStore 1.2.1's `data`, started while a write is
+  under way, reads the file without the lock and keeps what it read until the next write, so a collector
+  started then never sees that write (`ReadsDuringWritesTest`), and a read that lands as the write moves its
+  file in finds none and answers with the serializer's default: no paired Fermix, the app lock off (a probe on
+  Robolectric counted 3 to 17 in a run of 20,000 writes, some six million reads, on two cores). A DataStore is
+  made through `atomicDataStore`, over OkioStorage, whose one rename puts the written file in place:
+  DataStore's own storage deletes the old file first, so a process killed in that instant leaves none. Its
+  serializer emits what it wrote before `writeTo` returns: OkioStorage syncs the file then, before the move, and
+  a byte still in the sink's buffer reaches the file only after that sync, so a power cut after the move could
+  leave an empty or a partial file in the old one's place (`SyncedWritesTest`). A read started after a write has
+  returned shows it, so a test reads once after a write of its own has returned; it waits, bounded, on the store's
+  flow or a `stateIn` only for a write someone else makes, and never on a predicate that an empty list satisfies.
 - The phone reaches no address but its daemon's. A link preview's thumbnail, like any blob, comes only
   through `Session.fetchMedia`, never from the URL an event names, and `feature-chat`'s own code holds no
   HTTP client, socket, URL fetch or web view (`ChatMediaTest` scans its sources and build script, and the

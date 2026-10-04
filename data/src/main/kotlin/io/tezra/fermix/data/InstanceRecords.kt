@@ -1,11 +1,8 @@
 package io.tezra.fermix.data
 
 import androidx.datastore.core.CorruptionException
-import androidx.datastore.core.DataStore
-import androidx.datastore.core.DataStoreFactory
-import androidx.datastore.core.Serializer
+import androidx.datastore.core.okio.OkioSerializer
 import io.tezra.fermix.transport.Candidate
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -14,9 +11,8 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.serializer
-import java.io.File
-import java.io.InputStream
-import java.io.OutputStream
+import okio.BufferedSink
+import okio.BufferedSource
 import java.nio.charset.CharacterCodingException
 
 /**
@@ -31,34 +27,19 @@ private val RECORD_JSON =
     }
 
 /**
- * The instance records' DataStore over [file], whose writes run in [scope]. DataStore allows one per file
- * in a process, so the app makes it once; the file belongs in credential-encrypted storage that no backup
- * or device transfer carries (design section 6.6), such as `Context.noBackupFilesDir`.
- */
-fun instanceDataStore(
-    file: File,
-    scope: CoroutineScope,
-): DataStore<Instances> =
-    DataStoreFactory.create(
-        serializer = InstancesSerializer,
-        scope = scope,
-        produceFile = { file },
-    )
-
-/**
  * The typed DataStore's codec: the records as JSON through kotlinx.serialization, which the wire already
  * uses, rather than protobuf, which would bring a second codec and its toolchain for one file. A file that
  * does not decode, or whose records break a rule, is a [CorruptionException], which DataStore hands to the
  * reader: the records name the Keystore keys, so nothing replaces them silently.
  */
-object InstancesSerializer : Serializer<Instances> {
+internal object InstancesSerializer : OkioSerializer<Instances> {
     override val defaultValue: Instances = Instances()
 
-    override suspend fun readFrom(input: InputStream): Instances =
+    override suspend fun readFrom(source: BufferedSource): Instances =
         try {
             RECORD_JSON.decodeFromString(
                 serializer<Instances>(),
-                input.readBytes().decodeToString(throwOnInvalidSequence = true),
+                source.readByteArray().decodeToString(throwOnInvalidSequence = true),
             )
         } catch (refusal: IllegalArgumentException) {
             throw CorruptionException("the instance records do not decode", refusal)
@@ -68,9 +49,12 @@ object InstancesSerializer : Serializer<Instances> {
 
     override suspend fun writeTo(
         t: Instances,
-        output: OutputStream,
+        sink: BufferedSink,
     ) {
-        output.write(RECORD_JSON.encodeToString(serializer<Instances>(), t).encodeToByteArray())
+        sink.write(RECORD_JSON.encodeToString(serializer<Instances>(), t).encodeToByteArray())
+        // OkioStorage syncs the file as this returns, before it moves it in place: what the sink still buffers would
+        // reach the file only after that sync (atomicDataStore).
+        sink.emit()
     }
 }
 

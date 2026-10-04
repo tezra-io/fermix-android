@@ -63,7 +63,7 @@ class ReadersAndRemovalTest {
 
     private fun TestScope.open(): Pair<InstanceStore, ProfileDatabases> {
         val databases = ProfileDatabases(TestContext, root, queries)
-        val records = instanceDataStore(File(directory, "instances.json"), backgroundScope)
+        val records = atomicDataStore(File(directory, "instances.json"), InstancesSerializer, backgroundScope)
         return InstanceStore(records, databases, StandardTestDispatcher(testScheduler)) to databases
     }
 

@@ -15,6 +15,8 @@ open class FermixApplication : Application() {
     lateinit var services: AppServices
         private set
 
+    private lateinit var sight: SightObserver
+
     /** The app's services, made once as the process starts. */
     protected open fun makeServices(): AppServices = AppServices(this)
 
@@ -22,7 +24,21 @@ open class FermixApplication : Application() {
         super.onCreate()
         services = makeServices()
         services.start()
-        ProcessLifecycleOwner.get().lifecycle.addObserver(SightObserver(services.supervisor.inSight))
+        sight = SightObserver(services.supervisor.inSight)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(sight)
+    }
+
+    /**
+     * The process ends, which only an emulated one says: Robolectric makes a new application for each test in one
+     * process and calls this as the test ends, before it resets the notification manager's state, which it keeps for
+     * the whole process. Without it a test's services ran on into the next test and wrote into what that test reads,
+     * a channel of the test before among them. The services end, and the process's lifecycle, which outlives the
+     * application there, stops telling them its sight.
+     */
+    override fun onTerminate() {
+        ProcessLifecycleOwner.get().lifecycle.removeObserver(sight)
+        services.close()
+        super.onTerminate()
     }
 }
 

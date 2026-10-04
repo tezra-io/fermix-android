@@ -14,7 +14,6 @@ import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.NOTIFIED_ID_RETENTION_MS
 import io.tezra.fermix.data.NotifiedEntry
 import io.tezra.fermix.data.ProfileDatabases
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.data.launchCheck
 import io.tezra.fermix.instance.InstanceParts
 import io.tezra.fermix.instance.InstanceViewModel
@@ -164,8 +163,7 @@ class ScreenWiringTest {
     )
 
     private suspend fun TestScope.store(): InstanceStore {
-        val records = instanceDataStore(File(directory, "instances.json"), backgroundScope)
-        val store = InstanceStore(records, databases)
+        val store = InstanceStore(File(directory, "instances.json"), backgroundScope, databases)
         store.upsert(RECORD)
         return store
     }
@@ -299,7 +297,7 @@ class ScreenWiringTest {
     @Test
     fun `each Fermix a launch dropped keeps its own Re-pair row, whatever its title, until its daemon is back`() =
         runTest(main, timeout = SETTLE) {
-            val store = InstanceStore(instanceDataStore(File(directory, "instances.json"), backgroundScope), databases)
+            val store = InstanceStore(File(directory, "instances.json"), backgroundScope, databases)
             // The canon's production and dev daemons on one computer, both titled suj-mbp, and a third of
             // that title whose key the restore kept.
             val production = RECORD
@@ -365,7 +363,7 @@ class ScreenWiringTest {
         runTest(main, timeout = SETTLE) {
             // The profiles on the test's own dispatcher, so that each action has run once the scheduler is idle.
             val profiles = ProfileDatabases(ApplicationProvider.getApplicationContext(), File(directory, "here"), main)
-            val store = InstanceStore(instanceDataStore(File(directory, "instances.json"), backgroundScope), profiles)
+            val store = InstanceStore(File(directory, "instances.json"), backgroundScope, profiles)
             store.upsert(RECORD)
             profiles.open(RECORD.id, MAIN_PROFILE)
             store.remove(RECORD.id)

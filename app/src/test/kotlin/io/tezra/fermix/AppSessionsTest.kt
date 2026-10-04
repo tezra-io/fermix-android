@@ -8,7 +8,6 @@ import io.tezra.fermix.data.InstanceGone
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.instance.TestOutcome
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.session.Announcement
@@ -137,7 +136,7 @@ class AppSessionsTest {
         runTest {
             val file = File(folder.root, "instances.json")
             val process = CoroutineScope(backgroundScope.coroutineContext + Job(backgroundScope.coroutineContext[Job]))
-            val store = InstanceStore(instanceDataStore(file, process), databases)
+            val store = InstanceStore(file, process, databases)
             val paired = record(1).copy(candidates = listOf(TAILNET, LAN))
             store.upsert(paired)
             SessionEvents(
@@ -152,7 +151,7 @@ class AppSessionsTest {
             ).reached(paired.id, LAN)
             // The process ends, and the next one reads the records from their file.
             checkNotNull(process.coroutineContext[Job]).cancelAndJoin()
-            val kept = InstanceStore(instanceDataStore(file, backgroundScope), databases).instances.first().single()
+            val kept = InstanceStore(file, backgroundScope, databases).instances.first().single()
             assertEquals(LAN, kept.lastCandidate)
             val session = opener(FakeKeys(holds = setOf(kept.keyAlias))).open(kept, backgroundScope)
             assertEquals(LAN, session.lastSuccessful.value)

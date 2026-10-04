@@ -4,7 +4,6 @@ import android.content.ContextWrapper
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.ProfileDatabases
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.PushPlatform
@@ -106,10 +105,7 @@ internal fun instanceStore(
     directory: File,
     scope: CoroutineScope,
 ): InstanceStore =
-    InstanceStore(
-        instanceDataStore(File(directory, "instances.json"), scope),
-        ProfileDatabases(NoContext, File(directory, "instances")),
-    )
+    InstanceStore(File(directory, "instances.json"), scope, ProfileDatabases(NoContext, File(directory, "instances")))
 
 /**
  * A ceremony whose state the test sets: what it was asked, and what the handle would answer. Its commit

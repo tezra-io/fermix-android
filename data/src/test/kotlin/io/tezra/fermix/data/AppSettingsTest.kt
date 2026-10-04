@@ -3,6 +3,8 @@ package io.tezra.fermix.data
 import androidx.datastore.core.CorruptionException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import okio.buffer
+import okio.source
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -21,7 +23,7 @@ class AppSettingsTest {
     @Test
     fun `the settings start with the lock off and no last chat`() =
         runTest {
-            val store = AppSettingsStore(appSettingsDataStore(File(directory, "settings.json"), backgroundScope))
+            val store = AppSettingsStore(File(directory, "settings.json"), backgroundScope)
             assertEquals(AppSettings(appLock = false, lastChat = null), store.settings.first())
         }
 
@@ -29,11 +31,11 @@ class AppSettingsTest {
     fun `the lock and the last chat are kept on disk, and the last chat clears`() =
         runTest {
             val file = File(directory, "settings.json")
-            val store = AppSettingsStore(appSettingsDataStore(file, backgroundScope))
+            val store = AppSettingsStore(file, backgroundScope)
             store.setAppLock(true)
             store.setLastChat(chat)
             assertEquals(AppSettings(appLock = true, lastChat = chat), store.settings.first())
-            val read = AppSettingsSerializer.readFrom(file.inputStream())
+            val read = file.source().buffer().use { AppSettingsSerializer.readFrom(it) }
             assertEquals(AppSettings(appLock = true, lastChat = chat), read)
             store.setLastChat(null)
             assertEquals(AppSettings(appLock = true, lastChat = null), store.settings.first())
@@ -44,7 +46,7 @@ class AppSettingsTest {
         runTest {
             val bytes = "{\"app_lock\": tru".encodeToByteArray()
             val file = File(directory, "settings.json").apply { writeBytes(bytes) }
-            val store = AppSettingsStore(appSettingsDataStore(file, backgroundScope))
+            val store = AppSettingsStore(file, backgroundScope)
             val failure = runCatching { store.settings.first() }.exceptionOrNull()
             assertInstanceOf(CorruptionException::class.java, failure)
             assertArrayEquals(bytes, file.readBytes())

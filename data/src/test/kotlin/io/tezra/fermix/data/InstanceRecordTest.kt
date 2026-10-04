@@ -10,13 +10,12 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.serializer
+import okio.Buffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 
 /**
  * The instance record on disk (design sections 9.1 and 12.4): public data, field for field the design's,
@@ -110,7 +109,7 @@ class InstanceRecordTest {
                 )
             val records = Instances(listOf(named, instance(gateway = 3)))
             val text = written(records)
-            assertEquals(records, InstancesSerializer.readFrom(ByteArrayInputStream(text.encodeToByteArray())))
+            assertEquals(records, InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray())))
         }
 
     @Test
@@ -131,7 +130,7 @@ class InstanceRecordTest {
             val dropped = RepairNotice(instance(gateway = 3).id, "suj-mbp")
             val records = Instances(listOf(instance(gateway = 1)), listOf(dropped))
             val text = written(records)
-            assertEquals(records, InstancesSerializer.readFrom(ByteArrayInputStream(text.encodeToByteArray())))
+            assertEquals(records, InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray())))
             assertThrows<IllegalArgumentException> { RepairNotice("suj-mbp", "suj-mbp") }
             assertThrows<IllegalArgumentException> { Instances(repairNotices = listOf(dropped, dropped)) }
             val here = RepairNotice(instance(gateway = 1).id, "suj-mbp")
@@ -139,8 +138,8 @@ class InstanceRecordTest {
         }
 
     private suspend fun written(records: Instances): String {
-        val output = ByteArrayOutputStream()
+        val output = Buffer()
         InstancesSerializer.writeTo(records, output)
-        return output.toByteArray().decodeToString()
+        return output.readUtf8()
     }
 }

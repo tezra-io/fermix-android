@@ -167,3 +167,9 @@ whose version matches `version.properties`.
   started comes back from Recents, and the tray survives a rotation and a process death. The launcher icon has a
   round variant beside its themed monochrome layer. The release policy check holds the exported components to
   `policy/exported.txt`, each filter whole.
+- **Who is paired and whether the app is locked are read as written.** Anything that reads the paired Fermix
+  list or the app lock while it is being written, a screen, the lock, a notification or a push, gets what the
+  write wrote once it ends, never the list or the lock from before it, nor an empty list with the lock off; and
+  each file is on the disk whole before it replaces the old one in one step, so a phone that stops mid-write,
+  the app killed or the power cut, keeps them as they were or as written. A window keeps its preview
+  out of Recents until the app lock's setting is read. FCM's new token is taken before the app lets FCM go.

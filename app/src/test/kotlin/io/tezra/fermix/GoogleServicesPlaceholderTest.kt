@@ -35,11 +35,12 @@ class GoogleServicesPlaceholderTest {
                 .single()
                 .jsonObject
         assertEquals("fermix-placeholder", project.text("project_id"), WHERE_A_REAL_ONE_GOES)
-        assertTrue(project.text("project_number").all { it == '0' }, WHERE_A_REAL_ONE_GOES)
+        assertTrue(project.text("project_number").matches(Regex("0+")), WHERE_A_REAL_ONE_GOES)
         val appId = client.getValue("client_info").jsonObject.text("mobilesdk_app_id")
         assertEquals("1:000000000000:android:0000000000000000", appId, WHERE_A_REAL_ONE_GOES)
+        // One key or more, each the prefix every API key has and zeros after it: no key, or the prefix alone, is none.
         val keys = client.getValue("api_key").jsonArray.map { it.jsonObject.text("current_key") }
-        assertTrue(keys.all { it.removePrefix("AIzaSyA").all { digit -> digit == '0' } }, WHERE_A_REAL_ONE_GOES)
+        assertTrue(keys.isNotEmpty() && keys.all { it.matches(Regex("AIzaSyA0+")) }, WHERE_A_REAL_ONE_GOES)
     }
 }
 

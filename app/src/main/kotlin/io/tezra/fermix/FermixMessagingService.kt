@@ -18,8 +18,9 @@ private val NOTIFICATION_KEY_PREFIXES = listOf("gcm.n.", "gcm.notification.")
  * FCM's side of the app (design section 10): a data message is taken to its notification by the app's
  * PushInbox before [onMessageReceived] returns, as FCM holds the phone awake only until then, its trial
  * bounded by [PUSH_DECRYPT_BUDGET_MILLIS]; FCM's token, which it hands over each time the app asks for it
- * and whenever it changes ([onRegistered]); and messages FCM dropped ([onDeletedMessages]), which make each
- * instance's next session pull in full. FCM calls each on a thread of its own, never the main one. The
+ * and whenever it changes ([onRegistered]), taken into the records before the call returns; and messages FCM
+ * dropped ([onDeletedMessages]), which make each instance's next session pull in full, written before it returns
+ * too. FCM calls each on a thread of its own, never the main one. The
  * service takes FCM's intent alone: its manifest entry is not exported. A message's `notification` block is
  * never shown: the manifest keeps Play services from showing it as the app (Firebase's notification
  * delegation, off), and [handleIntent] takes it out before Firebase's own code could.
@@ -51,7 +52,7 @@ class FermixMessagingService : FirebaseMessagingService() {
 
     /** The token is held in memory alone, never written or logged (FcmToken). */
     override fun onRegistered(token: String) {
-        services.fcmRegistered(token)
+        runBlocking { services.fcmRegistered(token) }
     }
 
     /**
@@ -60,7 +61,7 @@ class FermixMessagingService : FirebaseMessagingService() {
      */
     @Deprecated("FCM hands the token to onRegistered", ReplaceWith("onRegistered(token)"))
     override fun onNewToken(token: String) {
-        services.fcmRegistered(token)
+        runBlocking { services.fcmRegistered(token) }
     }
 
     override fun onDeletedMessages() {

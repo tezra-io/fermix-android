@@ -2,11 +2,13 @@ package io.tezra.fermix.data
 
 import androidx.datastore.core.DataStore
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * This phone's paired daemons (design section 9.1), in the Chats list's order, with each one's files in
@@ -14,19 +16,34 @@ import kotlinx.coroutines.withContext
  * once [databases] has ended every reader of them (ProfileDatabases.delete), so a removal cut short leaves
  * files no record names, which [launchCheck] deletes. A pairing's write lets its daemon's files be opened
  * again first (ProfileDatabases.admit), as an earlier removal of the same daemon in this process refuses them.
+ * Every read, once or following, is taken under the write lock ([lockedReads]), so none started during a write
+ * keeps the records from before it once the write has ended, and every write runs on the store's own thread
+ * ([locked]), so none waits for its caller's. The DataStore is the store's alone, made by it, so no code outside it
+ * reads that `data`; the module's tests hand in one of their own.
  */
-class InstanceStore(
+class InstanceStore internal constructor(
     private val records: DataStore<Instances>,
     private val databases: ProfileDatabases,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    val instances: Flow<List<Instance>> = records.data.map { it.instances }
+    /**
+     * The records in [file], their writes run in [scope], each replacing the file in one rename (atomicDataStore).
+     * DataStore allows one per file in a process, so the app makes the store once; the file belongs in
+     * credential-encrypted storage that no backup or device transfer carries (design section 6.6), such as
+     * `Context.noBackupFilesDir`.
+     */
+    constructor(file: File, scope: CoroutineScope, databases: ProfileDatabases) :
+        this(atomicDataStore(file, InstancesSerializer, scope), databases)
+
+    private val kept: Flow<Instances> = lockedReads(records)
+
+    val instances: Flow<List<Instance>> = kept.map { it.instances }
 
     /**
      * The instances [launchCheck] dropped, which the app shows as "Re-pair this Fermix" until a pairing brings
      * the same daemon back ([upsert], [merge]) or the owner removes the notice ([dismissRepairNotice]).
      */
-    val repairNotices: Flow<List<RepairNotice>> = records.data.map { it.repairNotices }
+    val repairNotices: Flow<List<RepairNotice>> = kept.map { it.repairNotices }
 
     /**
      * Records [paired] on `pair_approved` (design section 6.1). The same daemon paired again replaces its
@@ -41,7 +58,7 @@ class InstanceStore(
     suspend fun upsert(paired: Instance): Instance? {
         databases.admit(paired.id)
         var replaced: Instance? = null
-        records.updateData { current ->
+        records.locked { current ->
             val plan = planUpsert(current.instances, paired)
             replaced = plan.replaced
             current.copy(instances = plan.instances, repairNotices = current.repairNotices.without(paired.id))
@@ -63,7 +80,7 @@ class InstanceStore(
         change: (Instance) -> Instance,
     ): Boolean {
         var present = false
-        records.updateData { current ->
+        records.locked { current ->
             present = current.instances.any { it.id == id }
             if (present) current.copy(instances = updated(current.instances, id, change)) else current
         }
@@ -84,7 +101,7 @@ class InstanceStore(
     ): Instance {
         databases.admit(paired.id)
         var replaced: Instance? = null
-        records.updateData { current ->
+        records.locked { current ->
             val plan = planMerge(current.instances, oldId, paired)
             replaced = plan.replaced
             current.copy(instances = plan.instances, repairNotices = current.repairNotices.without(paired.id))
@@ -104,7 +121,7 @@ class InstanceStore(
     ): NicknameRefusal? {
         val trimmed = nickname?.trim()
         var refusal: NicknameRefusal? = null
-        records.updateData { current ->
+        records.locked { current ->
             require(current.instances.any { it.id == id }) { "no record is $id" }
             refusal = trimmed?.let { nicknameRefusal(it, id, current.instances) }
             if (refusal == null) current.copy(instances = renamed(current.instances, id, trimmed)) else current
@@ -114,7 +131,7 @@ class InstanceStore(
 
     /** Removes [id]'s record, then its databases and media. */
     suspend fun remove(id: String) {
-        records.updateData { current ->
+        records.locked { current ->
             require(current.instances.any { it.id == id }) { "no record is $id" }
             current.copy(instances = current.instances.filter { it.id != id })
         }
@@ -126,17 +143,17 @@ class InstanceStore(
         id: String,
         toIndex: Int,
     ) {
-        records.updateData { current -> current.copy(instances = moved(current.instances, id, toIndex)) }
+        records.locked { current -> current.copy(instances = moved(current.instances, id, toIndex)) }
     }
 
     /** The owner has seen "Re-pair this Fermix": the notices go. */
     suspend fun dismissRepairNotices() {
-        records.updateData { current -> current.copy(repairNotices = emptyList()) }
+        records.locked { current -> current.copy(repairNotices = emptyList()) }
     }
 
     /** The owner removed the "Re-pair this Fermix" row of the dropped instance [id]: its notice goes. */
     suspend fun dismissRepairNotice(id: String) {
-        records.updateData { current ->
+        records.locked { current ->
             require(current.repairNotices.any { it.id == id }) { "no repair notice names $id" }
             current.copy(repairNotices = current.repairNotices.without(id))
         }
@@ -148,7 +165,7 @@ class InstanceStore(
      */
     internal suspend fun dropForRepair(missingAliases: Set<String>): List<Instance> {
         var dropped = emptyList<Instance>()
-        records.updateData { current ->
+        records.locked { current ->
             val (gone, kept) = current.instances.partition { it.keyAlias in missingAliases }
             dropped = gone
             val noticed = gone.map { RepairNotice(it.id, it.title) }
@@ -164,9 +181,8 @@ class InstanceStore(
      */
     internal suspend fun deleteUnrecordedFiles() {
         val ids =
-            records.data
+            instances
                 .first()
-                .instances
                 .map { it.id }
                 .toSet()
         withContext(io) {

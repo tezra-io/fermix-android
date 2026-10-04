@@ -116,7 +116,7 @@ class UploadServiceTest {
         app.services.inBackground.value = true
         val controller = started()
         val service = shadowOf(controller.get())
-        settled { shownTitle() == "Sending to suj-mbp" }
+        assertTrue(settled { shownTitle() == "Sending to suj-mbp" })
         controller.get().onTimeout(1, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
         assertTrue(service.isStoppedBySelf)
         assertTrue(service.isForegroundStopped)

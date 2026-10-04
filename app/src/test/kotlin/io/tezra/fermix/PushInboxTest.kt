@@ -15,7 +15,6 @@ import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.NotifiedEntry
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.RoomSessionStore
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.data.stagedUploads
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.HistoryMessage
@@ -103,7 +102,7 @@ class PushInboxTest {
         deviceKeys: DeviceKeyFacade = keys,
         keystore: CoroutineScope = backgroundScope,
     ): Rig {
-        val store = InstanceStore(instanceDataStore(File(folder.root, "instances.json"), backgroundScope), databases)
+        val store = InstanceStore(File(folder.root, "instances.json"), backgroundScope, databases)
         store.upsert(studio.record)
         store.upsert(mini.record)
         val records = store.instances.stateIn(backgroundScope, SharingStarted.Eagerly, emptyList())
@@ -207,7 +206,7 @@ class PushInboxTest {
             assertEquals(listOf(studio.record.keyAlias, mini.record.keyAlias), keys.agreed)
 
             keys.agreed.clear()
-            rig.store.update(studio.record.id) { it.copy(pushPlatforms = emptyList()) }
+            rig.store.changed(studio.record.id) { it.copy(pushPlatforms = emptyList()) }
             rig.inbox.received(mini.push(messageJson(4, "Tests passed")))
             assertEquals(listOf(mini.record.keyAlias), keys.agreed)
         }
@@ -329,8 +328,8 @@ class PushInboxTest {
     fun `a push no key opens posts nothing while no Fermix wants its pushes, and says so`() =
         runTest {
             val rig = rig()
-            rig.store.update(studio.record.id) { it.copy(notificationsEnabled = false) }
-            rig.store.update(miniId) { it.copy(pushPlatforms = emptyList()) }
+            rig.store.changed(studio.record.id) { it.copy(notificationsEnabled = false) }
+            rig.store.changed(miniId) { it.copy(pushPlatforms = emptyList()) }
             rig.inbox.received(PairedDaemon(3, "stranger").push(messageJson(3, "Build finished")))
             rig.inbox.received(mini.push(messageJson(3, "Build finished")) + ("v" to "1"))
             assertEquals(emptyList<StatusBarNotification>(), posted())
@@ -433,7 +432,7 @@ class PushInboxTest {
     fun `an instance whose notifications are off has its push opened and nothing posted`() =
         runTest {
             val rig = rig()
-            rig.store.update(miniId) { it.copy(notificationsEnabled = false) }
+            rig.store.changed(miniId) { it.copy(notificationsEnabled = false) }
             rig.records.first { records -> records.single { it.id == miniId }.notificationsEnabled.not() }
             rig.inbox.received(mini.push(messageJson(3, "Build finished")))
             assertEquals(emptyList<StatusBarNotification>(), posted())

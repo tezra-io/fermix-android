@@ -6,6 +6,7 @@ import io.tezra.fermix.session.TimelineRow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import okio.Buffer
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -15,7 +16,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
-import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
@@ -30,8 +30,7 @@ class InstanceStoreTest {
 
     private fun TestScope.open(): Pair<InstanceStore, ProfileDatabases> {
         val databases = ProfileDatabases(TestContext, root)
-        val records = instanceDataStore(File(directory, "instances.json"), backgroundScope)
-        return InstanceStore(records, databases) to databases
+        return InstanceStore(File(directory, "instances.json"), backgroundScope, databases) to databases
     }
 
     /** Gives [instance] a cached row and a cached blob, so that its files exist. */
@@ -172,16 +171,16 @@ class InstanceStoreTest {
     @Test
     fun `a records file that does not decode, or holds a record that breaks a rule, is reported and kept as it is`() =
         runTest {
-            val written = ByteArrayOutputStream()
+            val written = Buffer()
             InstancesSerializer.writeTo(Instances(listOf(instance(gateway = 1))), written)
-            val valid = written.toByteArray().decodeToString()
+            val valid = written.readUtf8()
             val badKey = valid.replace(base64(key(1)), base64(ByteArray(KEY_BYTES - 1)))
             assertTrue(badKey != valid, "the planted record still holds its gateway key")
             val files =
                 listOf("{not json".encodeToByteArray(), badKey.encodeToByteArray(), byteArrayOf(0xC3.toByte(), 0x28))
             files.forEachIndexed { index, bytes ->
                 val file = File(directory, "corrupt-$index.json").apply { writeBytes(bytes) }
-                val store = InstanceStore(instanceDataStore(file, backgroundScope), ProfileDatabases(TestContext, root))
+                val store = InstanceStore(file, backgroundScope, ProfileDatabases(TestContext, root))
                 val failure = runCatching { store.instances.first() }.exceptionOrNull()
                 assertInstanceOf(CorruptionException::class.java, failure, "file $index")
                 assertArrayEquals(bytes, file.readBytes(), "file $index was rewritten")

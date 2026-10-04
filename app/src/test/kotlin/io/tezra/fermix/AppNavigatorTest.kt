@@ -3,7 +3,6 @@ package io.tezra.fermix
 import io.tezra.fermix.data.AppSettingsStore
 import io.tezra.fermix.data.ChatRef
 import io.tezra.fermix.data.Instance
-import io.tezra.fermix.data.appSettingsDataStore
 import io.tezra.fermix.instance.Link
 import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.Dispatchers
@@ -63,7 +62,7 @@ class AppNavigatorTest {
     fun mainBack() = Dispatchers.resetMain()
 
     private fun TestScope.settings(name: String = "settings.json") =
-        AppSettingsStore(appSettingsDataStore(File(directory, name), backgroundScope))
+        AppSettingsStore(File(directory, name), backgroundScope)
 
     @Test
     fun `a chat's link is fermix chat, an instance's hex id and a profile, and nothing else`() {

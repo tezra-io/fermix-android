@@ -7,6 +7,8 @@ import io.tezra.fermix.session.OutboxItem
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import okio.buffer
+import okio.source
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -31,12 +33,11 @@ class LaunchCheckTest {
 
     private fun TestScope.open(): Pair<InstanceStore, ProfileDatabases> {
         val databases = ProfileDatabases(TestContext, root)
-        val records = instanceDataStore(recordsFile, backgroundScope)
-        return InstanceStore(records, databases) to databases
+        return InstanceStore(recordsFile, backgroundScope, databases) to databases
     }
 
     /** The records as the file holds them, read past the DataStore, as the next process would read them. */
-    private suspend fun onDisk(): Instances = recordsFile.inputStream().use { InstancesSerializer.readFrom(it) }
+    private suspend fun onDisk(): Instances = recordsFile.source().buffer().use { InstancesSerializer.readFrom(it) }
 
     @Test
     fun `an instance whose key alias is gone is dropped with its files, and one whose alias is there is untouched`() =

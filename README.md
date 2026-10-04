@@ -420,11 +420,25 @@ the keys are kept as the wire's text and checked when a record is made, with the
 and tint, which is one of `TINT_NAMES`, the design module's `Tint` by name, since `data` does not depend
 on `design`; a test in `design` holds the enum and the list equal. Protocol v2 supplies fields the record
 requires (`pair_approved.push_salt`, the QR's `profile`), so a version-1 pairing cannot make one. The
-records are a typed DataStore, `DataStore<Instances>`, written as JSON by a kotlinx.serialization
-`Serializer` of the module's own: design section 12.1 says Proto DataStore, and the typed store is
+records are a typed DataStore, `DataStore<Instances>`, written as JSON through kotlinx.serialization by an
+`OkioSerializer` of the module's own: design section 12.1 says Proto DataStore, and the typed store is
 what it needs, while protobuf would be a second codec and toolchain for one file. A file that does not
 decode, or holds a record that breaks a rule, is DataStore's `CorruptionException`, never replaced, and
-a test holds it to that. `InstanceStore` shows the records as a flow, in the Chats list's order.
+a test holds it to that. `InstanceStore` shows the records as a flow, in the Chats list's order, and every
+read of them, once or following, is taken under the store's write lock (`lockedReads`, `updateData` with a
+transform that writes nothing), so a reader started during a write shows that write once it ends: DataStore
+1.2.1's own `data`, started then, reads the file without the lock and keeps what it read until the next write,
+and one whose read lands as the write moves its file in finds none and answers with no records at all
+(`ReadsDuringWritesTest` holds the first, a run on Robolectric counted the second). Each transform, a
+read's or a write's, runs in place on the store's thread (`locked`), not in its caller's context, where
+DataStore runs it while it holds the lock, so a caller on a busy main thread holds no read behind it. The
+file is written through DataStore's `OkioStorage` (`atomicDataStore`), whose one rename puts the written file
+in place, where DataStore's own file storage deletes the old file first on Android 8 and later, so that a
+process killed in that instant would leave no records; the serializer emits what it wrote before it returns,
+as OkioStorage syncs the written file then, before the rename, and a byte left in the sink's buffer would reach
+the file only after that sync. The settings (`AppSettingsStore`) are kept, read and written the same way. Each
+store makes its DataStore from its file and holds it alone (the constructor handed one is the module's, for its
+tests), and DataStore is the module's dependency, not its API, so no other module can read around the lock.
 `upsert` records a pairing on `pair_approved`: the same daemon paired again replaces its record in
 place, with the owner's nickname and tint, and the record it replaced is handed back so the caller
 deletes the old key alias (design section 6.1); a pairing always brings a new alias, so one under the
@@ -511,8 +525,12 @@ the same SQLite built for desktops, and points the driver at it, and the tests h
 that answers database paths and nothing else. The JVM tests hold `RoomSessionStore` to
 `SessionStoreContract`, a test of each rule `SessionStore`'s KDoc states, a write made whole or not at
 all among them, proven by a trigger that fails the cursor write; and they cover the record's rules and
-codec against the vendored pairing link, a corrupt records file, every vendored fixture row read back
-equal with its query columns, an older page that fails partway, the search, the notified set, the
+codec against the vendored pairing link, a corrupt records file, a reader of the records or the settings
+started while a write is held (on one thread, by a serializer that waits) showing what it wrote, once and
+following, where DataStore's own `data` started then does not, a reader or a writer whose own thread is held
+keeping no reader waiting, each write of the records and the settings whole in its file when OkioStorage syncs
+it (`SyncedWritesTest`), every vendored fixture row read back equal with its query columns, an older page
+that fails partway, the search, the notified set, the
 outbox's flow, a restart that finds everything as it was, the media cache's digest, eviction and failed
 streams, and the launch check with its notices; and the readers against a removal, on a dispatcher of their
 own that the test advances by hand: a reader that holds a database ends as its instance is removed or
@@ -1229,7 +1247,7 @@ on (`LockGate`), the app locks when it comes into sight after the process starts
 rotation or a fold is no return), and nothing shows before the gate has read the setting. While locked
 the lock screen stands in place of the app's screens, none of which is composed, the system's prompt
 comes at once and "Unlock" asks again; back leaves the app; the recents preview is hidden while the lock
-is on. A phone with no strong biometric and no screen lock is never locked, as nothing could open it. On leaving Verify for another app it starts `PairingWaitService`,
+is on, and until its setting is read. A phone with no strong biometric and no screen lock is never locked, as nothing could open it. On leaving Verify for another app it starts `PairingWaitService`,
 the short foreground service of section 12.5, "Waiting for approval on suj-mbp · 1:42", which ends itself
 when the wait ends or the app comes back (`pairingWaitShown` decides both). On leaving the app while a
 session has an upload in flight (the supervisor's `uploading`, from each session's) it starts `UploadService`,
@@ -1259,9 +1277,7 @@ turn's is keyed by its turn. An id is one character or more, as the wire and the
 one of spaces is an id like any other. The session's approval cards post through the same owner, and the
 notified set lets a push and its socket row alert once between them, whichever comes first; a card the
 daemon resolved (`approval_resolved`), or one closed while the phone was away, takes its notification with
-it, cleared by its id. The services read the records through one collector made with them
-(`AppServices.records`), which the notifications and the chats' followers share: a DataStore collector that
-started while a write was under way was seen to miss that write for good. `FermixMessagingService`
+it, cleared by its id. `FermixMessagingService`
 is FCM's side, not exported. A message's `notification` block is never shown, on two paths: the manifest
 turns Firebase's notification delegation off (`firebase_messaging_notification_delegation_enabled`), so
 Play services never shows the block as the app without calling it, and the service takes the block out of
@@ -1293,9 +1309,10 @@ ring yet; its lines go to the log as they are made. The token is never written o
 logged: `FcmToken` holds it in memory, asked for with `FirebaseMessaging.register` and handed back to the
 service's `onRegistered` (firebase-messaging 25 deprecates `getToken` and `onNewToken`), and a token that
 changes, or comes unasked, clears the time of every record whose daemon is to push (`pushWanted`), so that
-each is registered again; a record owed a `push_unregister` keeps its time, so the unregister still goes. Firebase
-makes no token at launch (`firebase_messaging_auto_init_enabled` false), so a phone whose notifications
-are all off never reaches FCM.
+each is registered again, before `onRegistered` returns, as FCM keeps the process only while it runs; a
+record owed a `push_unregister` keeps its time, so the unregister still goes. Firebase makes no token at
+launch (`firebase_messaging_auto_init_enabled` false), so a phone whose notifications are all off never
+reaches FCM.
 
 Another app's share comes in through the share entry (design section 13.6, "Share into Fermix"), the activity
 `ShareTarget`, exported with `SEND` and `SEND_MULTIPLE` filters for `image/*`, `video/*`, `text/plain` and
@@ -1369,8 +1386,16 @@ bitmap is shipped. The notifications' small icon, `ic_notification`, is that mon
 app draws in the design's own colours, never the wallpaper's (`LauncherIconTest` reads all three).
 
 The app's tests run on
-Robolectric through the application convention, over the app's own services and the bundled SQLite: the
-supervisor's one session per instance, its grace and its timer, a return within the grace never
+Robolectric through the application convention, over the app's own services and the bundled SQLite, each
+test's services ended as it ends (`FermixApplication.onTerminate`, which Robolectric calls after each test,
+which a phone never does): Robolectric makes an application per test in one process and keeps the
+notification manager's state for the whole process, so services left running wrote into the next test's. The
+records' and the settings' stores run in a scope of their own, so they refuse every write once the services
+are closed, even while the app lock's setting still waits for a main thread that Robolectric no longer runs;
+services end started or not, an end that comes again does nothing, and their coroutines and stores end even
+when the system will not release the network watch (`AppServicesTest`, which ends the app's own application
+twice); the profile databases stay open until the process ends.
+They cover the supervisor's one session per instance, its grace and its timer, a return within the grace never
 suspending a session, nothing opened out of sight, a removal with the session closed before it runs and
 run only once the store call the session's run was making has returned, "Unpair" sending `unpair` and waiting for
 the daemon's close where "Remove" asks nothing, from the list and the Instance screen alike, an opener
@@ -1379,7 +1404,8 @@ alias and its refusals without a key, a route or the files a removal deleted, an
 for its own failure; the announcer's answers, about its own chat alone, each row kept; the session events
 kept, and one after a removal writing nothing, the Instance screen of a removed Fermix doing nothing, a row's unread count, each dropped Fermix's "Re-pair this Fermix" row kept by its id whatever its
 title, and the Notifications switch's policy; the lock's gate, a rotation and a phone that cannot lock
-among them; the trust screens' keys; the navigator's restore, a share's chat it leaves on top, its deep links and its pruning; the window's
+among them; the recents preview hidden until the lock's setting is read (`FollowLockSettingTest`); the trust
+screens' keys; the navigator's restore, a share's chat it leaves on top, its deep links and its pruning; the window's
 flag on Welcome and on the Instance screen, its clearing on the Chats list and its return when the lock
 holds, with the list gone and the prompt up; a dropped Fermix's "Re-pair this Fermix" row as the root; a
 paired Fermix as a row with its long-press menu; the intents the activity takes, and a chat's link

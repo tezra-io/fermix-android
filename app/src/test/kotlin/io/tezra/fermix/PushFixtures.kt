@@ -5,6 +5,7 @@ import android.os.Parcel
 import io.tezra.fermix.attest.AttestedKey
 import io.tezra.fermix.attest.DeviceKeyFacade
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.push.PADDED_PLAINTEXT_BYTES
@@ -159,4 +160,12 @@ internal fun messageJson(
 ): String {
     val words = preview?.let { "\"$it\"" } ?: "null"
     return """{"kind":"message","profile_id":"main","server_seq":$seq,"preview_text":$words}"""
+}
+
+/** [id]'s record changed by [change], failing loud when no record is [id], as the store then writes nothing. */
+internal suspend fun InstanceStore.changed(
+    id: String,
+    change: (Instance) -> Instance,
+) {
+    check(update(id, change)) { "no record is $id" }
 }

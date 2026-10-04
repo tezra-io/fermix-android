@@ -28,8 +28,6 @@ import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
-import io.tezra.fermix.data.appSettingsDataStore
-import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.data.launchCheck
 import io.tezra.fermix.instance.InstanceParts
 import io.tezra.fermix.onboarding.OnboardingParts
@@ -48,6 +46,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -60,12 +59,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "Fermix"
 
@@ -97,24 +97,27 @@ class AppServices(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + io)
     private val sessionScope = CoroutineScope(SupervisorJob() + work)
-    internal val databases = ProfileDatabases(context, File(context.noBackupFilesDir, INSTANCES_DIRECTORY))
-    val instances = InstanceStore(instanceDataStore(File(context.noBackupFilesDir, RECORDS_FILE), scope), databases)
 
     /**
-     * The records as one collector reads them from the moment the services are made, before anything writes
-     * them, shared by the notifications and the chats' followers: a DataStore collector that starts while a
-     * write is under way was seen to miss that write for good (FermixMessagingServiceTest, on Robolectric).
+     * The records' and the settings' stores' own: nothing else runs in it, so they end as [close] ends it, while a
+     * coroutine of [scope] may still wait for the main thread.
      */
-    private val records = instances.instances.shareIn(scope, SharingStarted.Eagerly, replay = 1)
-    val settings = AppSettingsStore(appSettingsDataStore(File(context.noBackupFilesDir, SETTINGS_FILE), scope))
+    private val storeScope = CoroutineScope(SupervisorJob() + io)
+    internal val databases = ProfileDatabases(context, File(context.noBackupFilesDir, INSTANCES_DIRECTORY))
+    val instances =
+        InstanceStore(File(context.noBackupFilesDir, RECORDS_FILE), storeScope, databases)
+    val settings = AppSettingsStore(File(context.noBackupFilesDir, SETTINGS_FILE), storeScope)
     private val network = NetworkWatcher(context)
+
+    /** Whether [start] has registered the network watch, which [close] then releases, once. */
+    private val watching = AtomicBoolean(false)
     private val identity by lazy { phoneIdentity(context) }
     private val onScreen = OnScreenChats()
     private val posted = PostedNotifications(context)
     private val notifications =
         Notifications(
             posted,
-            records.stateIn(scope, SharingStarted.Eagerly, emptyList()),
+            instances.instances.stateIn(scope, SharingStarted.Eagerly, emptyList()),
             databases,
             NotificationCopy.of(context.resources),
             locked = { settings.settings.first().appLock },
@@ -209,10 +212,12 @@ class AppServices(
      * Starts reading the network, then, off the main thread, drops the records whose keys a restore left
      * behind (data's launchCheck), and only then follows the records with the sessions and the
      * conversations, whose names carry each one's agent, the app lock and each chat's previews with the
-     * notifications showing, and the settings with the app lock.
+     * notifications showing, and the settings with the app lock. Once, and never after [close].
      */
     fun start() {
+        check(scope.isActive) { "the services are closed" }
         network.start()
+        watching.set(true)
         scope.launch {
             launchCheck(instances, keys::exists)
             checkedState.value = true
@@ -234,11 +239,31 @@ class AppServices(
      * (ProfileDatabases.observe): its agent's name, as `hello_ack` gave it, and its previews switch.
      */
     private fun chatsOf(): Flow<Pair<List<Instance>, Map<String, ChatState>>> =
-        records.flatMapLatest { listed ->
+        instances.instances.flatMapLatest { listed ->
             if (listed.isEmpty()) return@flatMapLatest flowOf(listed to emptyMap())
             val chats = listed.map { record -> databases.observe(record.id, MAIN_PROFILE) { it.chat().state() } }
             combine(chats) { states -> listed to listed.map { it.id }.zip(states).toMap() }
         }
+
+    /**
+     * Ends the services, started or not: the network watch [start] registered, every coroutine they run, the
+     * supervisor's and the sessions' among them, and the records' and the settings' stores, which refuse every write
+     * from then on, even while a coroutine of the services still waits for the main thread to end (as the one handing
+     * the app lock its setting does on Robolectric, which runs nothing a test left its main thread). The coroutines
+     * and the stores end even when the system will not release the watch, whose refusal is thrown on. A second call
+     * does nothing, as a Closeable's does. The profile databases stay open until the process ends: ProfileDatabases
+     * closes one only as its instance is removed. A phone's process ends with the services; an emulated one's
+     * application ends them as it ends (FermixApplication.onTerminate), Robolectric's after each test.
+     */
+    fun close() {
+        try {
+            if (watching.getAndSet(false)) network.stop()
+        } finally {
+            sessionScope.cancel()
+            scope.cancel()
+            storeScope.cancel()
+        }
+    }
 
     /** The App lock switch: the settings say it, and the gate hears it from them. */
     fun setAppLock(on: Boolean) {
@@ -247,11 +272,13 @@ class AppServices(
 
     /**
      * FCM handed this app's [token] (FermixMessagingService.onRegistered): a changed one, or one nobody asked
-     * for, registers every daemon with it again; the one asked for registers those that waited for it.
+     * for, registers every daemon with it again; the one asked for registers those that waited for it. It
+     * returns once the records say so, as FCM keeps the process only while its call runs: a token left to a
+     * coroutine of its own could be taken after a later call, or never.
      */
-    fun fcmRegistered(token: String) {
+    suspend fun fcmRegistered(token: String) {
         val changed = fcmToken.registered(token)
-        scope.launch { if (changed) registrations.newToken() else registrations.refresh() }
+        if (changed) registrations.newToken() else registrations.refresh()
     }
 
     /** Onboarding's parts, for the ViewModel the activity keeps. */
