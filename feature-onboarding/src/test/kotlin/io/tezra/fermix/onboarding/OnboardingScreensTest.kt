@@ -434,6 +434,7 @@ class OnboardingScreensTest {
                     pairingDispatcher = main,
                     pairingWait = MutableStateFlow(null),
                     handover = FakeHandover(store.instances),
+                    notifications = { _, _ -> },
                 ),
             )
         model.getStarted()

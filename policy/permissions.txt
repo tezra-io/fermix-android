@@ -18,3 +18,9 @@ android.permission.POST_NOTIFICATIONS
 android.permission.RECORD_AUDIO
 # The app lock's prompt, BIOMETRIC_STRONG | DEVICE_CREDENTIAL (design section 13.7).
 android.permission.USE_BIOMETRIC
+# Firebase Messaging's (design section 10): it holds the phone awake while a push is taken to its
+# notification, which onMessageReceived does before it returns.
+android.permission.WAKE_LOCK
+# FCM's delivery of a push to this app (design section 10), declared by Firebase Messaging, whose
+# receiver takes it from Google Play services alone (com.google.android.c2dm.permission.SEND).
+com.google.android.c2dm.permission.RECEIVE

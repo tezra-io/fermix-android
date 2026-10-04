@@ -6,6 +6,7 @@ import io.tezra.fermix.attest.GateResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -91,14 +92,19 @@ class OnboardingViewModel(
 
     /**
      * "Allow notifications" answered by the system's prompt, or "Not now" (section 13.3, step 7): the record
-     * says whether this Fermix notifies, and onboarding is over. It is asked once; the Instance screen has
-     * the switch.
+     * says whether this Fermix notifies, then the app acts on it, a grant with the first `push_register`
+     * (design section 10), and onboarding is over. It is asked once; the Instance screen has the switch.
      */
     fun notificationsAnswered(granted: Boolean) {
         stackState.value.requireTop(OnboardingKey.Notifications)
         val paired = checkNotNull(uiState.value.paired) { "Notifications follow a stored pairing" }
         viewModelScope.launch {
             parts.instances.update(paired.record.id) { it.copy(notificationsEnabled = granted) }
+            val record =
+                parts.instances.instances
+                    .first()
+                    .find { it.id == paired.record.id }
+            if (record != null) parts.notifications(record, granted)
             set(emptyList())
         }
     }

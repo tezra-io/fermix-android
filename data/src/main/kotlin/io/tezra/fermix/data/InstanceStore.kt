@@ -52,15 +52,22 @@ class InstanceStore(
     /**
      * Changes [id]'s record by [change] in one write: what the daemon reports after pairing (`hello_ack`'s
      * host, label, profile, candidates, caps and push platforms) and this phone's settings (notifications,
-     * the last `push_register`). [change] runs inside the write, so it is pure and quick. What a pairing set
-     * (the gateway key, the TLS pin, the device id, the key alias, the push salt) and the owner's nickname and
-     * tint are refused, and nothing is written: a pairing is [upsert], a nickname [rename].
+     * the last `push_register`, a full pull due). [change] runs inside the write, so it is pure and quick. What
+     * a pairing set (the gateway key, the TLS pin, the device id, the key alias, the push salt) and the owner's
+     * nickname and tint are refused, and nothing is written: a pairing is [upsert], a nickname [rename]. False,
+     * and nothing written, once no record is [id]: a removal may take it while a change is on its way, from a
+     * session's event, a push or the system's word.
      */
     suspend fun update(
         id: String,
         change: (Instance) -> Instance,
-    ) {
-        records.updateData { current -> current.copy(instances = updated(current.instances, id, change)) }
+    ): Boolean {
+        var present = false
+        records.updateData { current ->
+            present = current.instances.any { it.id == id }
+            if (present) current.copy(instances = updated(current.instances, id, change)) else current
+        }
+        return present
     }
 
     /**

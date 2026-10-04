@@ -84,7 +84,21 @@ sealed interface SessionEvent {
         val mutationHeadSeq: ULong,
     ) : SessionEvent
 
-    /** The read frontier moved: the notified set drops what it covers (design section 10). */
+    /**
+     * A connection's reconnect reconciliation is done, its outbox drained: the `hello` the app registers this
+     * phone's push token at (design section 10, "Registration"), as a request that is never queued may go now.
+     * [pulledInFull] says the session was opened to pull in full (SessionParts.fullPull), as this connection's
+     * first pull has asked; a session opened before the app asked for that pulls as always.
+     */
+    data class Reconciled(
+        val pulledInFull: Boolean,
+    ) : SessionEvent
+
+    /**
+     * The read frontier, on every `hello_ack` and `read_state` whether it moved or not, and whenever this
+     * phone's own read moves it: the notified set drops what it covers (design section 10, "Lifecycle on the
+     * phone").
+     */
     data class ReadFrontier(
         val readUpToSeq: ULong,
     ) : SessionEvent

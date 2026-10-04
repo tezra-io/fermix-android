@@ -80,7 +80,8 @@ private class Socket : AutoCloseable {
 
 /**
  * How the app opens a session and tests a connection (AppSessions): each instance's session with its own
- * Keystore key and none without a key or a route, racing first the candidate its last `hello` went over; and
+ * Keystore key and none without a key or a route, racing first the candidate its last `hello` went over, and
+ * pulling in full once FCM dropped pushes for the phone; and
  * "Test connection"'s race (design section 13.7), which names a candidate only for its own attempt's failure,
  * never for the winner's cancel.
  *
@@ -123,6 +124,15 @@ class AppSessionsTest {
         }
 
     @Test
+    fun `a record whose pushes FCM dropped opens a session that pulls its history in full, and only such a record`() =
+        runTest {
+            val paired = record(1)
+            val opener = opener(FakeKeys(holds = setOf(paired.keyAlias)))
+            assertTrue(opener.sessionParts(paired.copy(historyPullDue = true)).fullPull)
+            assertFalse(opener.sessionParts(paired).fullPull)
+        }
+
+    @Test
     fun `the candidate the last hello went over is kept on the record, and the next process races it first`() =
         runTest {
             val file = File(folder.root, "instances.json")
@@ -130,7 +140,16 @@ class AppSessionsTest {
             val store = InstanceStore(instanceDataStore(file, process), databases)
             val paired = record(1).copy(candidates = listOf(TAILNET, LAN))
             store.upsert(paired)
-            SessionEvents(store, databases, ChatFolds(TestClock) { 0uL }, NoAlerts).reached(paired.id, LAN)
+            SessionEvents(
+                store,
+                databases,
+                ChatFolds(TestClock) {
+                    0uL
+                },
+                NoAlerts,
+                testNotifications(databases),
+                quietRegistrations(store),
+            ).reached(paired.id, LAN)
             // The process ends, and the next one reads the records from their file.
             checkNotNull(process.coroutineContext[Job]).cancelAndJoin()
             val kept = InstanceStore(instanceDataStore(file, backgroundScope), databases).instances.first().single()

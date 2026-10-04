@@ -106,10 +106,7 @@ internal class Dispatch(
 
     private suspend fun readState(event: ServerEvent.ReadState) {
         if (!mine(event.profileId, event)) return
-        val timeline = core.timeline()
-        if (timeline.read(event.readUpToSeq, fromDaemon = true)) {
-            core.emit(SessionEvent.ReadFrontier(timeline.readFrontier))
-        }
+        core.timeline().read(event.readUpToSeq, fromDaemon = true)
         // A frontier that passed a row never announced lets its ack go: the daemon pushes no row read.
         live.report()
     }

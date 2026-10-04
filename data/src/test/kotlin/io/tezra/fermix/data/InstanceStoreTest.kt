@@ -157,6 +157,19 @@ class InstanceStoreTest {
         }
 
     @Test
+    fun `an update writes a record while it is there, and nothing once a removal took it, and says which`() =
+        runTest {
+            val (store, _) = open()
+            val mac = instance(gateway = 1)
+            store.upsert(mac)
+            assertTrue(store.update(mac.id) { it.copy(fcmRegisteredAt = 5L) })
+            assertEquals(listOf(mac.copy(fcmRegisteredAt = 5L)), store.instances.first())
+            store.remove(mac.id)
+            assertFalse(store.update(mac.id) { it.copy(fcmRegisteredAt = 6L) })
+            assertEquals(emptyList<Instance>(), store.instances.first())
+        }
+
+    @Test
     fun `a records file that does not decode, or holds a record that breaks a rule, is reported and kept as it is`() =
         runTest {
             val written = ByteArrayOutputStream()

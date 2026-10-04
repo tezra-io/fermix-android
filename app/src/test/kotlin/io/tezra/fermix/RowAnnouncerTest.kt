@@ -48,7 +48,7 @@ private class RecordingNotifier : RowNotifier {
         profileId: String,
     ): Boolean = able
 
-    override fun notify(
+    override suspend fun notify(
         instanceId: String,
         profileId: String,
         row: TimelineRow,

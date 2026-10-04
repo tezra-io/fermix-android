@@ -21,7 +21,7 @@ private class FakeApprovalNotifier(
 
     override fun canNotify(instanceId: String): Boolean = can
 
-    override fun notify(
+    override suspend fun notify(
         instanceId: String,
         approval: SessionEvent.Approval,
     ) {

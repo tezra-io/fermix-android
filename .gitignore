@@ -26,8 +26,11 @@ keystore.properties
 *.aab
 
 # Per Firebase project, kept out of the tree (onboarding section 2.4), and the Play and FCM
-# service-account keys (CI/CD design section 4.5)
+# service-account keys (CI/CD design section 4.5). The one exception is the stub with a placeholder
+# project that every pull-request build compiles with (CI/CD design section 3); a real file goes in
+# app/src/debug/ or app/src/release/, which the services plugin reads first, and stays ignored there.
 google-services.json
+!/app/google-services.json
 *service-account*.json
 
 # OS and editors

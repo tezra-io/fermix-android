@@ -37,7 +37,12 @@ val TINT_NAMES: List<String> = listOf("Slate", "Sage", "Clay", "Plum", "Ocean", 
  * maps to its colour. [candidates] are the routes for the next race, and [lastCandidate] the one the last
  * completed `hello` went over (core-session's Session.lastSuccessful), which the next process races first
  * (section 5.1, "last successful first") while [candidates] still holds it; [caps] are the last `hello_ack`'s,
- * none before the first one. [fcmRegisteredAt] is when this phone last sent `push_register`, in Unix milliseconds.
+ * none before the first one. [fcmRegisteredAt] is when this phone last sent `push_register`, in Unix milliseconds,
+ * none before the first one, once `push_unregister` went, or once FCM gave the app a new token, which the daemon
+ * then takes at the next `hello` (design section 10). The token itself is not here: Firebase keeps it, and a
+ * record holds no token. [historyPullDue] says FCM dropped pushes it held for this phone (`onDeletedMessages`), so
+ * the instance's next session pulls its history in full (design section 10); it is cleared once that session has
+ * reconciled.
  * [deviceName] and [pairedAt] are the Instance screen's "This phone" (section 13.7): the name `pair_request`
  * carried, and when the pairing was approved, in Unix milliseconds. Section 9.1 does not list them; the
  * screen needs them, and only the pairing knows them.
@@ -70,6 +75,7 @@ data class Instance(
     @SerialName("caps") val caps: Caps? = null,
     @SerialName("notifications_enabled") val notificationsEnabled: Boolean,
     @SerialName("fcm_registered_at") val fcmRegisteredAt: Long? = null,
+    @SerialName("history_pull_due") val historyPullDue: Boolean = false,
     @SerialName("device_name") val deviceName: String? = null,
     @SerialName("paired_at") val pairedAt: Long? = null,
     @Serializable(with = CandidateSerializer::class)
@@ -101,6 +107,9 @@ data class Instance(
 
     /** The row's title: the owner's nickname, or else the daemon's own name (design section 9.2). */
     val title: String get() = nickname ?: label
+
+    /** Whether the daemon pushes through FCM: `hello_ack.caps.push` once known, else the pairing's. */
+    val pushReady: Boolean get() = PushPlatform.FCM in (caps?.push ?: pushPlatforms)
 
     /** The daemon's static key, which the IK handshake authenticates; fresh bytes. */
     fun gatewayPublicKey(): ByteArray = keyBytes("gateway_pk", gatewayPk)

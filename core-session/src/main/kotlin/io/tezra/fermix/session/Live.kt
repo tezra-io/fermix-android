@@ -167,12 +167,13 @@ internal class Live(
     /**
      * The reconciliation's first pull: the rows after the cursor, or for an empty cache the newest page,
      * backward from past the head. Protocol v2's backward cursor (design section 7, the
-     * `history_pull.before_seq?` row) replaces protocol v1's pull of the whole history from row 0.
+     * `history_pull.before_seq?` row) replaces protocol v1's pull of the whole history from row 0, but for a
+     * session told to pull in full (SessionParts.fullPull), whose empty cache pulls forward from row 0.
      */
     suspend fun openHistory() {
         historyOpen = true
         val timeline = core.timeline()
-        if (timeline.cursor == 0uL && timeline.head > 0uL) {
+        if (timeline.cursor == 0uL && timeline.head > 0uL && !core.parts.fullPull) {
             val before = timeline.head + 1uL
             forwardPulls++
             pulls.addLast(Pull(PullKind.NEWEST, beforeSeq = before))

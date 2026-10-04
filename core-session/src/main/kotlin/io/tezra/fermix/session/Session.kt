@@ -48,7 +48,10 @@ class PairedInstance(
  * What a session runs on, all of it the app's: the phone's Keystore key, the dialer, the store and
  * the announcer of the data layer, the network facts core-transport's watcher reads, a monotonic
  * clock, the backoff's jitter and the answers' ids, and the dispatcher a fetched blob is written on. A
- * test passes fakes and the virtual clock.
+ * test passes fakes and the virtual clock. [fullPull] is `onDeletedMessages`'s full `history_pull` (design
+ * section 10): FCM dropped pushes it held for this phone, so an empty cache pulls every row from the first,
+ * each announced, rather than the newest page alone; a cache that holds rows pulls everything after its cursor
+ * on every connection, as always.
  */
 data class SessionParts(
     val appVersion: String,
@@ -60,6 +63,7 @@ data class SessionParts(
     val clock: TimeSource = TimeSource.Monotonic,
     val random: Random = Random.Default,
     val io: CoroutineDispatcher = Dispatchers.IO,
+    val fullPull: Boolean = false,
 )
 
 /**
@@ -77,6 +81,7 @@ class Session private constructor(
     private val confined: CoroutineDispatcher,
 ) {
     internal val calls = OneShotCalls(core, requests, runner, confined)
+    internal val pushCalls = PushCalls(core, confined)
 
     val state: StateFlow<SessionState> get() = core.state
 

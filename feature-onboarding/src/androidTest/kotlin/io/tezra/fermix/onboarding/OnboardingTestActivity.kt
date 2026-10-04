@@ -135,6 +135,7 @@ internal class TestRig(
             pairingDispatcher = Dispatchers.Main.immediate,
             pairingWait = MutableStateFlow(null),
             handover = FakeHandover(store.instances),
+            notifications = { _, _ -> },
         )
 
     /** The scan's camera: allowed as [cameraAllowed] says, and a dark frame with a torch, off, for its preview. */

@@ -23,8 +23,9 @@ fun interface ChatOnScreen {
 }
 
 /**
- * What posts a row's notification (design section 10, "Lifecycle on the phone"): the notifications change
- * brings the app's, and until then the app's can post none, so no row is told of and none is acked.
+ * What posts a row's notification (design section 10, "Lifecycle on the phone"): the app's Notifications,
+ * which rebuilds the row's conversation from its notified set. A row that cannot be notified is not told of,
+ * so it is never acked and its push still comes.
  */
 interface RowNotifier {
     /** Whether a row of [instanceId]'s [profileId] can be notified now: its channel, its permission. */
@@ -34,7 +35,7 @@ interface RowNotifier {
     ): Boolean
 
     /** Posts [row]'s notification, which the notified set has just taken. */
-    fun notify(
+    suspend fun notify(
         instanceId: String,
         profileId: String,
         row: TimelineRow,
@@ -73,7 +74,7 @@ class RowAnnouncer(
         }
     }
 
-    private fun notified(row: TimelineRow): Announcement {
+    private suspend fun notified(row: TimelineRow): Announcement {
         notifier.notify(instanceId, profileId, row)
         return Announcement.NOTIFIED
     }

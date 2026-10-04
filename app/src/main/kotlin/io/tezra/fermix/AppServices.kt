@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import io.tezra.fermix.attest.DeviceKeyFacade
 import io.tezra.fermix.attest.DeviceKeys
 import io.tezra.fermix.attest.HardwareGate
 import io.tezra.fermix.chat.ChatClock
@@ -21,6 +22,7 @@ import io.tezra.fermix.chats.ChatsParts
 import io.tezra.fermix.chats.ConversationSync
 import io.tezra.fermix.chats.PlatformConversations
 import io.tezra.fermix.data.AppSettingsStore
+import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
@@ -30,15 +32,14 @@ import io.tezra.fermix.data.appSettingsDataStore
 import io.tezra.fermix.data.instanceDataStore
 import io.tezra.fermix.data.launchCheck
 import io.tezra.fermix.instance.InstanceParts
-import io.tezra.fermix.instance.NotificationsPolicy
 import io.tezra.fermix.onboarding.OnboardingParts
 import io.tezra.fermix.onboarding.PairingWait
 import io.tezra.fermix.onboarding.deviceNameRefusal
 import io.tezra.fermix.onboarding.handleStarter
+import io.tezra.fermix.push.PushLog
+import io.tezra.fermix.push.TrialDecrypt
 import io.tezra.fermix.session.PhoneIdentity
 import io.tezra.fermix.session.Session
-import io.tezra.fermix.session.SessionEvent
-import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.session.deviceModel
 import io.tezra.fermix.transport.NetworkWatcher
 import io.tezra.fermix.transport.WebSocketConnector
@@ -49,14 +50,18 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -73,11 +78,13 @@ private const val INSTANCES_DIRECTORY = "instances"
  * What the app runs on for as long as its process lives, made once by [FermixApplication]: the instance
  * records and their databases, the app's settings, the network facts, the device keys, the sessions'
  * [supervisor], the app lock's [lockGate], the conversations, and the two facts the pairing-wait
- * notification follows, [pairingWait] (onboarding's) and [inBackground] (the activity's). Blocking work,
- * the files and the Keystore, runs on [io]; a ceremony and the sessions run on [work]. Unpairing asks a
- * daemon to forget the phone through [sendUnpair], `unpair` over the session's live connection, which a test
- * replaces to see who asks; whether a session has an upload in flight is [uploadingOf]'s to say, Session.uploading,
- * which a test replaces to have one.
+ * notification follows, [pairingWait] (onboarding's) and [inBackground] (the activity's), and the
+ * notifications: their one owner, a push's inbox ([push]) and the push registrations ([registrations]).
+ * Blocking work, the files and the Keystore, runs on [io]; a ceremony and the sessions run on [work].
+ * Unpairing asks a daemon to forget the phone through [sendUnpair], `unpair` over the session's live
+ * connection, which a test replaces to see who asks; whether a session has an upload in flight is
+ * [uploadingOf]'s to say, Session.uploading, which a test replaces to have one; and the device keys are
+ * the Keystore's ([keys]), which a test replaces with software keys.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppServices(
@@ -86,16 +93,33 @@ class AppServices(
     private val work: CoroutineDispatcher = Dispatchers.Default,
     sendUnpair: suspend (Session) -> Boolean = { askToForget(it, ::logFault) },
     private val uploadingOf: (Session) -> Flow<Boolean> = { it.uploading },
+    private val keys: DeviceKeyFacade = DeviceKeys(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + io)
     private val sessionScope = CoroutineScope(SupervisorJob() + work)
     private val databases = ProfileDatabases(context, File(context.noBackupFilesDir, INSTANCES_DIRECTORY))
     val instances = InstanceStore(instanceDataStore(File(context.noBackupFilesDir, RECORDS_FILE), scope), databases)
+
+    /**
+     * The records as one collector reads them from the moment the services are made, before anything writes
+     * them, shared by the notifications and the chats' followers: a DataStore collector that starts while a
+     * write is under way was seen to miss that write for good (FermixMessagingServiceTest, on Robolectric).
+     */
+    private val records = instances.instances.shareIn(scope, SharingStarted.Eagerly, replay = 1)
     val settings = AppSettingsStore(appSettingsDataStore(File(context.noBackupFilesDir, SETTINGS_FILE), scope))
     private val network = NetworkWatcher(context)
-    private val keys = DeviceKeys()
     private val identity by lazy { phoneIdentity(context) }
     private val onScreen = OnScreenChats()
+    private val posted = PostedNotifications(context)
+    private val notifications =
+        Notifications(
+            posted,
+            records.stateIn(scope, SharingStarted.Eagerly, emptyList()),
+            databases,
+            NotificationCopy.of(context.resources),
+            locked = { settings.settings.first().appLock },
+            now = System::currentTimeMillis,
+        )
     private val sessionsMade =
         AppSessions(
             databases,
@@ -108,13 +132,28 @@ class AppServices(
                     MAIN_PROFILE,
                     database,
                     onScreen,
-                    NotificationsToCome,
+                    notifications,
                     System::currentTimeMillis,
                 )
             },
         ) { identity.appVersion }
     private val folds = ChatFolds(AppClock, ::newestKept)
-    val supervisor =
+    private val fcmToken = FcmToken { askFcmForToken(it, ::logFault) }
+
+    /** This phone's push registration with each daemon, over the sessions the supervisor holds. */
+    val registrations: PushRegistrations =
+        PushRegistrations(
+            RegistrationParts(
+                instances,
+                // The supervisor's, which is made below: read at each step, never while this is made.
+                sessions = { supervisor.sessions.value },
+                canShow = { posted.canShow(conversationId(it.id, MAIN_PROFILE)) },
+                token = fcmToken::current,
+                now = System::currentTimeMillis,
+                log = ::logFault,
+            ),
+        )
+    val supervisor: SessionSupervisor =
         SessionSupervisor(
             instances.instances,
             sessionsMade,
@@ -122,14 +161,33 @@ class AppServices(
                 instances,
                 databases,
                 folds,
-                ApprovalAlerts(onScreen, ApprovalsToCome, System::currentTimeMillis),
+                ApprovalAlerts(onScreen, notifications, System::currentTimeMillis),
+                notifications,
+                registrations,
             ),
             sessionScope,
             ::logFault,
             sendUnpair,
         )
+
+    /** What a push comes to (FermixMessagingService), and the diagnostics ring of each one's lines. */
+    val pushLog = PushLog()
+    val push =
+        PushInbox(
+            PushParts(
+                instances,
+                TrialDecrypt(keys, ::logFault),
+                notifications,
+                databases,
+                onScreen,
+                pushLog,
+                keystore = scope,
+                now = System::currentTimeMillis,
+            ),
+        )
     val lockGate = LockGate(canLock = { canLock(context) })
-    private val conversations = ConversationSync(PlatformConversations(context, ::conversationIntent))
+    private val conversations =
+        ConversationSync(PlatformConversations(context) { chatIntent(context, it.instanceId, it.profileId) })
     private val checkedState = MutableStateFlow(false)
 
     /** Whether the launch check has run: nothing shows, and no session opens, before it has (section 6.6). */
@@ -144,7 +202,8 @@ class AppServices(
     /**
      * Starts reading the network, then, off the main thread, drops the records whose keys a restore left
      * behind (data's launchCheck), and only then follows the records with the sessions and the
-     * conversations, and the settings with the app lock.
+     * conversations, whose names carry each one's agent, the app lock and each chat's previews with the
+     * notifications showing, and the settings with the app lock.
      */
     fun start() {
         network.start()
@@ -152,30 +211,41 @@ class AppServices(
             launchCheck(instances, keys::exists)
             checkedState.value = true
             supervisor.start(io, uploadingOf)
-            launch { namedRecords().collect { (records, agents) -> conversations.sync(records, agents) } }
+            launch { supervisor.inSight.filter { it }.collect { registrations.refresh() } }
+            val agents = chatsOf().map { (listed, chats) -> listed to chats.mapValues { it.value.agentName } }
+            launch { agents.distinctUntilChanged().collect { (listed, named) -> conversations.sync(listed, named) } }
+            val looks =
+                combine(settings.settings, chatsOf()) { set, (_, chats) ->
+                    set.appLock to chats.mapValues { it.value.previews }
+                }
+            launch { looks.distinctUntilChanged().collect { notifications.restyled() } }
             settings.settings.collect { withContext(Dispatchers.Main) { lockGate.lockSetting(it.appLock) } }
         }
     }
 
-    /** The records, and each one's agent name from its main profile's chat, which its conversation's name carries. */
-    private fun namedRecords(): Flow<Pair<List<Instance>, Map<String, String?>>> =
-        instances.instances.flatMapLatest { records ->
-            if (records.isEmpty()) return@flatMapLatest flowOf(records to emptyMap())
-            combine(records.map { record -> agentOf(record.id).map { record.id to it } }) { agents ->
-                records to agents.toMap()
-            }
+    /**
+     * The records, and each one's main chat as its profile keeps it, until the instance is removed
+     * (ProfileDatabases.observe): its agent's name, as `hello_ack` gave it, and its previews switch.
+     */
+    private fun chatsOf(): Flow<Pair<List<Instance>, Map<String, ChatState>>> =
+        records.flatMapLatest { listed ->
+            if (listed.isEmpty()) return@flatMapLatest flowOf(listed to emptyMap())
+            val chats = listed.map { record -> databases.observe(record.id, MAIN_PROFILE) { it.chat().state() } }
+            combine(chats) { states -> listed to listed.map { it.id }.zip(states).toMap() }
         }
-
-    /** [instanceId]'s agent name as `hello_ack` gave it, until the instance is removed (ProfileDatabases.observe). */
-    private fun agentOf(instanceId: String): Flow<String?> =
-        databases
-            .observe(instanceId, MAIN_PROFILE) { it.chat().state() }
-            .map { it.agentName }
-            .distinctUntilChanged()
 
     /** The App lock switch: the settings say it, and the gate hears it from them. */
     fun setAppLock(on: Boolean) {
         scope.launch { settings.setAppLock(on) }
+    }
+
+    /**
+     * FCM handed this app's [token] (FermixMessagingService.onRegistered): a changed one, or one nobody asked
+     * for, registers every daemon with it again; the one asked for registers those that waited for it.
+     */
+    fun fcmRegistered(token: String) {
+        val changed = fcmToken.registered(token)
+        scope.launch { if (changed) registrations.newToken() else registrations.refresh() }
     }
 
     /** Onboarding's parts, for the ViewModel the activity keeps. */
@@ -189,6 +259,7 @@ class AppServices(
             pairingDispatcher = work,
             pairingWait = pairingWait,
             handover = supervisor,
+            notifications = registrations::apply,
         )
 
     /** The Chats list's parts. */
@@ -202,10 +273,7 @@ class AppServices(
             remove = { supervisor.remove(it, unpair = false, removal = ::forget) },
         )
 
-    /**
-     * The Instance screen's parts. The notifications switch is the record's alone until the notifications
-     * change brings the channel and `push_register` behind it.
-     */
+    /** The Instance screen's parts: its Notifications switch registers or unregisters this phone's push. */
     fun instanceParts(): InstanceParts =
         InstanceParts(
             instances = instances,
@@ -213,7 +281,7 @@ class AppServices(
             network = network.facts,
             profiles = databases,
             tester = sessionsMade::test,
-            notifications = NotificationsPolicy { _, _ -> },
+            notifications = registrations,
             unpair = { supervisor.remove(it, unpair = true, removal = ::forget) },
             releaseBuild = !debuggable(context),
         )
@@ -277,9 +345,6 @@ class AppServices(
         instances.remove(instanceId)
         withContext(io) { keys.delete(record.keyAlias) }
     }
-
-    private fun conversationIntent(conversation: io.tezra.fermix.chats.Conversation) =
-        chatIntent(context, conversation.instanceId, conversation.profileId)
 }
 
 /** The clocks a chat reads: the monotonic one since boot, and the wall's. */
@@ -287,33 +352,6 @@ private object AppClock : ChatClock {
     override fun monoMs(): Long = SystemClock.elapsedRealtime()
 
     override fun wallMs(): Long = System.currentTimeMillis()
-}
-
-/** The approvals' notifier until the notifications change (A4) brings the app's: it can post none. */
-private object ApprovalsToCome : ApprovalNotifier {
-    override fun canNotify(instanceId: String): Boolean = false
-
-    override fun notify(
-        instanceId: String,
-        approval: SessionEvent.Approval,
-    ): Unit = error("no notification is posted before the notifications change")
-}
-
-/**
- * The notifications to come: until the notifications change brings the channel's posts, no row can be
- * notified of, so none is announced or acked, and the daemon's push for it still comes (PUSH-2).
- */
-private object NotificationsToCome : RowNotifier {
-    override fun canNotify(
-        instanceId: String,
-        profileId: String,
-    ): Boolean = false
-
-    override fun notify(
-        instanceId: String,
-        profileId: String,
-        row: TimelineRow,
-    ): Unit = error("no notification is posted before the notifications change")
 }
 
 /** A fault the app logs and lives with: a session it cannot open now, a chat's request that did not go. */

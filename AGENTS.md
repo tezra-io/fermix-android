@@ -12,8 +12,10 @@ This is the repo's only agent-instruction file. Never add a `CLAUDE.md`, `.claud
 ## Layout
 ```
 app/                  the application module, io.tezra.fermix: AppServices, the SessionSupervisor (one
-                      session per instance, put aside 5 s out of sight), the RowAnnouncer, the app
-                      lock's gate, the navigator and its deep links, and the activity
+                      session per instance, put aside 5 s out of sight), the RowAnnouncer, the
+                      notifications' one owner (Notifications), FCM's service, PushInbox and
+                      PushRegistrations, the app lock's gate, the navigator and its deep links, and the
+                      activity; google-services.json is the placeholder project's
 build-logic/          convention plugins: fermix.android.application (the app, with its JVM and
                       Robolectric tests), fermix.android.library,
                       fermix.android.library.compose (Compose and the Roborazzi screenshot tests),
@@ -43,6 +45,10 @@ data/                 the phone's durable state, io.tezra.fermix.data (Android l
                       on the bundled SQLite): the instance records' DataStore, one Room database
                       per (instance, profile) with its schema in data/schemas, the media cache, the
                       launch check
+push/                 a push before it is shown, io.tezra.fermix.push (Android library, no Firebase,
+                      JVM-tested against push_vectors.json): the envelope's bounds, the push key, the
+                      cipher, the trial over each instance's key, the typed plaintext, the
+                      registration step and the diagnostics lines; its Keystore test in src/androidTest
 feature-onboarding/   design section 13.3 as screens, io.tezra.fermix.onboarding (Compose library):
                       Welcome to Notifications and every failure, OnboardingViewModel over
                       core-session's pairing, the Navigation 3 entries, the scan's CameraX preview
@@ -172,8 +178,11 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   change. Never turn Roborazzi's copies from `build/intermediates/roborazzi` back on: they write build
   state into the references. A screen's previews use `@FermixPreviews` and `FermixPreviewTheme { }`.
 - No secret enters the tree: no keystore, `keystore.properties`, `google-services.json` or service
-  account. Debug builds sign with the developer's own key from outside the repository, never with
-  the SDK's.
+  account. The one `google-services.json` is `app/google-services.json`, the placeholder project's,
+  which holds no real key; a real one goes in `app/src/debug/` or `app/src/release/`, which `.gitignore`
+  keeps out, and never replaces the placeholder (`GoogleServicesPlaceholderTest` fails the build on one
+  that is not the placeholder's). Debug builds sign with the developer's own key from outside the
+  repository, never with the SDK's.
 - A Room entity change commits the schema the build exports into `data/schemas` in the same change;
   once a version has shipped, the change is a new database version with its migration, never an edit
   of a shipped version's file. CI's build job fails when the build leaves `data/schemas` changed.
@@ -222,7 +231,21 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   or an early return reads to it as no check at all.
 - A permission the app starts to request lands in `policy/permissions.txt` in the same change, with
   the design section that asks for it; CI's `policy` job fails a release APK whose permissions differ
-  from that file's in either direction (`scripts/check_release_policy.sh`).
+  from that file's in either direction (`scripts/check_release_policy.sh`). A library's manifest counts:
+  read the merged release manifest after adding or upgrading a dependency (Firebase Messaging brings
+  `WAKE_LOCK` and `com.google.android.c2dm.permission.RECEIVE`), and remove one the app does not need
+  with `tools:node="remove"` rather than list it.
+- A token, a key, a salt or a word of a push's plaintext never reaches a log or the push diagnostics. The
+  instance a notification names, its channel, shortcut and tap come from the record whose key verified
+  the push, never from its plaintext, whose fields are shown as text only; every PendingIntent is
+  explicit and `FLAG_IMMUTABLE`. An FCM message's `notification` block is never rendered, on two paths:
+  the manifest turns Firebase's notification delegation off
+  (`firebase_messaging_notification_delegation_enabled`), so Play services never shows the block as the app
+  without calling it, and the messaging service takes the block out of the intent before Firebase's own code
+  could show it (`handleIntent`). Firebase reads that flag once per install and keeps Play services as the
+  delegate of an install that ran without it, so never drop it, even for one build
+  (`FermixMessagingServiceTest` reads it); with both, what a sender who learns the token writes there
+  reaches no notification, past the app lock or otherwise.
 - Code: linear flow, small functions, no fallbacks, surgical changes.
 - Work on `dev`. `main` moves only by pull request, and a release is a `vX.Y.Z` tag on `main`
   (CI/CD design C1). Never tag unless the owner asks.

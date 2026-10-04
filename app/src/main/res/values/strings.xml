@@ -11,4 +11,18 @@
     -->
     <string name="upload_title">Sending to %1$s</string>
     <string name="upload_channel">Uploads</string>
+    <!--
+      Design section 13.9's notification lines: previews off, the instance's name over "New message"; an
+      approval; one that arrived after its expiry; a failed turn.
+    -->
+    <string name="notification_new_message">New message</string>
+    <string name="notification_approval">%1$s needs your approval</string>
+    <string name="notification_approval_expired">An approval on %1$s expired</string>
+    <string name="notification_turn_failed">%1$s: the reply didn\'t finish</string>
+    <!--
+      The design gives no words for the channel of the generic notification no key opened, or for the phone's
+      own name in a conversation's MessagingStyle: these are the owner's to settle.
+    -->
+    <string name="push_channel">Messages</string>
+    <string name="notification_self">You</string>
 </resources>

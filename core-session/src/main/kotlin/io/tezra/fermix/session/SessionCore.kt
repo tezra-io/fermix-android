@@ -5,9 +5,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.selects.select
 
 /** Events the app has not collected yet; past this the session waits for the app rather than drop one. */
-private const val EVENT_BUFFER = 256
+internal const val EVENT_BUFFER = 256
 
 /**
  * What one session keeps across its connections: its state and events, its diagnostics and the acks it
@@ -23,6 +24,9 @@ internal class SessionCore(
     private val started = parts.clock.markNow()
     private val loaded = CompletableDeferred<Timeline>()
     private var book = TurnBook()
+
+    /** Completed as the session ends, which lets an [emit] waiting on the app go. */
+    private val ending = CompletableDeferred<Unit>()
 
     val events = Channel<SessionEvent>(EVENT_BUFFER)
     val state = MutableStateFlow<SessionState>(SessionState.Connecting)
@@ -50,16 +54,30 @@ internal class SessionCore(
     /** Milliseconds since the session opened, on its monotonic clock. */
     fun now(): Long = started.elapsedNow().inWholeMilliseconds
 
-    /** The timeline, its cursors read from the store the first time. */
+    /** The timeline, its cursors read from the store the first time, its read frontier said to the app. */
     suspend fun timeline(): Timeline {
         if (!loaded.isCompleted) {
-            loaded.complete(Timeline(parts.store.cursors(), parts.store, parts.announcer, ::now))
+            val timeline =
+                Timeline(parts.store.cursors(), parts.store, parts.announcer, ::now) {
+                    emit(SessionEvent.ReadFrontier(it))
+                }
+            loaded.complete(timeline)
         }
         return loaded.await()
     }
 
+    /**
+     * Says [event] to the app, waiting while [EVENT_BUFFER] events wait for it; once the session has ended,
+     * nothing more is said, and an emit that was waiting lets go. A request runs in its caller's coroutine
+     * (markRead's read frontier, an approval's answer), which no stop of the run reaches, and the supervisor
+     * stops collecting before it closes a session (SessionSupervisor.drop): so a close never waits on an emit no
+     * collector will take (Runner.close).
+     */
     suspend fun emit(event: SessionEvent) {
-        events.send(event)
+        select {
+            ending.onAwait {}
+            events.onSend(event) {}
+        }
     }
 
     /** A live state; a session that ended stays ended. */
@@ -70,6 +88,7 @@ internal class SessionCore(
     /** The session ends as [ended], unless it ended already; its events end with it, and an adopted link not taken. */
     fun end(ended: SessionState.Ended) {
         publish(ended)
+        ending.complete(Unit)
         events.close()
         scopeWatch?.dispose()
         takeAdopted()?.won?.close()

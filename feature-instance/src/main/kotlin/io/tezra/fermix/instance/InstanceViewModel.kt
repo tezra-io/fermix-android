@@ -8,7 +8,6 @@ import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
-import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionState
@@ -38,9 +37,9 @@ import kotlinx.coroutines.launch
 private const val WATCH_LINGER_MILLIS = 5_000L
 
 /**
- * What turns a Fermix's notifications on and off beyond its record's switch: its channel and
- * `push_register` / `push_unregister` (design sections 10 and 13.7). The app's does nothing yet; the
- * notifications change brings the rest.
+ * What turns a Fermix's notifications on and off beyond its record's switch: `push_register` /
+ * `push_unregister` over its live connection (design sections 10 and 13.7), the app's PushRegistrations.
+ * The record holds the answer before it is applied.
  */
 fun interface NotificationsPolicy {
     suspend fun apply(
@@ -84,9 +83,6 @@ data class InstanceUi(
     val test: TestState,
     val releaseBuild: Boolean,
 )
-
-/** Whether [this]'s daemon pushes through FCM: `hello_ack.caps.push` once known, else the pairing's. */
-val Instance.pushReady: Boolean get() = PushPlatform.FCM in (caps?.push ?: pushPlatforms)
 
 /**
  * A session's state and diagnostics together, and the candidate its live connection went over; none of

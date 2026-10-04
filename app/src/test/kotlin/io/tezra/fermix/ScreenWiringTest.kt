@@ -1,12 +1,17 @@
 package io.tezra.fermix
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationManager
+import android.content.Context
+import android.os.Bundle
 import androidx.test.core.app.ApplicationProvider
 import io.tezra.fermix.chats.ChatsParts
 import io.tezra.fermix.chats.ChatsViewModel
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
+import io.tezra.fermix.data.NOTIFIED_ID_RETENTION_MS
 import io.tezra.fermix.data.NotifiedEntry
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.instanceDataStore
@@ -14,6 +19,7 @@ import io.tezra.fermix.data.launchCheck
 import io.tezra.fermix.instance.InstanceParts
 import io.tezra.fermix.instance.InstanceViewModel
 import io.tezra.fermix.instance.NotificationsPolicy
+import io.tezra.fermix.protocol.ApprovalOutcome
 import io.tezra.fermix.protocol.Caps
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.Profile
@@ -115,8 +121,9 @@ private class RecordingPolicy : NotificationsPolicy {
 
 /**
  * What reaches the screens from the stores and the sessions: the session events the app keeps (design
- * sections 9.2 and 10), an older page's rows, the Chats row's unread count from the notified set (section
- * 9.4), and the Instance screen's Notifications switch through its policy (section 13.7).
+ * sections 9.2 and 10), the notified set's expired ids and an approval's notification cleared by its id among
+ * them, an older page's rows, the Chats row's unread count from the notified set (section 9.4), and the Instance
+ * screen's Notifications switch through its policy (section 13.7).
  *
  * On Robolectric, as MainActivityTest: the app's tests load the bundled SQLite library once for the JVM,
  * into Robolectric's classloader, so every test of the app that opens a database runs there. The plain
@@ -144,7 +151,17 @@ class ScreenWiringTest {
     }
 
     /** The app's sink over [store], its chats' folds on a clock that stands still. */
-    private fun events(store: InstanceStore) = SessionEvents(store, databases, ChatFolds(TestClock) { 0uL }, NoAlerts)
+    private fun events(
+        store: InstanceStore,
+        notifications: Notifications = testNotifications(databases),
+    ) = SessionEvents(
+        store,
+        databases,
+        ChatFolds(TestClock) { 0uL },
+        NoAlerts,
+        notifications,
+        quietRegistrations(store),
+    )
 
     private suspend fun TestScope.store(): InstanceStore {
         val records = instanceDataStore(File(directory, "instances.json"), backgroundScope)
@@ -186,6 +203,71 @@ class ScreenWiringTest {
             assertTrue(events(store).take(RECORD.id, idleSession(backgroundScope), SessionEvent.ReadFrontier(5uL)))
             assertEquals(listOf(9uL), notified.serverSeqs().first())
         }
+
+    @Test
+    fun `a read frontier the session says rebuilds the conversation's notification, and cancels it once empty`() =
+        runTest(main, timeout = SETTLE) {
+            val store = store()
+            val notifications = testNotifications(databases, MutableStateFlow(listOf(RECORD)))
+            val events = events(store, notifications)
+            val notified = databases.open(RECORD.id, MAIN_PROFILE).notified()
+            listOf(3uL, 5uL).forEach { assertTrue(notified.put(NotifiedEntry.Row(it), 1_000L)) }
+            assertTrue(notifications.postMessages(RECORD, MAIN_PROFILE))
+            val tag = "${conversationId(RECORD.id, MAIN_PROFILE)}/messages"
+            assertEquals(2, shownMessages(tag))
+
+            assertTrue(events.take(RECORD.id, idleSession(backgroundScope), SessionEvent.ReadFrontier(3uL)))
+            assertEquals(1, shownMessages(tag))
+            assertTrue(events.take(RECORD.id, idleSession(backgroundScope), SessionEvent.ReadFrontier(5uL)))
+            assertEquals(emptyList<String>(), notificationManager().activeNotifications.map { it.tag })
+        }
+
+    @Test
+    fun `a reconciled connection takes the approvals and failed turns past their retention from the notified set`() =
+        runTest(main, timeout = SETTLE) {
+            val store = store()
+            val now = NOTIFIED_ID_RETENTION_MS + 2_000L
+            val notified = databases.open(RECORD.id, MAIN_PROFILE).notified()
+            assertTrue(notified.put(NotifiedEntry.Approval("ap-old"), 1_000L))
+            assertTrue(notified.put(NotifiedEntry.TurnFailed("turn-new"), now - 500L))
+            val events = events(store, testNotifications(databases, now = { now }))
+            val reconciled = SessionEvent.Reconciled(pulledInFull = false)
+            assertTrue(events.take(RECORD.id, idleSession(backgroundScope), reconciled))
+            assertFalse(notified.contains(NotifiedEntry.Approval("ap-old")))
+            assertTrue(notified.contains(NotifiedEntry.TurnFailed("turn-new")))
+        }
+
+    @Test
+    fun `an approval the daemon resolved, or closed while the phone was away, takes its notification with it`() =
+        runTest(main, timeout = SETTLE) {
+            val store = store()
+            val notifications = testNotifications(databases, MutableStateFlow(listOf(RECORD)))
+            val events = events(store, notifications)
+            val card = SessionEvent.Approval("ap-1", "sandbox", "Run make test?", "make test", ttlS = 90)
+            listOf(card, card.copy(approvalId = "ap-2"), card.copy(approvalId = "ap-3")).forEach {
+                notifications.notify(RECORD.id, it)
+            }
+            val session = idleSession(backgroundScope)
+            assertTrue(events.take(RECORD.id, session, SessionEvent.ApprovalResolved("ap-1", ApprovalOutcome.APPROVED)))
+            assertTrue(events.take(RECORD.id, session, SessionEvent.ApprovalClosedWhileAway("ap-2")))
+            val conversation = conversationId(RECORD.id, MAIN_PROFILE)
+            assertEquals(
+                listOf("$conversation/approval/ap-3"),
+                notificationManager().activeNotifications.map { it.tag },
+            )
+        }
+
+    private fun notificationManager(): NotificationManager =
+        ApplicationProvider.getApplicationContext<Context>().getSystemService(NotificationManager::class.java)
+
+    /** How many messages the notification under [tag] lists; it must be showing. */
+    private fun shownMessages(tag: String): Int {
+        val shown = notificationManager().activeNotifications.single { it.tag == tag }.notification
+        return shown.extras
+            .getParcelableArray(Notification.EXTRA_MESSAGES, Bundle::class.java)
+            .orEmpty()
+            .size
+    }
 
     @Test
     fun `an older page's rows are kept in the chat's cache, which they were not announced to`() =

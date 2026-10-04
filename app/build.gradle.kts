@@ -33,6 +33,10 @@ dependencies {
     implementation(project(":attest"))
     implementation(project(":core-session"))
     implementation(project(":data"))
+    // A push's envelope, keys, trial and plaintext (push), and FCM, which delivers it (design section 10).
+    implementation(project(":push"))
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     // MainActivityTest starts the activity under Compose's test rule, on Robolectric.
     testImplementation(libs.androidx.compose.ui.test.junit4)

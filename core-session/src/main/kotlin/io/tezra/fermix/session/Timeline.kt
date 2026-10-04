@@ -37,13 +37,17 @@ internal data class Reports(
  * new session never acks past a row the owner was not told of. It lasts across connections. Rows go to
  * the announcer one at a time, outside the lock, since the app may call back into the session from it;
  * the cursor is stored only once the announcer has returned (Announcer). Only the session's actor
- * applies rows; the lock serializes the writes, so the store sees the frontier only move forward.
+ * applies rows; the lock serializes the writes, so the store sees the frontier only move forward. The read
+ * frontier goes to [readFrontierSaid], outside the lock, on every `hello_ack` and `read_state` whether it moved
+ * or not, and whenever this phone's own read moves it, the owner's or a row landing on screen: each takes the
+ * rows it covers from the app's notified set (design section 10, "Lifecycle on the phone").
  */
 internal class Timeline(
     stored: StoredCursors,
     private val store: SessionStore,
     private val announcer: Announcer,
     private val now: () -> Long,
+    private val readFrontierSaid: suspend (ULong) -> Unit,
 ) {
     private val writes = Mutex()
     private var ack =
@@ -109,12 +113,12 @@ internal class Timeline(
     /**
      * A connection's `hello_ack`: the newest row, and the frontier the daemon holds. The daemon's acked
      * cursor is the socket's and goes with it (tla/specs/mobile_push), so the ack is owed again on each
-     * connection. True when the frontier moved.
+     * connection. The frontier is said, moved or not.
      */
     suspend fun connected(
         daemonHead: ULong,
         daemonRead: ULong,
-    ): Boolean =
+    ) {
         writes.withLock {
             saw(daemonHead)
             ackSent = 0uL
@@ -122,16 +126,25 @@ internal class Timeline(
             readReported = daemonRead
             moveRead(daemonRead)
         }
+        readFrontierSaid(readFrontier)
+    }
 
-    /** A frontier [reported] by the daemon, which then knows it, or by this phone's owner. True when it moved. */
+    /**
+     * A frontier [reported] by the daemon, which then knows it, or by this phone's owner. True when it moved.
+     * The daemon's is said moved or not, the owner's when it moved.
+     */
     suspend fun read(
         reported: ULong,
         fromDaemon: Boolean,
-    ): Boolean =
-        writes.withLock {
-            if (fromDaemon) readReported = maxOf(readReported, reported)
-            moveRead(reported)
-        }
+    ): Boolean {
+        val moved =
+            writes.withLock {
+                if (fromDaemon) readReported = maxOf(readReported, reported)
+                moveRead(reported)
+            }
+        if (moved || fromDaemon) readFrontierSaid(readFrontier)
+        return moved
+    }
 
     /**
      * The `mutations_gone` rebuild: the store drops the cache and the cursor, and the cursor starts over.
@@ -161,16 +174,18 @@ internal class Timeline(
     private suspend fun apply(row: TimelineRow) {
         val announcement = announcer.announce(row)
         val announcedAt = now()
-        writes.withLock {
-            // A row a rebuild dropped and brought back was judged when it was first applied.
-            val judged = row.serverSeq <= ack.lastApplied
-            val next = if (judged) ack else ack.applied(row.serverSeq, announcement).read(readFrontier)
-            store.setServerCursor(row.serverSeq, next.ackable, next.held)
-            cursor = row.serverSeq
-            ack = next
-            ackDue(announcedAt)
-            if (announcement == Announcement.ON_SCREEN) moveRead(row.serverSeq)
-        }
+        val readOnScreen =
+            writes.withLock {
+                // A row a rebuild dropped and brought back was judged when it was first applied.
+                val judged = row.serverSeq <= ack.lastApplied
+                val next = if (judged) ack else ack.applied(row.serverSeq, announcement).read(readFrontier)
+                store.setServerCursor(row.serverSeq, next.ackable, next.held)
+                cursor = row.serverSeq
+                ack = next
+                ackDue(announcedAt)
+                announcement == Announcement.ON_SCREEN && moveRead(row.serverSeq)
+            }
+        if (readOnScreen) readFrontierSaid(readFrontier)
     }
 
     private suspend fun moveRead(reported: ULong): Boolean {

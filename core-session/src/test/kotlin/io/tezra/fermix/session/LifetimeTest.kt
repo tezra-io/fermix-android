@@ -393,6 +393,27 @@ class LifetimeTest {
         }
 
     @Test
+    fun `close returns while a read waits to say its frontier to an app that stopped collecting`() =
+        runTest {
+            val harness = Harness(this)
+            harness.store.cursors =
+                EMPTY_CURSORS.copy(lastServerSeq = 20uL, readUpToSeq = 10uL, announcedUpToSeq = 20uL)
+            val connection = harness.connect(HELLO_ACK.copy(historyHeadSeq = 20uL, readUpToSeq = 10uL))
+            // The supervisor stops collecting a session's events before it closes it, as it drops it.
+            harness.eventsCollected.cancel()
+            repeat(EVENT_BUFFER) { connection.send(ServerEvent.ReadState(PROFILE, 10uL)) }
+            harness.settle()
+            val reading = backgroundScope.launch { harness.session.markRead(15uL) }
+            harness.settle()
+            assertFalse(reading.isCompleted, "the read did not wait on the full buffer")
+            val closing = backgroundScope.launch { harness.session.close() }
+            harness.settle()
+            assertTrue(closing.isCompleted, "close waited on a read no collector would let go")
+            assertTrue(reading.isCompleted && !reading.isCancelled, "the read did not return")
+            assertEquals(15uL, harness.store.cursors.readUpToSeq)
+        }
+
+    @Test
     fun `an ended session refuses markRead, retry and remove, and leaves the store as another session wrote it`() =
         runTest {
             val harness = Harness(this)

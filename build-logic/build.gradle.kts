@@ -20,6 +20,7 @@ dependencies {
     implementation(libs.room.gradle.plugin)
     implementation(libs.detekt.gradle.plugin)
     implementation(libs.ktlint.gradle.plugin)
+    implementation(libs.google.services.gradle.plugin)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

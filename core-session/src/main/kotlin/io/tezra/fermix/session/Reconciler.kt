@@ -103,10 +103,7 @@ internal class Reconciler(
     suspend fun reconcile(ack: ServerEvent.HelloAck) {
         core.emit(SessionEvent.Server(ack))
         candidates(ack)
-        val timeline = core.timeline()
-        if (timeline.connected(ack.historyHeadSeq, ack.readUpToSeq)) {
-            core.emit(SessionEvent.ReadFrontier(timeline.readFrontier))
-        }
+        core.timeline().connected(ack.historyHeadSeq, ack.readUpToSeq)
         // The ack this socket owes, and a frontier the owner moved while away, reach the daemon first.
         live.report()
         // Asked after even when the turn is over now: its request row says how it ended.
@@ -121,6 +118,7 @@ internal class Reconciler(
         live.openHistory()
         requests.drain(live)
         live.checkCaughtUp()
+        core.emit(SessionEvent.Reconciled(pulledInFull = core.parts.fullPull))
     }
 
     /** The daemon's routes, best first, replace the ones the session races, when it sends any. */

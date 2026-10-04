@@ -12,13 +12,16 @@ import org.gradle.kotlin.dsl.getByType
  * signing from outside the repository, an R8-shrunk release that is never debuggable, and unit tests on
  * JUnit 5 and on Robolectric, as a Compose library's, for what only the app does: its window, its
  * activity's lifecycle and its foreground service, with the bundled SQLite library its screens' databases
- * open on.
+ * open on. Google's services plugin reads the Firebase project from `google-services.json` into the app's
+ * resources (design section 10): the stub with a placeholder project in `app/`, or a developer's or the
+ * release's own file in `app/src/<build type>/`, which the plugin reads first and git never takes.
  */
 class AndroidApplicationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
         with(target) {
             pluginManager.apply("com.android.application")
             pluginManager.apply("org.jetbrains.kotlin.plugin.compose")
+            pluginManager.apply("com.google.gms.google-services")
             pluginManager.apply(QualityConventionPlugin::class.java)
 
             val versionFile = rootProject.layout.projectDirectory.file("version.properties")

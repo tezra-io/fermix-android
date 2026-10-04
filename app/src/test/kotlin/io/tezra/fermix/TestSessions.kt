@@ -1,7 +1,11 @@
 package io.tezra.fermix
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import io.tezra.fermix.chat.ChatClock
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.data.InstanceStore
+import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.LinkPreviewCard
 import io.tezra.fermix.protocol.MutationRow
@@ -23,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import java.util.Base64
 import java.util.Locale
@@ -200,9 +205,37 @@ internal val NoAlerts =
         object : ApprovalNotifier {
             override fun canNotify(instanceId: String): Boolean = false
 
-            override fun notify(
+            override suspend fun notify(
                 instanceId: String,
                 approval: SessionEvent.Approval,
             ): Unit = error("no approval is notified in these tests")
         },
     ) { 0L }
+
+/**
+ * The app's notifications over [databases], posting to Robolectric's notification manager with the records
+ * [records] says, the app lock off and the clock at [now].
+ */
+internal fun testNotifications(
+    databases: ProfileDatabases,
+    records: StateFlow<List<Instance>> = MutableStateFlow(emptyList()),
+    locked: Boolean = false,
+    now: () -> Long = { 0L },
+): Notifications {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val copy = NotificationCopy.of(context.resources)
+    return Notifications(PostedNotifications(context), records, databases, copy, { locked }, now)
+}
+
+/** Registrations that never send: no session is held, nothing can show, and FCM has no token. */
+internal fun quietRegistrations(store: InstanceStore): PushRegistrations =
+    PushRegistrations(
+        RegistrationParts(
+            store,
+            sessions = { emptyMap() },
+            canShow = { false },
+            token = { null },
+            now = { 0L },
+            log = { message, _ -> error("nothing is registered in these tests: $message") },
+        ),
+    )

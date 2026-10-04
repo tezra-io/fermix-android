@@ -142,3 +142,16 @@ whose version matches `version.properties`.
   name or a type the phone cannot take never stops the app: an image the computer says is a document is
   saved into Download/Fermix, and a save the phone refuses, the 33rd file of one name in a folder among
   them, is let go. Pasting a pairing link never opens a file another app put on the clipboard.
+- **Notifications and push.** A reply, a proactive message, an approval or a failed turn on a computer
+  the phone is not connected to arrives as an FCM push the phone decrypts with the key it paired with,
+  and shows as the chat's conversation notification under that Fermix's name, with its words unless
+  previews are off or the app lock is on, then "New message"; an approval times out with its expiry, and
+  one that arrives late says it expired. A message the phone already showed, read on the computer or
+  open on screen alerts no one, whichever of the push and the connection comes first. A push the phone
+  cannot read still shows "New message" while a Fermix has its notifications on, and a notification
+  someone else writes into a push is never shown. A message read on the phone leaves its notification at
+  once, and a later one lists only what is unread; turning the app lock on, or a chat's previews off,
+  takes the words out of a notification already showing; an approval answered or expired on the computer
+  takes its notification with it. The phone registers for push when its notifications can show, again
+  every 7 days and on a new token, and unregisters when they cannot, a new token included. The app now
+  holds `WAKE_LOCK` and `com.google.android.c2dm.permission.RECEIVE`, from Firebase Messaging.

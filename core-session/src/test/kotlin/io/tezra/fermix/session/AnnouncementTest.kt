@@ -76,6 +76,29 @@ class AnnouncementTest {
             assertEquals(ClientEvent.ReadState(PROFILE, 1uL), connection.expect<ClientEvent.ReadState>())
             assertEquals(sentAt, harness.now)
             assertEquals(1uL, harness.store.cursors.readUpToSeq)
+            harness.settle()
+            assertEquals(listOf(0uL, 1uL), harness.readFrontiers())
+        }
+
+    @Test
+    fun `a frontier this phone's owner moves is said at once, and again on the echo and every hello_ack`() =
+        runTest {
+            val harness = Harness(this)
+            val first = harness.connect()
+            first.send(row(1uL))
+            assertEquals(ClientEvent.Ack(1uL), first.expect<ClientEvent.Ack>())
+            harness.session.markRead(1uL)
+            harness.settle()
+            assertEquals(listOf(0uL, 1uL), harness.readFrontiers())
+
+            // The daemon tells every client of the profile, this one included (PROTOCOL.md), and moves nothing.
+            first.send(ServerEvent.ReadState(PROFILE, 1uL))
+            harness.settle()
+            assertEquals(listOf(0uL, 1uL, 1uL), harness.readFrontiers())
+            first.close(NORMAL_CLOSURE, LIFETIME_REASON)
+            harness.daemon.accept().connect(HELLO_ACK.copy(historyHeadSeq = 1uL, readUpToSeq = 1uL))
+            harness.settle()
+            assertEquals(listOf(0uL, 1uL, 1uL, 1uL), harness.readFrontiers())
         }
 
     @Test
@@ -92,10 +115,8 @@ class AnnouncementTest {
             connection.send(row(6uL))
             assertEquals(ClientEvent.Ack(6uL), connection.expect<ClientEvent.Ack>())
             assertEquals(4uL, harness.store.cursors.readUpToSeq)
-            assertEquals(
-                listOf(SessionEvent.ReadFrontier(4uL)),
-                harness.events.filterIsInstance<SessionEvent.ReadFrontier>(),
-            )
+            // hello_ack's, and each read_state's, moved or not; the owner's 3 moved nothing.
+            assertEquals(listOf(0uL, 4uL, 4uL), harness.readFrontiers())
             harness.session.markRead(100uL)
             assertEquals(ClientEvent.ReadState(PROFILE, 6uL), connection.expect<ClientEvent.ReadState>())
             assertEquals(6uL, harness.store.cursors.readUpToSeq)

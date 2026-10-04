@@ -14,16 +14,16 @@ fun interface ChatShowing {
 
 /**
  * What posts an approval card's heads-up notification while its chat is off screen (design section 8.4, D23;
- * section 10): the notifications change (A4) brings the app's, and until then the app's posts none. It is
- * handed the card as the session typed it, its kind, words and time to live, never its route: the token stays
- * in the session.
+ * section 10): the app's Notifications, the one owner a push's approval posts through too. It is handed the
+ * card as the session typed it, its kind, words and time to live, never its route: the token stays in the
+ * session.
  */
 interface ApprovalNotifier {
     /** Whether an approval of [instanceId] can be notified now: its channel, its permission. */
     fun canNotify(instanceId: String): Boolean
 
     /** Posts [approval]'s notification, which the notified set has just taken. */
-    fun notify(
+    suspend fun notify(
         instanceId: String,
         approval: SessionEvent.Approval,
     )

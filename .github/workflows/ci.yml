@@ -270,7 +270,7 @@ jobs:
         run: |
           ./gradlew --warning-mode fail --console=plain \
             :feature-onboarding:assembleDebugAndroidTest :feature-chats:assembleDebugAndroidTest \
-            :feature-chat:assembleDebugAndroidTest
+            :feature-chat:assembleDebugAndroidTest :push:assembleDebugAndroidTest
 
       # The action runs the pre-launch script once the AVD is made, before the emulator starts, and the
       # script line by line, each after the emulator booted; each marks how far it got. A cold boot can
@@ -298,6 +298,7 @@ jobs:
             ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }}
             ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
             ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }}
+            ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest
 
       # How far the first run got: booted and settled, made its AVD but never booted or never settled
       # (no-boot), or failed before the AVD was made (no-avd). Only no-boot runs the tests once more.
@@ -335,6 +336,7 @@ jobs:
             ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }}
             ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
             ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }}
+            ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest
 
       - name: Upload the test reports
         if: always()

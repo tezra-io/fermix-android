@@ -49,7 +49,7 @@ class InstanceRecordTest {
         )
 
     @Test
-    fun `the record's fields are design section 9_1's and section 13_7's This phone, and none is a secret`() {
+    fun `the record's fields are sections 9_1's, 13_7's This phone and 10's full pull, and none is a secret`() {
         val names = serializer<Instance>().descriptor.elementNames.toList()
         val expected =
             listOf(
@@ -69,6 +69,7 @@ class InstanceRecordTest {
                 "caps",
                 "notifications_enabled",
                 "fcm_registered_at",
+                "history_pull_due",
                 "device_name",
                 "paired_at",
                 "last_candidate",

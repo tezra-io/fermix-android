@@ -28,6 +28,7 @@ attest/                 the device key: the hardware gate, the Keystore key and 
 core-session/           the pairing ceremony, and one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
 design/                 the design language as code, its fonts, previews and screenshot references (io.tezra.fermix.design)
 data/                   the instance records, each profile's database and media cache, the launch check (io.tezra.fermix.data)
+push/                   a push's envelope, keys, trial decryption and plaintext, and its diagnostics lines (io.tezra.fermix.push)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 policy/                 permissions.txt, the permissions the release APK requests, exactly
 scripts/                verify_protocol_contract.sh, check_release_policy.sh
@@ -190,7 +191,9 @@ after core-transport's backoff, the state no longer `Connected` through the wait
 them); after 2,880 races in one run the session is `Suspended` until
 `resume()`. `close()` ends it for good and returns only once its run has stopped and every request made
 before it, `send`, `retry`, `stop`, `markRead` and `remove`, which run in their caller's coroutine, has returned;
-one made after it is refused, so a closed session touches its store no more. The outbox lives in the app's `SessionStore`, which one session at a time owns: a
+one made after it is refused, so a closed session touches its store no more. An event such a request says,
+`markRead`'s read frontier or an approval's answer, waits while 256 events wait for the app, and lets go
+as the session ends, so a close never waits on a collector the app stopped first. The outbox lives in the app's `SessionStore`, which one session at a time owns: a
 request is persisted, then sent; `accepted` clears it and `error{client_msg_id}` keeps it, failed,
 until `remove()` takes it out; one persisted while the drain reads the store is sent after what the
 drain read, and none goes twice on one connection, accepted or not. "Run again" is a new request
@@ -519,6 +522,36 @@ its value, the files of an instance removed in this process are refused until a 
 a reader that never lets go fails the removal after the wait, and Room's own close, of a flow and of a
 suspend call. The app's backup posture, `allowBackup="false"` with data extraction rules and
 full-backup rules that exclude every domain, is checked in the release APK itself by the `policy` job.
+
+`push` (`io.tezra.fermix.push`) is the phone's side of a push before anything is shown (design section
+10), an Android library with no Firebase in it and no `android.*` but what its records bring. `PushEnvelope`
+reads FCM's `data` map, `{"v":"2","n","c"}`, within its bounds: the whole map at most 4,096 bytes, `v`
+"2", a 12-byte nonce and the 2,064 bytes of a sealed 2,048-byte bucket, in standard base64, and refuses
+anything else by the field's name. `PushKeys.derive` is `HKDF-SHA256(salt: push_salt, ikm: X25519(device,
+gateway), info "fermix-push-v1", L 32)`, on core-noise's RFC 5869 `hkdfSha256`, and `PushCipher.open`
+ChaCha20-Poly1305 with no associated data, a tag that does not verify being no error but another key's
+push. `TrialDecrypt` tries each instance's push key in record order, one Keystore agreement each through
+attest's `DeviceKeyFacade`, until a tag verifies; the instance it names, and with it the notification's
+channel, shortcut and tap, is the record whose key verified, never a field of the plaintext, and a key the
+Keystore lost is logged by the instance's id and passed over. It is bounded by the records it is handed and
+by its caller's budget: once its coroutine is cancelled it starts no further agreement. `readPushPlaintext` takes the bucket apart (the
+JSON, one 0x80 byte, then zeros) and types its `kind`: `message` (`profile_id`, `server_seq` from 1 to what
+the store's signed 64-bit column keeps, `preview_text` or null), `approval` (`approval_id`, `expires_at`), `turn_failed` (`turn_id`, `code`), and
+any other kind or none as `Unknown`; a field is shown as text at most. `registrationStep` decides what a
+connection sends, `push_register` while a daemon that pushes through FCM may show its notifications and
+none was sent since the last token or 7 days ago, `push_unregister` once they cannot show. `PushLog` keeps
+the last 200 push lines, `decision[:instance] [detail]`, with no token, key, salt or word of a plaintext, and
+the lines of a push no key opened in a ring of their own, so that anyone who floods the token with pushes
+never pushes out what became of a paired Fermix's.
+The JVM tests replay `contracts/mobile/push_vectors.json`, which is protocol v1's APNs vector only: its
+agreement, push key and sealed plaintext gate the derivation and the cipher. The FCM cases, one per kind,
+are built in the tests from that vector's keys, salt and nonce (`ProvisionalFcmCasesTest`) until engine
+stage D1's export brings its own. The instrumented test generates an X25519 agree key in the device's
+AndroidKeyStore, as a pairing does, and opens a push sealed for it at test time, behind a record whose key
+the Keystore does not hold, and again with the screen locked behind a PIN set for the test and cleared after
+it, the key made while unlocked; what an emulator cannot show is the owner's device gate (onboarding section
+6): a phone's TEE or StrongBox doing the agreement, locked or not, its time, FCM's delivery to a phone asleep
+and locked, and attestation to Google's root.
 
 `feature-onboarding` (`io.tezra.fermix.onboarding`) is design section 13.3, Welcome to Notifications, as
 Compose screens over one ViewModel. Each screen is a composable of its state and its callbacks, with no
@@ -1143,9 +1176,9 @@ turns end with their session); and that counts the turns running per instance fo
 known already; a row the chat on screen lists is shown there (`OnScreenChats`: a Chat screen reports the
 newest row its list holds while it is resumed and focused, and the answer waits for the list to take the
 row, at most 3 s, so the row is persisted, shown, then acked); any other is put into the notified set and
-posted (`RowNotifier`), or known already when the set held it. Until the notifications change comes
-nothing can be posted, so a row of a chat not on screen is not announced and never acked, its push still
-to come (tla/specs/mobile_push, PUSH-2), and the unread count stays 0. Out of sight for 5 s every session is suspended, by one timer that a return within
+posted (`RowNotifier`), or known already when the set held it; a row that cannot be posted, its
+instance's notifications off or unable to show, is not announced and never acked, its push still to come
+(tla/specs/mobile_push, PUSH-2). Out of sight for 5 s every session is suspended, by one timer that a return within
 them cancels; back in sight each resumes, and one that ended reconnects, unless it was revoked or its
 identity changed, which wait for the owner. A pairing's approved session is taken over as its record is
 stored (`adopt`), so no second socket opens; unpairing sends `unpair`, waits up to 5 s for the daemon to
@@ -1185,7 +1218,68 @@ session has an upload in flight (the supervisor's `uploading`, from each session
 section 12.5's `shortService` for an upload, "Sending to {host}", which ends itself when no upload is in
 flight, the app comes back, or the platform's timeout comes (`uploadShown`); out of sight past the grace, the
 supervisor keeps such a session up until its upload ends or `UPLOAD_HOLD_MILLIS` (165 s, inside the service's
-three minutes) pass, then puts it aside with the rest, its item left in the outbox for the next connection. The app's tests run on
+three minutes) pass, then puts it aside with the rest, its item left in the outbox for the next connection.
+
+The app's notifications have one owner, `Notifications` (design section 10, "Lifecycle on the phone"),
+behind the session's seams, `RowNotifier` and `ApprovalNotifier`, and a push's. A conversation, one per
+(instance, profile), has one `MessagingStyle` notification, rebuilt from its notified set each time and
+posted on the conversation's channel with its shortcut (`ConversationSync`'s ids) and a tap that opens its
+chat, an explicit, immutable intent of the app's own activity. A post that adds a row alerts; the read
+frontier, which core-session says on every `hello_ack` and `read_state` and whenever this phone's own read
+moves it, takes the rows it covers from the set, cancels the notification once the set is empty, and
+rebuilds one still showing without alerting (`setOnlyAlertOnce`), a dismissed one staying dismissed; a
+rebuild leaves out the rows at or below the stored frontier too, as the phone stores its own read before the
+session says it. A row's words come from the
+cache, or from the preview its push carried while the process lives, or are "New message"; with previews
+off it is the instance's name over "New message", and while the app lock is on it is "New message" alone,
+no word of a message written into it whatever the previews say (`messagesNotification`, the pure builder the
+tests read); the generic notification is "New message" alone then too. Turning the app lock on or off, or a
+chat's previews switch, rebuilds each conversation's notification still showing without alerting
+(`restyled`), so none keeps words they now keep out. An approval's notification is keyed by its id and times out at its expiry
+(`setTimeoutAfter`), and one whose push comes after it says "An approval on {instance} expired"; a failed
+turn's is keyed by its turn. An id is one character or more, as the wire and the notified set take it, so
+one of spaces is an id like any other. The session's approval cards post through the same owner, and the
+notified set lets a push and its socket row alert once between them, whichever comes first; a card the
+daemon resolved (`approval_resolved`), or one closed while the phone was away, takes its notification with
+it, cleared by its id. The services read the records through one collector made with them
+(`AppServices.records`), which the notifications and the chats' followers share: a DataStore collector that
+started while a write was under way was seen to miss that write for good. `FermixMessagingService`
+is FCM's side, not exported. A message's `notification` block is never shown, on two paths: the manifest
+turns Firebase's notification delegation off (`firebase_messaging_notification_delegation_enabled`), so
+Play services never shows the block as the app without calling it, and the service takes the block out of
+FCM's intent before Firebase's own code could show it out of sight, past the app lock (`handleIntent`). A
+daemon sends none, and one that comes is from whoever learned the token. Firebase reads the flag once per
+install, keeping Play services as the delegate of an install that ran without it, so the flag must never
+be dropped, even for one build. `onMessageReceived` hands the `data` map to `PushInbox` and returns
+once it is posted, the trial bounded by `PUSH_DECRYPT_BUDGET_MILLIS` (5 s of FCM's ten) and run off the main thread,
+past which the generic notification goes up; a push no key opens, an unreadable plaintext, a kind the
+app does not know or a profile other than main posts the generic notification, never nothing, and a row
+read already or a chat on screen posts nothing. A push no key opens posts nothing, its line
+`suppressed:off unopened`, while no Fermix wants pushes (none pushes through FCM with its notifications
+showing): FCM's priority is then nobody's to keep, and anyone who learns the token can send one. Each push leaves lines in the push diagnostics ring and the log (`FermixPush`), with
+no content: `received`, `refused`, `decrypted:{instance}`, `posted`, `suppressed:{set|read|on_screen|off}`,
+`expired`, `generic`, `deleted`, and `timed`, the decrypt-to-notify time in milliseconds.
+`onDeletedMessages` marks every record's full pull (`Instance.historyPullDue`), so its next session with an
+empty cache pulls every row from the first, and the flag clears once a connection of a session opened with
+it has reconciled (`SessionEvent.Reconciled.pulledInFull`); a session already open when FCM dropped them
+leaves it for the next. The trial tries the records whose daemon pushes through FCM, and whether a push may
+notify is read from the record whose key opened it.
+`PushRegistrations` is the Instance screen's and onboarding's `NotificationsPolicy`: once a connection has
+reconciled, when the app comes into sight, when the switch is turned or onboarding's step 7 answered, and
+when FCM hands a new token, each instance's `registrationStep` runs over its live session, writing the
+time of a `push_register` to the record and clearing it on `push_unregister`; the switch's step reads the
+record as written back, so a quick double toggle takes the last answer. The switch does not unblock a
+channel the owner blocked in the system's settings, which only the owner can: while it is blocked, or the
+permission denied, the step unregisters and the switch still reads on. No screen shows the push diagnostics
+ring yet; its lines go to the log as they are made. The token is never written or
+logged: `FcmToken` holds it in memory, asked for with `FirebaseMessaging.register` and handed back to the
+service's `onRegistered` (firebase-messaging 25 deprecates `getToken` and `onNewToken`), and a token that
+changes, or comes unasked, clears the time of every record whose daemon is to push (`pushWanted`), so that
+each is registered again; a record owed a `push_unregister` keeps its time, so the unregister still goes. Firebase
+makes no token at launch (`firebase_messaging_auto_init_enabled` false), so a phone whose notifications
+are all off never reaches FCM.
+
+The app's tests run on
 Robolectric through the application convention, over the app's own services and the bundled SQLite: the
 supervisor's one session per instance, its grace and its timer, a return within the grace never
 suspending a session, nothing opened out of sight, a removal with the session closed before it runs and
@@ -1208,7 +1302,31 @@ service started as the app leaves with an upload in flight and not otherwise, na
 ending itself when the upload ends, the app comes back or the platform's timeout comes (`onTimeout`). The
 app's tests that need an upload run under `UploadingApplication`, whose services take each session's upload
 from the test; the upload service's run on Robolectric, not on a device, as it is a service the app starts
-and stops with no window of its own.
+and stops with no window of its own. The notifications' tests post into Robolectric's notification manager: a push
+from the second of two daemons opened and posted on its conversation's channel with its shortcut, its
+words and its chat's immutable tap; a row the notified set holds, from an earlier push or its socket row,
+posting nothing, a row read before its push and a chat on screen likewise, and a frontier that empties the
+set cancelling; an unknown kind, an unreadable plaintext, a profile other than main, a push no key opens,
+one outside the envelope's bounds and a trial whose Keystore hangs past the budget each posting the generic
+notification, the last at the budget on the virtual clock, and a push no key opens posting nothing while no
+Fermix wants pushes; an approval's or a failed turn's id of spaces notified under that id; the app lock's
+"New message" with no word of the message anywhere in what is posted; an approval's timeout and its late
+copy, a failed turn by its turn, and `onDeletedMessages`' full pull; the session's side of the same owner
+(`NotificationsTest`): a socket row posted by the app itself before its push, which then posts nothing, a
+live approval off screen, one whose id is spaces, a row read on the phone left out of the next row's
+notification, and a rebuild after a read, or as the app lock comes on, that alerts nobody; a read frontier
+through `SessionEvents` rebuilding and then cancelling the conversation's notification, a reconciled
+connection dropping the expired ids, and a resolved or closed approval's notification cleared; the
+registrations over recorded sends, none without `POST_NOTIFICATIONS` or with the channel blocked, an
+unregister on coming into sight, a renewal after 7 days and on a new token, an unregister a new token does
+not cancel, and the full pull's flag left to the session opened to make it, which the opener's parts carry
+(`AppSessions.sessionParts`); `FermixMessagingService` itself under `SoftKeysApplication`, whose services
+hold the device key in software in place of the Keystore, a `notification` block shown by no one while the
+app is out of sight and locked, the manifest's delegation flag off, the app lock and a chat's previews
+rewriting the notification showing, and the registrations reading the permission and the channel as the
+notifications do; and `GoogleServicesPlaceholderTest`, which refuses an `app/google-services.json` that is
+not the placeholder's. The lock's check reads every string the posted notification carries, through its
+parcel, and first finds a preview there with the lock off.
 
 ## Build and check
 
@@ -1296,10 +1414,14 @@ Where CI departs from CI/CD design section 3, for the owner to settle:
 ## Instrumented tests
 
 A `fermix.android.library.compose` module's `src/androidTest` runs on an emulator or a phone, with
-AndroidX Test's runner, Compose's test rule and Espresso 3.7 (Compose's own 3.5 cannot start on API 36).
-`check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the tests to every
-gate; running them needs a device. Today `feature-onboarding`, `feature-chats` and `feature-chat` have
-them, and they need no daemon and no camera. `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
+AndroidX Test's runner, Compose's test rule and Espresso 3.7 (Compose's own 3.5 cannot start on API 36);
+a `fermix.android.library` module that has a `src/androidTest` gets AndroidX Test's runner and its JUnit 4
+runner class. `check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the
+tests to every gate; running them needs a device. Today `feature-onboarding`, `feature-chats`,
+`feature-chat` and `push` have them, and they need no daemon and no camera. `push`'s `KeystorePushTest`
+generates an X25519 agree key in the device's AndroidKeyStore and opens a push sealed for it at test time,
+once more with the screen locked behind a PIN it sets and clears again, and logs the trial's time under its
+tag, an emulator's and not a phone's TEE. `OnboardingTestActivity` shows the entries in `NavDisplay` over a `TestRig` kept in the
 activity's ViewModel store, which holds the fake pairing control (`FakeStarter`, from `src/sharedTest`,
 which the JVM tests compile too), the gate's answer, the network facts, a stub preview that reads what a
 test hands it and reports a torch, an `ActivityResultRegistry` that answers the camera prompt, and a fake
@@ -1434,7 +1556,8 @@ ANDROID_SERIAL="$serial" ./gradlew :feature-onboarding:connectedDebugAndroidTest
 ANDROID_SERIAL="$serial" ./gradlew :feature-chats:connectedDebugAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chats.FoldingPhone || exit 1
 ANDROID_SERIAL="$serial" ./gradlew :feature-chat:connectedDebugAndroidTest \
-  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chat.FoldingPhone
+  -Pandroid.testInstrumentationRunnerArguments.notAnnotation=io.tezra.fermix.chat.FoldingPhone || exit 1
+ANDROID_SERIAL="$serial" ./gradlew :push:connectedDebugAndroidTest
 ```
 
 `-feature -QuickbootFileBacked` keeps the guest's 2 GB of RAM out of a file: a host that pins
@@ -1470,6 +1593,22 @@ only when the AVD was made and the emulator never booted or never settled do the
 and a setup that failed before the AVD existed is not retried. The job's summary
 says which happened, or that the tests never ran, and whether KVM was open, and the reports are
 uploaded. `gate` requires it.
+
+## Firebase
+
+The Google services Gradle plugin reads the app's Firebase configuration, `google-services.json`, into
+resources. The repository holds a placeholder, `app/google-services.json`, for a project named
+`fermix-placeholder` with no real key, so the app builds and its tests run anywhere; a build with it asks
+FCM for a token and gets none, logs so, and registers nothing. Push needs the owner's Firebase project
+(`MILESTONE_51_ANDROID_APP_DEVELOPER_ONBOARDING.md` section 2.4): its Android app is registered with the
+package name `io.tezra.fermix` and the signing certificates' SHA-256, and its `google-services.json` is
+downloaded from the Firebase console. Put that file at `app/src/debug/google-services.json` for your debug
+builds, or `app/src/release/google-services.json` for a release, where the plugin looks before
+`app/google-services.json`; `.gitignore` keeps both out of the tree. Never put it over
+`app/google-services.json`, Firebase's default path: that file is tracked, and `GoogleServicesPlaceholderTest`
+fails the build on one that is not the placeholder's. The file is not a secret, but it is
+the owner's project, so it never enters the repository. The service account a daemon sends with is a
+secret and lives on the daemon alone.
 
 ## Developer keystore
 

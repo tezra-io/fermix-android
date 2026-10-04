@@ -62,6 +62,42 @@
             android:name=".UploadService"
             android:exported="false"
             android:foregroundServiceType="shortService" />
+
+        <!--
+          FCM's data messages, new tokens and dropped messages (design section 10). Not exported: Firebase's own
+          receiver, which holds com.google.android.c2dm.permission.SEND, starts it with an explicit intent.
+        -->
+        <service
+            android:name=".FermixMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!--
+          No token is made at launch: the first is asked for when a daemon is to be registered, so a phone
+          whose notifications are all off never reaches FCM. The token is asked for with
+          FirebaseMessaging.register and comes to the service's onRegistered, the API that replaces the
+          deprecated getToken and onNewToken, which Firebase enables only with the installation-id flag.
+        -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
+        <meta-data
+            android:name="firebase_analytics_collection_enabled"
+            android:value="false" />
+        <!--
+          Firebase otherwise makes Play services the app's notification delegate, which shows an FCM message's
+          notification block as the app without ever calling it: past the app lock, PushInbox and handleIntent's
+          stripping (design section 10, "the app always renders"). FermixMessagingServiceTest reads it.
+        -->
+        <meta-data
+            android:name="firebase_messaging_notification_delegation_enabled"
+            android:value="false" />
     </application>
 
 </manifest>

@@ -242,7 +242,8 @@ internal class Harness(
 
     /**
      * Opens the session in [scope], the test's background scope unless a test ends its own, with
-     * [lastSuccessful] as the candidate an earlier session last reached, a fetch's file written on [io].
+     * [lastSuccessful] as the candidate an earlier session last reached, a fetch's file written on [io], and
+     * an empty cache's first pull in full when [fullPull] says so.
      */
     fun open(
         candidates: List<Candidate> = listOf(TAILNET),
@@ -250,6 +251,7 @@ internal class Harness(
         lastSuccessful: Candidate? = null,
         // A fetch's writes on the test's own scheduler, so its virtual clock never runs on while they do.
         io: CoroutineDispatcher = StandardTestDispatcher(test.testScheduler),
+        fullPull: Boolean = false,
     ): Session {
         val parts =
             SessionParts(
@@ -262,6 +264,7 @@ internal class Harness(
                 clock = test.testScheduler.timeSource,
                 random = Random(SEED),
                 io = io,
+                fullPull = fullPull,
             )
         val instance = PairedInstance("device-1", PROFILE, daemon.gatewayKey.publicKey)
         session = Session.open(instance, candidates, parts, scope, lastSuccessful)
@@ -286,6 +289,9 @@ internal class Harness(
     }
 
     fun turnEffects(): List<TurnEffect> = events.filterIsInstance<SessionEvent.Turn>().map { it.effect }
+
+    /** Each read frontier the session said, in order. */
+    fun readFrontiers(): List<ULong> = events.filterIsInstance<SessionEvent.ReadFrontier>().map { it.readUpToSeq }
 
     fun diagnostics(): List<Diagnostic> = session.diagnostics.value
 

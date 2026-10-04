@@ -19,7 +19,9 @@ import kotlin.time.TimeMark
  * it, the instance records, the network facts behind section 5.2's failures, the dispatcher a ceremony
  * runs on (never the main thread), [pairingWait], where onboarding says what the pairing-wait
  * notification of section 12.5 shows while Verify waits, [handover], which takes the approved pairing's
- * session as the record is stored, and [now], the wall clock a record's "Paired since" is read from.
+ * session as the record is stored, [notifications], which acts on step 7's answer once the record holds it
+ * (the channel and `push_register`, or `push_unregister`, design section 10), and [now], the wall clock a
+ * record's "Paired since" is read from.
  */
 data class OnboardingParts(
     val gate: () -> GateResult,
@@ -30,6 +32,7 @@ data class OnboardingParts(
     val pairingDispatcher: CoroutineDispatcher,
     val pairingWait: MutableStateFlow<PairingWait?>,
     val handover: SessionHandover,
+    val notifications: suspend (record: Instance, on: Boolean) -> Unit,
     val now: () -> Long = System::currentTimeMillis,
 )
 

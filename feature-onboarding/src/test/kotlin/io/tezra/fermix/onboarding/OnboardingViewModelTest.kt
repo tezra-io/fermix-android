@@ -77,6 +77,9 @@ class OnboardingViewModelTest {
         val wait = MutableStateFlow<PairingWait?>(null)
         val store = instanceStore(File(directory, "rig${rigs++}"), scope.backgroundScope)
         val handover = FakeHandover(store.instances)
+
+        /** What step 7's answers asked of the app's notifications: each record's id, and on or off. */
+        val answered = mutableListOf<Pair<String, Boolean>>()
         private val parts =
             OnboardingParts(
                 gate = { gate },
@@ -87,6 +90,7 @@ class OnboardingViewModelTest {
                 pairingDispatcher = main,
                 pairingWait = wait,
                 handover = handover,
+                notifications = { record, on -> answered += record.id to on },
                 now = { PAIRED_AT },
             )
 
@@ -431,6 +435,8 @@ class OnboardingViewModelTest {
                     .single()
                     .notificationsEnabled,
             )
+            // The grant reaches the app's notifications with the record that says it: the first push_register.
+            assertEquals(listOf(stored.id to true), rig.answered)
         }
 
     @Test
@@ -445,6 +451,8 @@ class OnboardingViewModelTest {
             assertFalse(checkNotNull(rig.model.ui.value.paired).offerNotifications)
             rig.model.continueFromPaired()
             assertEquals(emptyList<OnboardingKey>(), rig.model.stack.value)
+            // Step 7 never showed, so the system's prompt was never asked and nothing reached the app's notifications.
+            assertEquals(emptyList<Pair<String, Boolean>>(), rig.answered)
         }
 
     @Test

@@ -65,19 +65,28 @@ internal class AppSessions(
         scope: CoroutineScope,
     ): Session {
         if (instance.candidates.isEmpty()) throw SessionUnavailable("${instance.id} has no route to race")
-        val key = staticKey(instance.keyAlias)
-        val database = mainProfile(instance.id)
-        val parts =
-            SessionParts(
-                appVersion = appVersion(),
-                staticKey = key,
-                dialer = WebSocketDialer(connector, instance.port, PinnedTrust(instance.tlsFingerprint())),
-                store = RoomSessionStore(database, databases.stagedUploads(instance.id, MAIN_PROFILE)),
-                announcer = announcer(instance.id, lazyOf(database)),
-                network = network,
-            )
+        val parts = sessionParts(instance)
         val paired = PairedInstance(instance.deviceId, MAIN_PROFILE, instance.gatewayPublicKey())
         return Session.open(paired, instance.candidates, parts, scope, lastSuccessful = instance.lastCandidate)
+    }
+
+    /**
+     * What [instance]'s session runs on: its Keystore key, its pinned WebSocket, its main profile's store and
+     * announcer, and the full pull FCM's dropped messages asked for. It reads the Keystore and opens the database.
+     */
+    internal fun sessionParts(instance: Instance): SessionParts {
+        val key = staticKey(instance.keyAlias)
+        val database = mainProfile(instance.id)
+        return SessionParts(
+            appVersion = appVersion(),
+            staticKey = key,
+            dialer = WebSocketDialer(connector, instance.port, PinnedTrust(instance.tlsFingerprint())),
+            store = RoomSessionStore(database, databases.stagedUploads(instance.id, MAIN_PROFILE)),
+            announcer = announcer(instance.id, lazyOf(database)),
+            network = network,
+            // FCM dropped pushes for this phone: an empty cache pulls every row, not the newest page.
+            fullPull = instance.historyPullDue,
+        )
     }
 
     /**
