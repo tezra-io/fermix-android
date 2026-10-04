@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import io.tezra.fermix.design.FermixType
@@ -239,7 +238,8 @@ internal fun MicRationale(
 
 /**
  * A picked item's thumbnail for the tray, at [TRAY_PX]: a provider's from its own thumbnail, a file the chat made
- * decoded; none for an item that draws none (a document), logged.
+ * decoded; none for an item that draws none (a document), logged. An item the chat may not read as the tray holds
+ * it (readableUri) is a SecurityException: the tray holds none such.
  */
 internal suspend fun trayThumbnail(
     context: Context,
@@ -249,7 +249,7 @@ internal suspend fun trayThumbnail(
     val drawn = picked.kind == PickedKind.IMAGE || picked.kind == PickedKind.VIDEO
     if (!drawn) return null
     return withContext(io) {
-        val uri = picked.uri.toUri()
+        val uri = readableUri(context, picked.uri, landing = null)
         try {
             val bitmap =
                 if (uri.scheme == "file") {

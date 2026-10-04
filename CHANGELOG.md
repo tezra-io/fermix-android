@@ -132,4 +132,10 @@ whose version matches `version.properties`.
   a voice note: slide left to cancel, up to lock; a call, leaving the app or the system taking the touch
   keeps it as a draft, which only a tap sends, and a rotation mid-hold locks it. A draft stays with its
   chat until it is sent or discarded, even after the app closes. Notes play in the chat with their
-  transcript and their own waveform. The app now asks for the microphone (`RECORD_AUDIO`).
+  transcript and their own waveform. The app now asks for the microphone (`RECORD_AUDIO`). Nothing a
+  computer names and nothing another app hands over reaches the app's own files: a document opened, shared
+  or saved is copied only into the chat's own folder for it, whatever the computer calls it, and Photos,
+  Files, Paste and the keyboard take another app's content only, never a file of the app's or its own. A
+  name or a type the phone cannot take never stops the app: an image the computer says is a document is
+  saved into Download/Fermix, and a save the phone refuses, the 33rd file of one name in a folder among
+  them, is let go. Pasting a pairing link never opens a file another app put on the clipboard.

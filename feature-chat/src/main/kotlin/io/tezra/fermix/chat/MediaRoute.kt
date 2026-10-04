@@ -26,12 +26,6 @@ import java.io.IOException
 /** The tag what the phone refuses of a blob is logged under. */
 private const val MEDIA_TAG = "FermixChat"
 
-/** Where a blob is copied for another app to open or take, under the cache, as the FileProvider serves it. */
-private const val SHARED_DIRECTORY = "shared"
-
-/** The most blobs kept copied for other apps at once; the oldest goes as another is copied. */
-private const val MAX_SHARED = 8
-
 /** Where Save puts an image (design section 13.7, "Save (Pictures/Fermix)") and a document. */
 private const val SAVED_IMAGES = "Pictures/Fermix"
 private const val SAVED_DOCUMENTS = "Download/Fermix"
@@ -120,7 +114,10 @@ private class Handed(
         }
     }
 
-    /** Save: [media] written into the phone's shared Pictures/Fermix or Download/Fermix; "Saved" once it is. */
+    /**
+     * Save: [media] written into the phone's shared Pictures/Fermix or Download/Fermix; "Saved" once it is. One the
+     * phone cannot write, or whose type or name the media store refuses ([storeCall]), is logged.
+     */
     fun saved(media: ShownMedia) {
         scope.launch {
             val into = copy(media) ?: return@launch
@@ -139,7 +136,7 @@ private class Handed(
     private suspend fun copy(media: ShownMedia): File? {
         val outcome =
             try {
-                val into = withContext(io) { sharedFile(context, media) }
+                val into = withContext(io) { sharedFile(context.cacheDir, media) }
                 model.blobs.file(media, into)
             } catch (refused: IOException) {
                 Log.w(MEDIA_TAG, "a blob could not be copied for another app", refused)
@@ -153,38 +150,6 @@ private class Handed(
         Toast.makeText(context, words, Toast.LENGTH_SHORT).show()
     }
 }
-
-/**
- * A file under the cache's shared directory named as [media] is, in a directory of its cache name, the oldest
- * copies past [MAX_SHARED] deleted first; run off the main thread.
- */
-private fun sharedFile(
-    context: Context,
-    media: ShownMedia,
-): File {
-    val shared = File(context.cacheDir, SHARED_DIRECTORY)
-    val held = shared.listFiles().orEmpty().sortedBy { it.lastModified() }
-    held.dropLast(MAX_SHARED - 1).forEach { it.deleteRecursively() }
-    val directory = File(shared, media.cacheName.take(CACHE_NAME_CHARS))
-    if (!directory.isDirectory && !directory.mkdirs()) throw IOException("$directory could not be made")
-    return File(directory, fileNameOf(media))
-}
-
-/** The characters of a cache name a shared copy's directory keeps: enough to tell two blobs apart. */
-private const val CACHE_NAME_CHARS = 16
-
-/** [media]'s name as a file of its own, with no directory in it; [UNNAMED_FILE] when it has none. */
-internal fun fileNameOf(media: ShownMedia): String {
-    val name =
-        media.name
-            ?.substringAfterLast('/')
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() && it != "." && it != ".." }
-    return name ?: UNNAMED_FILE
-}
-
-/** The file name a blob that names none is shared and saved under. */
-private const val UNNAMED_FILE = "file"
 
 /** The chooser over the apps that open [uri], as [media]'s type, read-only. */
 internal fun openIntent(
@@ -212,15 +177,16 @@ private fun shareIntent(
 }
 
 /**
- * [file], as [media], written into the phone's shared storage: an image into Pictures/Fermix, anything else into
- * Download/Fermix, pending until it is whole. Whether it was; one that could not be is deleted again.
+ * [file], as [media], written into the phone's shared storage: an image into Pictures/Fermix ([savesIntoPictures]),
+ * anything else into Download/Fermix, pending until it is whole. Whether it was; one that could not be is deleted
+ * again. The type and the name are the daemon's, which the media store can refuse ([storeCall]): an IOException.
  */
 private fun savedFile(
     context: Context,
     file: File,
     media: ShownMedia,
 ): Boolean {
-    val image = media.shape == MediaShape.IMAGE
+    val image = savesIntoPictures(media)
     val collection =
         if (image) {
             MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -235,17 +201,40 @@ private fun savedFile(
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
     val resolver = context.contentResolver
-    val uri = resolver.insert(collection, values) ?: throw IOException("the shared storage took no new entry")
+    val uri = storeCall { resolver.insert(collection, values) } ?: throw IOException("the shared storage took no entry")
     var published = false
     try {
         val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-        published = written(resolver, uri, file) && resolver.update(uri, done, null, null) > 0
+        published = written(resolver, uri, file) && storeCall { resolver.update(uri, done, null, null) } > 0
     } finally {
         // An entry left pending, a write that threw among them, is deleted, so no half file shows in Pictures.
         if (!published) resolver.delete(uri, null, null)
     }
     return published
 }
+
+/**
+ * [call], the media store asked to take or publish an entry, its refusal of the daemon's type or name an IOException:
+ * an IllegalStateException as it publishes a name it can number no further ("report (32).pdf"), which an agent that
+ * names each export alike reaches, and an IllegalArgumentException for a type its collection takes not, which
+ * [savesIntoPictures] and [mediaTypeOf] keep from it, so no test reaches that catch: it is there in depth. Only these
+ * calls are wrapped, which suspend nothing, so a coroutine's cancellation, an IllegalStateException too, passes.
+ */
+private inline fun <T> storeCall(call: () -> T): T =
+    try {
+        call()
+    } catch (refused: IllegalStateException) {
+        throw IOException("the shared storage refused a blob's name", refused)
+    } catch (refused: IllegalArgumentException) {
+        throw IOException("the shared storage refused a blob's type or name", refused)
+    }
+
+/**
+ * Whether Save puts [media] into Pictures/Fermix: an image whose type is an image's, which alone the media store's
+ * images take. A row's kind and type are the daemon's, and may disagree; anything else goes to Download/Fermix.
+ */
+internal fun savesIntoPictures(media: ShownMedia): Boolean =
+    media.shape == MediaShape.IMAGE && media.mime.startsWith("image/")
 
 /** [file]'s bytes into the entry [uri]; whether [resolver] opened it. */
 private fun written(

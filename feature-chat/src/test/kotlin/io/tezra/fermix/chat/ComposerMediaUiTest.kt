@@ -57,7 +57,9 @@ class ComposerMediaUiTest {
     @Test
     fun `an image the keyboard commits goes to the tray, and the field keeps its words`() {
         val store = FakeChatStore()
-        val parts = fakeParts(sample(), FakeChatSession(store), store, background)
+        // The landing copy's file work runs on the main looper, which Compose's idling drains, never on a thread
+        // of its own that the test would have to wait for.
+        val parts = fakeParts(sample(), FakeChatSession(store), store, background).copy(io = Dispatchers.Main)
         // Robolectric's ImageDecoder decodes no file, so the copy is described as one that draws no thumbnail.
         (parts.media as FakePipeline).describe = { uri, from ->
             Picked(uri, uri, PickedKind.FILE, "image/png", uri.substringAfterLast('/'), 1_000L, from)

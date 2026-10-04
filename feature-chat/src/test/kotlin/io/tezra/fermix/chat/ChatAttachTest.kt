@@ -178,7 +178,7 @@ class ChatAttachTest {
             )
             assertEquals(2, rig.ui.picked.size)
             assertTrue(rig.scratches.none { it.exists() }, "a scratch file was left")
-            assertTrue("An attachment could not be read: its grant is gone" in rig.log.lines.value)
+            assertTrue("An attachment was refused, or its grant is gone" in rig.log.lines.value)
         }
 
     @Test
@@ -268,14 +268,14 @@ class ChatAttachTest {
         }
 
     @Test
-    fun `a paste with nothing on the clipboard adds nothing and the log says so`() =
+    fun `a paste the clipboard hands nothing adds nothing and the log says so`() =
         runTest(main) {
             val rig = Rig(this)
             runCurrent()
             rig.model.attach.paste()
             runCurrent()
             assertTrue(rig.ui.picked.isEmpty())
-            assertEquals(listOf("Paste found no image or file on the clipboard"), rig.log.lines.value)
+            assertEquals(listOf("Paste took nothing from the clipboard"), rig.log.lines.value)
         }
 
     @Test

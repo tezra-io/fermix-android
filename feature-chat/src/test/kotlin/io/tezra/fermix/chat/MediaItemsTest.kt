@@ -212,11 +212,58 @@ class MediaItemsTest {
     }
 
     @Test
-    fun `a blob handed to another app is named as itself, never with a directory in its name`() {
-        fun named(name: String?) = fileNameOf(ShownMedia("r", null, MediaShape.DOCUMENT, "x/y", 1L, name))
-        assertEquals("report.pdf", named("report.pdf"))
-        assertEquals("passwd", named("../../etc/passwd"))
-        assertEquals("file", named(null))
-        assertEquals("file", named(".."))
+    fun `Save puts a blob in Pictures only when it is drawn as an image and its type is an image's`() {
+        val rows =
+            listOf(
+                MediaShape.IMAGE to "image/png" to true,
+                MediaShape.IMAGE to "image/jpeg" to true,
+                MediaShape.IMAGE to "application/pdf" to false,
+                MediaShape.IMAGE to "text/html" to false,
+                MediaShape.IMAGE to "image" to false,
+                MediaShape.IMAGE to "" to false,
+                MediaShape.IMAGE to "IMAGE/PNG" to false,
+                MediaShape.DOCUMENT to "image/png" to false,
+                MediaShape.DOCUMENT to "application/pdf" to false,
+                MediaShape.VOICE to "audio/ogg" to false,
+            )
+        val saved = rows.map { (row, _) -> savesIntoPictures(ShownMedia("r", null, row.first, row.second, 1L, "x")) }
+        assertEquals(rows.map { it.second }, saved)
+    }
+
+    @Test
+    fun `a type from the wire or another app reaches an intent or the media store bounded, or as bytes`() {
+        val part = "a".repeat(127)
+        val huge = "text/${"x".repeat(1_048_576)}"
+        val rows =
+            listOf(
+                "application/pdf" to "application/pdf",
+                "IMAGE/PNG" to "image/png",
+                " text/plain ; charset=utf-8" to "text/plain",
+                "application/vnd.ms-excel" to "application/vnd.ms-excel",
+                "image/svg+xml" to "image/svg+xml",
+                "$part/$part" to "$part/$part",
+                "$part/${part}a" to UNKNOWN_MIME,
+                "${part}a/$part" to UNKNOWN_MIME,
+                huge to UNKNOWN_MIME,
+                "text/plain; x=${"y".repeat(1_048_576)}" to "text/plain",
+                "" to UNKNOWN_MIME,
+                "image" to UNKNOWN_MIME,
+                "image/" to UNKNOWN_MIME,
+                "/png" to UNKNOWN_MIME,
+                "image/png/x" to UNKNOWN_MIME,
+                "image/p ng" to UNKNOWN_MIME,
+                "image/png\u0000" to UNKNOWN_MIME,
+                "image/pñg" to UNKNOWN_MIME,
+                "-image/png" to UNKNOWN_MIME,
+            )
+        assertEquals(rows.map { it.second }, rows.map { mediaTypeOf(it.first) })
+        val refs =
+            listOf(
+                MediaRef("r1", "file", huge, 10, filename = "a.txt"),
+                MediaRef("r2", "image", "Image/PNG", 10),
+            )
+        assertEquals(listOf(UNKNOWN_MIME, "image/png"), rowMedia(refs, user = false).map { it.mime })
+        val outbox = item(attachment("a1").copy(mime = huge))
+        assertEquals(listOf(UNKNOWN_MIME), outboxMedia(outbox, emptyMap()).map { it.mime })
     }
 }

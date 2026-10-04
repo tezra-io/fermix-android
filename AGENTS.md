@@ -176,6 +176,20 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   answers a card by its id. Its answer travels as an outbox `command` (`approval-answer:`), which holds the
   token until the daemon accepts it and which the chat never draws; the daemon's row of it is kept without
   its words (`keptMessage`), so no cache, announcement or index holds the token, and no search shows it.
+- A string from the wire or from another app never names a path or picks what the app reads. A path is built
+  from names the app derived, a digest or a name with no separator, control character or lone surrogate in it,
+  never `.` or `..`, and its canonical path is checked to lie under the directory it was meant for before
+  anything is written there (`sharedFile`, `liesUnder`, comparing strings, as ART throws on a lone surrogate in
+  a java.nio path); a deletion there never follows a link. PROTOCOL.md gives a blob's `ref` no form, and a
+  `../../no_backup/` once named the instance records. A wire string a system API takes, an intent's or a
+  MediaStore entry's type or name, is bounded first (`mediaTypeOf`, `fileNameOf`) and picks nothing it was not
+  checked for (Save puts a blob in Pictures/Fermix only when its kind and its type both say image; anything
+  else goes to Download/Fermix), and that API's refusal, a name the media store numbers no further among them,
+  is logged, never a stopped app. What enters the chat from outside it goes through the one check, `mayRead`:
+  another app's `content:` URI whose authority, without its `user@` prefix, names no provider of the app's own
+  package, which the app would read with its own rights, or a `file:` URI the chat made under its cache; a
+  refusal is logged by scheme and authority, never by path. A clip's URI is never opened for its text
+  (onboarding's Paste takes the URI's own words).
 - In `src/sharedTest`, detekt's `TooManyFunctions` applies, as its default excludes only `test` and
   `androidTest`: a fake of a wide interface delegates a part (`SessionStore, RowEdits by NoRowEdits`). The
   type-resolving tasks `build` runs (`detektDebug`, `detektRelease`, `detektDebugUnitTest`,

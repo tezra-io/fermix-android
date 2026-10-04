@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
@@ -39,6 +40,17 @@ class ChatFilesTest {
             assertTrue(named.isFile, "a file the outbox names was released")
             assertFalse(orphan.exists(), "a file no item names is still there")
         }
+
+    @Test
+    fun `a file is staged under no id that names a directory, the file left where it was`() {
+        val staged = StagedUploads(File(directory, "uploads"))
+        val picked = File(directory, "picked").apply { writeBytes(byteArrayOf(1)) }
+        for (id in listOf(".", "..", "", "a/b", "../a1")) {
+            assertThrows<IllegalArgumentException>(id) { staged.stage(picked, id) }
+            assertTrue(picked.isFile, id)
+        }
+        assertEquals(listOf("picked"), directory.list().orEmpty().toList())
+    }
 
     @Test
     fun `the voice draft's file is the profile's, and goes with its instance`() =

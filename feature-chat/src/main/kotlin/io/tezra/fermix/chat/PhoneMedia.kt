@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ImageDecoder
@@ -28,9 +29,6 @@ const val JPEG_QUALITY = 85
 /** The longest edge a first chunk decodes at for its placeholder colour: enough pixels to average. */
 private const val SHADE_EDGE_PX = 32
 
-/** A type for an item neither its provider nor its name says: bytes, sent as a document. */
-private const val UNKNOWN_MIME = "application/octet-stream"
-
 /**
  * The types a file the chat made is named by, by its extension: a camera's capture and an outbox item's copy. A
  * provider's item takes the type its provider says.
@@ -46,36 +44,39 @@ private val FILE_TYPES =
     )
 
 /**
- * The phone's media (design section 8.5): a picked item described through the ContentResolver; an image decoded
- * by ImageDecoder at most [LONG_EDGE_PX] on its long edge (HEIF too, natively, and turned upright by its EXIF
- * orientation) and compressed to a JPEG by Bitmap.compress, which writes no EXIF, so the photo's GPS and camera
- * tags stay on the phone; any other item, and an image sent as a file, copied as its own bytes. Its file work
- * runs on [io]; a first chunk that decodes to no placeholder is told to [log].
+ * The phone's media (design section 8.5): a picked item, once the chat may read it (readableUri), described through
+ * the ContentResolver; an image decoded by ImageDecoder at most [LONG_EDGE_PX] on its long edge (HEIF too,
+ * natively, and turned upright by its EXIF orientation) and compressed to a JPEG by Bitmap.compress, which writes
+ * no EXIF, so the photo's GPS and camera tags stay on the phone; any other item, and an image sent as a file,
+ * copied as its own bytes. Its file work runs on [io]; a first chunk that decodes to no placeholder is told to
+ * [log].
  */
 class PhoneMedia(
     private val context: Context,
     private val log: (String, Throwable?) -> Unit,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : MediaPipeline {
+    /** [uri] as it lands from [from], once the chat may read it (readableUri): a SecurityException when it may not. */
     override suspend fun describe(
         uri: String,
         from: PickedFrom,
     ): Picked? =
         withContext(io) {
-            val parsed = uri.toUri()
+            val parsed = readableUri(context, uri, from)
             nameAndSize(parsed)?.let { (name, size) ->
                 val mime = context.contentResolver.getType(parsed) ?: mimeOf(name)
                 Picked(uri, uri, pickedKindOf(mime), mime, name, size, from)
             }
         }
 
+    /** [picked] made ready once the chat may read it as the tray holds it (readableUri): a SecurityException if not. */
     override suspend fun prepare(
         picked: Picked,
         asFile: Boolean,
         into: File,
     ): Prepared =
         withContext(io) {
-            val parsed = picked.uri.toUri()
+            val parsed = readableUri(context, picked.uri, landing = null)
             if (asFile || picked.kind != PickedKind.IMAGE) {
                 copyInto(parsed, into)
                 Prepared(picked.mime, picked.name)
@@ -112,7 +113,10 @@ class PhoneMedia(
         }
     }
 
-    /** [uri]'s display name and size, from the file itself or its provider; none when neither answers. */
+    /**
+     * [uri]'s display name and size, from the file itself or its provider; none when neither answers. Its one caller,
+     * [describe], has let it in first: a file the chat made, under its cache, or another app's content URI.
+     */
     private fun nameAndSize(uri: Uri): Pair<String, Long>? {
         if (uri.scheme == "file") {
             val file = File(requireNotNull(uri.path) { "$uri names no file" })
@@ -156,18 +160,74 @@ class PhoneMedia(
     }
 }
 
-/** The phone's clipboard: its first item's content URI, which Paste takes as a picked item. */
+/**
+ * The phone's clipboard: its first item's URI, which Paste takes as a picked item, when it is another app's content
+ * URI ([readable]); any other is refused, and told to [log] by its scheme and authority alone.
+ */
 class PhoneClip(
     private val context: Context,
+    private val log: (String, Throwable?) -> Unit,
 ) : ChatClip {
     override fun media(): String? {
-        val clip = context.getSystemService(ClipboardManager::class.java)?.primaryClip ?: return null
-        return clip
-            .takeIf { it.itemCount > 0 }
+        val uri = firstUri() ?: return null
+        val taken = readable(context, uri, PickedFrom.PASTE)
+        if (!taken) log("Paste refused the clipboard's ${outsideOf(uri)}", null)
+        return uri.takeIf { taken }?.toString()
+    }
+
+    private fun firstUri(): Uri? =
+        context
+            .getSystemService(ClipboardManager::class.java)
+            ?.primaryClip
+            ?.takeIf { it.itemCount > 0 }
             ?.getItemAt(0)
             ?.uri
-            ?.toString()
-    }
+}
+
+/**
+ * Whether the chat reads [uri] as it lands from [landing], or held in the tray (none): mayRead, its facts asked of
+ * the phone, the app's own providers through PackageManager.resolveContentProvider, and a file's place by its
+ * canonical path under the app's cache, which reads the filesystem and is asked only where a file may be read: a
+ * camera's capture as it lands and an item held, both off the main thread.
+ */
+internal fun readable(
+    context: Context,
+    uri: Uri,
+    landing: PickedFrom?,
+): Boolean =
+    mayRead(
+        uri.scheme,
+        uri.authority,
+        landing,
+        own = { authority -> ownsProvider(context, authority) },
+        inCache = { uri.path?.let { liesUnder(File(it), context.cacheDir) } == true },
+    )
+
+/**
+ * [uri] parsed, once the chat reads it as it lands from [landing], or held in the tray (none) ([readable]); a
+ * SecurityException that names its scheme and authority, never its path, when it does not.
+ */
+internal fun readableUri(
+    context: Context,
+    uri: String,
+    landing: PickedFrom?,
+): Uri {
+    val parsed = uri.toUri()
+    val where = landing?.let { "as it lands from $it" } ?: "held in the tray"
+    if (!readable(context, parsed, landing)) throw SecurityException("the chat refuses a ${outsideOf(parsed)} $where")
+    return parsed
+}
+
+/** A URI as a refusal names it: its scheme and its authority, never its path, which can say what the phone holds. */
+internal fun outsideOf(uri: Uri): String = "${uri.scheme} URI of ${uri.authority.orEmpty().ifEmpty { "no authority" }}"
+
+/** Whether [authority] names a provider of the app's own package, which the app reads with its own rights. */
+private fun ownsProvider(
+    context: Context,
+    authority: String,
+): Boolean {
+    val provider = context.packageManager.resolveContentProvider(authority, PackageManager.ComponentInfoFlags.of(0))
+    return provider?.packageName == context.packageName
 }
 
 /** [width] × [height] scaled down to at most [edge] on the long edge, never up; at least a pixel each way. */

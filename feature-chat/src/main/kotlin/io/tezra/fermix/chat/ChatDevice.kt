@@ -7,7 +7,10 @@ import java.io.File
  * ImageDecoder and bitmap compression for the app (PhoneMedia), a fake for the JVM tests.
  */
 interface MediaPipeline {
-    /** What [uri] names, picked from [from]: its kind, type, name and size; none when it cannot be read. */
+    /**
+     * What [uri] names, picked from [from]: its kind, type, name and size; none when it cannot be read. A URI the chat
+     * may not read as it lands from [from] (mayRead) is a SecurityException.
+     */
     suspend fun describe(
         uri: String,
         from: PickedFrom,
@@ -16,7 +19,8 @@ interface MediaPipeline {
     /**
      * [picked]'s bytes as they go up, written to [into]: an image as a JPEG at most LONG_EDGE_PX on its long
      * edge, its EXIF and GPS left behind, unless [asFile], which, like anything not an image, sends its own
-     * bytes. Throws an IOException when the item cannot be read.
+     * bytes. Throws an IOException when the item cannot be read, and a SecurityException when the chat may not read
+     * it as the tray holds it (mayRead).
      */
     suspend fun prepare(
         picked: Picked,
@@ -36,7 +40,7 @@ data class Prepared(
 
 /** The primary clip, which Paste takes an image or a file from: the phone's clipboard for the app, a fake for tests. */
 fun interface ChatClip {
-    /** The content URI of the clip's first item, none when the clipboard holds no image or file. */
+    /** Another app's content URI, the clip's first item; none when the clipboard holds no such image or file. */
     fun media(): String?
 }
 

@@ -11,14 +11,37 @@ import io.tezra.fermix.session.UploadStage
 const val VOICE_MIME = "audio/ogg"
 const val VOICE_NAME = "voice-note.ogg"
 
+/** A type for an item nothing names a type for that the phone takes: bytes, sent and shown as a document. */
+internal const val UNKNOWN_MIME = "application/octet-stream"
+
+/** The most characters a media type takes: a type and a subtype of at most 127 each, and the slash (RFC 6838). */
+private const val MEDIA_TYPE_MAX_CHARS = 255
+
+/** A `type/subtype` as RFC 6838 names them, lower-cased: each a letter or digit, then at most 126 of its others. */
+private val MEDIA_TYPE = Regex("[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}")
+
+/**
+ * [mime], the daemon's or another app's, as the type an intent and the media store are handed: its `type/subtype`,
+ * its parameters dropped, lower-cased, at most [MEDIA_TYPE_MAX_CHARS] characters; [UNKNOWN_MIME] for anything else.
+ * The wire holds a type to no form or length (PROTOCOL.md, "Timeline shapes"), and one past the binder's buffer
+ * would stop the app as the chooser starts.
+ */
+internal fun mediaTypeOf(mime: String): String {
+    val bare = mime.substringBefore(';').trim()
+    if (bare.length > MEDIA_TYPE_MAX_CHARS) return UNKNOWN_MIME
+    val type = bare.lowercase()
+    return if (MEDIA_TYPE.matches(type)) type else UNKNOWN_MIME
+}
+
 /** How a blob shows in its bubble (design section 13.5): an image, a document's row, or a voice note. */
 enum class MediaShape { IMAGE, DOCUMENT, VOICE }
 
 /**
  * One blob of a message as the chat draws it: [ref], the daemon's for a row's (media_fetch) and the digest for an
  * outbox item's, which the daemon names it by once it holds it; [sha256], the media cache's name for it, none
- * when the daemon gave none; its shape, type, size and name; for an outbox item, [local], the staged file the
- * bubble draws from before the daemon has it, and [sent], the ring's share of it gone, none once it is in.
+ * when the daemon gave none; its shape, type (as [mediaTypeOf] bounds it), size and name; for an outbox item,
+ * [local], the staged file the bubble draws from before the daemon has it, and [sent], the ring's share of it gone,
+ * none once it is in.
  */
 data class ShownMedia(
     val ref: String,
@@ -58,7 +81,7 @@ fun rowMedia(
                 ref.kind == "audio" && user -> MediaShape.VOICE
                 else -> MediaShape.DOCUMENT
             }
-        ShownMedia(ref.ref, ref.sha256, shape, ref.mime, ref.sizeBytes, ref.filename)
+        ShownMedia(ref.ref, ref.sha256, shape, mediaTypeOf(ref.mime), ref.sizeBytes, ref.filename)
     }
 
 /** An outbox item's attachments, each from its staged file, an image with its ring while it goes up, none failed. */
@@ -77,7 +100,7 @@ fun outboxMedia(
             ref = attachment.sha256,
             sha256 = attachment.sha256,
             shape = shape,
-            mime = attachment.mime,
+            mime = mediaTypeOf(attachment.mime),
             sizeBytes = attachment.sizeBytes,
             name = attachment.name,
             local = attachment.source,

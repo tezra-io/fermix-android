@@ -19,6 +19,41 @@ enum class PickedKind { IMAGE, VIDEO, AUDIO, FILE, VOICE }
  */
 fun copiedOnLanding(from: PickedFrom): Boolean = from == PickedFrom.PASTE || from == PickedFrom.KEYBOARD
 
+/**
+ * Whether the chat reads a URI of [scheme] and [authority], as android.net.Uri parses them, as it lands in the tray
+ * from [landing], or, none, held in it already (design section 8.5, "Sources"). The Photo Picker's, the documents
+ * UI's, the clipboard's and the keyboard's items are other apps': a `content:` URI whose authority, without the
+ * `user@` prefix the ContentResolver strips up to its last `@`, names no provider of the app's own package ([own]),
+ * whose checks the app would pass with its own rights. A camera's capture and Edit's copy are files the chat made:
+ * a `file:` URI whose canonical path lies under the app's cache ([inCache], asked only of such a URI). An item held
+ * is either, a paste's and the keyboard's being the chat's copies by then. Any other scheme is refused, a scheme
+ * compared exactly, as the ContentResolver compares it: `CONTENT:` and `FILE:` are neither.
+ */
+internal fun mayRead(
+    scheme: String?,
+    authority: String?,
+    landing: PickedFrom?,
+    own: (String) -> Boolean,
+    inCache: () -> Boolean,
+): Boolean {
+    val provider = scheme == "content" && isForeign(authority, own)
+    val made = { scheme == "file" && inCache() }
+    return when (landing) {
+        null -> provider || made()
+        PickedFrom.CAMERA, PickedFrom.OUTBOX -> made()
+        PickedFrom.PHOTOS, PickedFrom.FILES, PickedFrom.PASTE, PickedFrom.KEYBOARD -> provider
+    }
+}
+
+/** Whether [authority], its `user@` prefix stripped, names a provider at all, and none of the app's own ([own]). */
+private fun isForeign(
+    authority: String?,
+    own: (String) -> Boolean,
+): Boolean {
+    val name = authority?.substringAfterLast('@').orEmpty()
+    return name.isNotEmpty() && !own(name)
+}
+
 /** Whether [picked]'s URI names a file the chat made, which goes once it leaves the tray. */
 fun ownsFile(picked: Picked): Boolean =
     picked.from == PickedFrom.CAMERA || picked.from == PickedFrom.OUTBOX || copiedOnLanding(picked.from)

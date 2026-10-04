@@ -58,11 +58,11 @@ internal val THREAD =
 
 /**
  * What the tests set and count, kept across the activity's recreation as the app's session and cache are: the
- * fake cache and session, the app's fold of the session's events, the monotonic clock, and how many times the
- * activity was made. The record's daemon says its model, and lists [ENTRIES] when asked. Beyond the screen, the
- * system's pickers and prompts answer as [results] says, every activity the chat starts is kept in [started], the
- * app holds every permission, the microphone while [micAllowed], the camera is [FakeCamera] and the attach sheet's
- * grid the Photo Picker's tile.
+ * fake cache and session, the app's fold of the session's events, the monotonic clock, what the chat logged
+ * ([log]), and how many times the activity was made. The record's daemon says its model, and lists [ENTRIES] when
+ * asked. Beyond the screen, the system's pickers and prompts answer as [results] says, every activity the chat
+ * starts is kept in [started], the app holds every permission, the microphone while [micAllowed], the camera is
+ * [FakeCamera] and the attach sheet's grid the Photo Picker's tile.
  */
 internal class ChatTestRig : ViewModel() {
     val creations = AtomicInteger()
@@ -84,7 +84,8 @@ internal class ChatTestRig : ViewModel() {
     val session = FakeChatSession(store).apply { models = OneShot.Answered(ENTRIES) }
     val live = MutableStateFlow(ChatLive())
     val clock = FakeChatClock(mono = CARD_STARTED_MS)
-    val parts = fakeParts(withModel(), session, store, viewModelScope).copy(live = live, clock = clock)
+    val log = FakeLog()
+    val parts = fakeParts(withModel(), session, store, viewModelScope).copy(live = live, clock = clock, log = log.log)
 
     /** [APPROVAL] shown now on the rig's clock with [ttlS] seconds left: again, it is replayed in place. */
     fun approval(ttlS: Int) {
@@ -132,11 +133,14 @@ internal fun ChatTestActivity.cardPhrase(elapsedMs: Long): String? {
 }
 
 /** The Chat screen over the rig's fakes, in the design's theme, as the app shows it. */
-class ChatTestActivity : ComponentActivity() {
+open class ChatTestActivity : ComponentActivity() {
     internal val rig: ChatTestRig by viewModels()
     internal val model: ChatViewModel by viewModels {
-        viewModelFactory { initializer { ChatViewModel(rig.parts) } }
+        viewModelFactory { initializer { ChatViewModel(chatParts()) } }
     }
+
+    /** What the chat runs on: the rig's fakes. */
+    internal open fun chatParts(): ChatParts = rig.parts
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -158,4 +162,17 @@ class ChatTestActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/**
+ * The Chat screen as [ChatTestActivity] shows it, but on the phone's own clipboard and media, PhoneClip and
+ * PhoneMedia, as the app runs it: what the clipboard, another app or the camera hands the chat is weighed as it is
+ * in the app, and what they refuse is told to the rig's log.
+ */
+class PhoneChatTestActivity : ChatTestActivity() {
+    override fun chatParts(): ChatParts =
+        rig.parts.copy(
+            media = PhoneMedia(applicationContext, rig.log.log),
+            clip = PhoneClip(applicationContext, rig.log.log),
+        )
 }

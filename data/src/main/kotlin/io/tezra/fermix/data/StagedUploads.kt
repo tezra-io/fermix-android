@@ -16,6 +16,9 @@ private const val UPLOADS_DIRECTORY = "uploads"
 /** An attachment id as a file name: what the wire allows of it beyond that is never staged. */
 private val STAGED_NAME = Regex("[A-Za-z0-9._-]{1,128}")
 
+/** The names that match [STAGED_NAME] and still name a directory, never a staged file. */
+private val DIRECTORY_NAMES = setOf(".", "..")
+
 /**
  * One outbox attachment as the outbox row keeps it, in its `attachments` column (OutboxEntity): core-session's
  * OutboxAttachment, its fields named as `attach_begin` names them, with the local file and whether it is in.
@@ -69,7 +72,8 @@ class StagedUploads internal constructor(
         file: File,
         attachId: String,
     ): File {
-        require(STAGED_NAME.matches(attachId)) { "$attachId is no name a staged file can take" }
+        val named = STAGED_NAME.matches(attachId) && attachId !in DIRECTORY_NAMES
+        require(named) { "$attachId is no name a staged file can take" }
         require(file.isFile) { "$file is not a file to stage" }
         makeDirectory(directory)
         val staged = File(directory, attachId)

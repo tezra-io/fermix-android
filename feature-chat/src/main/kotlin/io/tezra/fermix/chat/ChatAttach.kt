@@ -88,11 +88,11 @@ class ChatAttach(
         }
     }
 
-    /** Paste: the clipboard's image or file, none when it holds neither. */
+    /** Paste: the clipboard's image or file, none when it holds neither or the clip refused what it holds. */
     fun paste() {
         val uri = parts.clip.media()
         if (uri == null) {
-            parts.log("Paste found no image or file on the clipboard", null)
+            parts.log("Paste took nothing from the clipboard", null)
             return
         }
         add(listOf(uri), PickedFrom.PASTE)
@@ -224,7 +224,11 @@ private suspend fun landed(
     return if (copiedOnLanding(from)) ownCopy(parts, picked) else picked
 }
 
-/** [uri], picked from [from], described under a new id; none, logged, when the phone cannot read it. */
+/**
+ * [uri], picked from [from], described under a new id; none, logged, when the phone cannot read it, its grant gone,
+ * or when the chat refuses it as it lands (mayRead: an app's own file or provider), which is logged by its scheme and
+ * authority alone.
+ */
 private suspend fun described(
     parts: ChatParts,
     uri: String,
@@ -235,7 +239,7 @@ private suspend fun described(
         if (picked == null) parts.log("A picked item could not be read", null)
         picked?.copy(id = parts.newId())
     } catch (refused: SecurityException) {
-        parts.log("A picked item could not be read: its grant is gone", refused)
+        parts.log("A picked item was refused, or its grant is gone", refused)
         null
     }
 
@@ -256,7 +260,7 @@ private suspend fun ownCopy(
     } catch (unreadable: IOException) {
         parts.log("A pasted or typed-in item could not be copied", unreadable)
     } catch (refused: SecurityException) {
-        parts.log("A pasted or typed-in item could not be read: its grant is gone", refused)
+        parts.log("A pasted or typed-in item was refused, or its grant is gone", refused)
     } finally {
         if (copy == null) withContext(NonCancellable + parts.io) { into.delete() }
     }

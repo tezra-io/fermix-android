@@ -13,5 +13,12 @@
             android:showWhenLocked="true"
             android:turnScreenOn="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <!-- The same host on the phone's own clipboard and media, as the app reads them. -->
+        <activity
+            android:name="io.tezra.fermix.chat.PhoneChatTestActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 </manifest>

@@ -570,7 +570,8 @@ while the saved state, which outlives the process, never holds the secret. Paste
 text's first word that starts `fermix://pair?`, so `fermix pair`'s "Manual pairing URI: …" line copied
 whole from a terminal, its end with it, gives its link. A clip with a pairing link in it, whatever the
 phone makes of the link, is cleared once Paste reads it, or once "Continue" takes or refuses a link;
-a clip with none is the owner's own and stays.
+a clip with none is the owner's own and stays. Paste takes the clip's first item's text, or else its URI's own
+words, and never opens that URI, which the app would read with its own rights (`clipboardClip`).
 `onboardingEntries(builder, viewModel, camera, clip)` registers the screens as Navigation 3 entries,
 with what lies outside the app: the pages, the Tailscale app (seen through the
 manifest's `<queries>`), the VPN settings, the app's settings page, the camera and notification prompts,
@@ -890,8 +891,16 @@ is {max}."); the caption, which is the composer's words; "Send as files"; and "S
 documents UI (`OpenMultipleDocuments`), Camera the chat's own CameraX capture once the app may use the camera
 ("Camera is off for Fermix" when refused), Paste the clipboard's first item (`ChatClip`), and the keyboard's
 images come through the field's content receiver (IME `commitContent`). None of them needs a media
-permission. A paste's and the keyboard's items are copied into the chat's own files as they land, the
-keyboard's commit held until then, since their read grant ends long before Send; one whose grant is already
+permission. Each enters through one check, `mayRead`: an item from Photos, Files, Paste or the keyboard is
+another app's `content:` URI whose authority, without its `user@` prefix, names no provider of this app's own
+package (`PackageManager.resolveContentProvider`), which the app would read with its own rights, and the
+camera's is a `file:` URI the chat made under its cache; any other scheme or authority is refused, logged by
+its scheme and authority alone, never its path, and never lands in the tray, and the clipboard hands Paste
+nothing else (`PhoneClip`). The tray's reads, a send's and its thumbnails, take those two and no other. The
+check knows a provider, not a grant: a row the app saved into the media store itself (Save), which other apps
+cannot read, is read by the app as its owner when another app puts its URI on the clipboard or a keyboard
+commits it, and shows in the tray before Send. A paste's and the keyboard's items are copied into the chat's
+own files as they land, the keyboard's commit held until then, since their read grant ends long before Send; one whose grant is already
 gone is logged and left out. The sheet's grid keeps at least 160 dp, and what the window leaves beside it,
 with the sheet's other items (a capture, files, a paste) in a tray at its foot; the Photos tile shows its
 own picks. The picks wait in the tray over the field, 56 dp thumbnails each with its ✕, an 18 dp badge in
@@ -913,9 +922,19 @@ four or more as a 2 × 2 whose last cell says "+N", the message's words as the c
 the daemon let go says "No longer on {host}". A document is a 64 dp row, its extension's tile, its name cut
 in the middle and its size · origin; a tap downloads it and opens it through the chooser as a read-only
 content URI of the module's FileProvider (`{applicationId}.chat.files`, the cache's `shared/` alone), raw
-HTML too, which the chat never draws; a long-press offers Share and Save, which writes into Pictures/Fermix or
-Download/Fermix through MediaStore, with no storage permission. A tapped image opens the viewer, black in both
-themes, the image moving from its bubble as a shared element: every image the list holds, oldest first,
+HTML too, which the chat never draws. No string from the wire names the copy's path (`sharedFile`): it sits
+in a directory named by the first 16 hex characters of the SHA-256 of the blob's cache name, whatever its
+ref, under its name with no `/`, `\`, control character or lone surrogate in it, never `.` or `..`, cut to
+its last 255 UTF-8 bytes (`file` when nothing is left), and its canonical path is checked to lie under
+`shared/` before anything is written, a copy that would not being refused and logged; the oldest of eight
+copies goes as another is made, a link among them deleted, never followed. A blob's type reaches the chooser,
+the share sheet and the media store as a `type/subtype` of at most 255 characters, its parameters dropped and
+lower-cased, anything else as `application/octet-stream` (`mediaTypeOf`), the daemon's and another app's alike,
+as the wire bounds it nowhere. A long-press offers Share and Save, which writes through MediaStore, with no
+storage permission, an image whose type is an image's into Pictures/Fermix and anything else into
+Download/Fermix, as a row's kind and type are the daemon's and may disagree; an entry the media store refuses,
+a name it numbers no further ("report (32).pdf") among them, is logged and the app goes on. A tapped image
+opens the viewer, black in both themes, the image moving from its bubble as a shared element: every image the list holds, oldest first,
 swiped between, pinched to 5× and panned while zoomed, a swipe down at its own size putting it down, with
 Share, Save and Show in chat; it keeps its image as the window turns. The mic, at the end of an empty
 composer, records while held: the first hold shows the microphone's rationale, then the system's prompt
@@ -946,9 +965,12 @@ interruption keeping the draft, the draft kept through the chat's close, a recor
 a refused send, and one unreadable let go, a recording stopped into a draft as the chat leaves the
 foreground and going on through a rotation, its length and bars, the player's one note and the notes it
 cannot open or read, the outbox's ring and lines, "Retry sending"'s new ids, the layouts and the viewer's
-pages, a shared file's name, and the module's scan for a network client; `data`'s tests keep the voice
-draft in its profile's directory, gone with its instance, and a send's staged files let go unless an item
-names them; the screenshots draw the sheet with two picked, a file and a paste in its tray, and a
+pages, a shared copy's directory and name and where they may lie, a copy refused before any is evicted, and the
+oldest copies evicted without following a link (`SharedFileTest`), where Save puts a blob, a type bounded
+(`mediaTypeOf`, a 1 MiB one among them), the one check's table of scheme, source,
+authority and path (`ReadableUriTest`), and the module's scan for a network client; `data`'s tests keep the
+voice draft in its profile's directory, gone with its instance, a send's staged files let go unless an item
+names them, and a file staged under no id that names a directory; the screenshots draw the sheet with two picked, a file and a paste in its tray, and a
 caption, the size line, the sheet's Photos tile with its pick, the tray, the composer recording, locked, its
 draft and the microphone off, one, two, three and five images, the ring, the duplicate line, a gone image
 in a lone and a small cell, documents and a voice note uploading, voice notes playing and transcribing, the
@@ -1264,8 +1286,8 @@ a clip with a link in it, a rotation and a fold that keep Verify's code and coun
 sheet's text, TalkBack reaching "Paste a pairing link" first, reduce-motion's still code with the setting
 the owner sets, the scan's own reader (`qrReader()`) on real QR, inverted QR, Data Matrix and Micro QR
 images (`src/androidTest/assets/codes`), and its analysis (`qrAnalyzer`) on camera frames made of them,
-and `clipboardClip` on the phone's own clipboard. The test APK is signed with the SDK's debug key; it is
-not the app, and pairs with nothing. `ChatsTestActivity` shows the Chats list and the Instance screen
+and `clipboardClip` on the phone's own clipboard, a clip's URI given as its own words, never opened. The
+test APK is signed with the SDK's debug key; it is not the app, and pairs with nothing. `ChatsTestActivity` shows the Chats list and the Instance screen
 over fixed state, two rows and one connected Fermix, with a `ChatsTestRig` kept the same way that counts
 the activity's creations and picks the screen; its tests long-press a row for Move to top · Rename · Details · Unpair…, and keep a rename
 dialog's half-typed name, on the list and on the Instance screen, through a rotation and a fold.
@@ -1287,11 +1309,30 @@ the clipboard's and the camera's items to the tray, cancel a held mic past 120 d
 lock it slid up, keep a take the phone stopped while held (a lost audio focus, a touch the system took) a
 draft that a release does not send, ask for the microphone with its rationale first and offer "Open
 settings" once it is refused, open a document and raw HTML through the chooser from the module's provider,
-keep a locked recording, its bars and its timer, and an upload with its ring through a rotation and a fold,
+hand one to the share sheet as the same URI and save one into Download/Fermix under its name, copy a document
+whose ref climbs out of the cache under `shared/` with the app's own file left as it was, open one whose name
+holds a lone surrogate under a name the filesystem holds, save an image whose type is a PDF's as a document,
+save a name the media store numbers no further once Download/Fermix holds as many of it as it takes,
+the app going on each time, keep a locked recording, its bars and its timer, and an upload with its ring through a rotation and a fold,
 and keep the viewer open on its image through a rotation (`ViewerDeviceTest`). `MediaPipelineDeviceTest`
 runs the phone's own image pipeline on a photo with GPS and a camera's EXIF, and on a 4,000 × 3,000 photo
 that goes up at 2,048 × 1,536; `PhoneVoiceDeviceTest` the phone's own recorder and player, an OGG/Opus note
-whose length and levels are read back, and a take another app's audio focus stops. A test
+whose length and levels are read back, and a take another app's audio focus stops. `PhoneChatTestActivity` is
+the same host on the phone's own clipboard and media (`PhoneClip`, `PhoneMedia`), and `PhoneSourcesDeviceTest`
+puts what another app would on the clipboard: Paste refuses a `file:` URI of a file planted in the app's
+`noBackupFilesDir` or of a copy under the chat's cache, and a `content:` URI of the chat's own FileProvider,
+with and without a `0@` prefix, each
+logged by its scheme and authority and the tray left empty, while a photo the test puts in the media store, a
+provider of another package, lands as the chat's copy, and the camera's capture lands. A provider the test
+APK declared would be of the app's own package, the module's under test, and refused as such; the photo is a
+row the test, running as the app, owns, so that read is the app's by ownership, not another app's grant.
+`PhoneReadsDeviceTest` asks `PhoneMedia` and the tray's thumbnail directly: a file under the chat's cache lands
+from the camera alone, never from Photos, Files, Paste or the keyboard, and the media store's photo from those and
+never from the camera; a camera's capture as it lands, a
+send's copy and the tray's thumbnail each refuse a `file:` URI of the planted file, the same through a link
+the cache holds and a file in a sibling `cache2/`, and the chat's own provider's URI, with a SecurityException
+that names no path and nothing copied, while a file the chat made under its cache is read by each, and a
+path with a lone surrogate is weighed, never thrown on. A test
 that needs the window's focus, Espresso's back and the clipboard's read, waits for it
 (`awaitWindowFocus`) and fails naming the window that holds it.
 

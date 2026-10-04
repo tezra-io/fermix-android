@@ -51,18 +51,20 @@ interface PrimaryClip {
 
 /** The phone's primary clip, through [ClipboardManager]. */
 fun clipboardClip(context: Context): PrimaryClip =
-    SystemClip(context, checkNotNull(context.getSystemService(ClipboardManager::class.java)) { "no clipboard service" })
+    SystemClip(checkNotNull(context.getSystemService(ClipboardManager::class.java)) { "no clipboard service" })
 
+/**
+ * The clip's first item's text, or else its URI's own words, never opened, and none for an item with neither:
+ * ClipData's coerceToText would read a `content:` URI another app put there with this app's own rights, its
+ * non-exported providers among them.
+ */
 private class SystemClip(
-    private val context: Context,
     private val clipboard: ClipboardManager,
 ) : PrimaryClip {
-    override fun text(): String? =
-        clipboard.primaryClip
-            ?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)
-            ?.coerceToText(context)
-            ?.toString()
+    override fun text(): String? {
+        val item = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0) ?: return null
+        return item.text?.toString() ?: item.uri?.toString()
+    }
 
     override fun clear() = clipboard.clearPrimaryClip()
 }

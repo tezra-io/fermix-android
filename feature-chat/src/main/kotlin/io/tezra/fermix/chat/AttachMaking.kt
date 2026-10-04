@@ -51,7 +51,7 @@ internal class AttachMaker(
 ) {
     /**
      * [chosen], images as files when [asFiles], made and staged; failed, logged, when one cannot be read (an
-     * IOException, or a SecurityException once its read grant is gone) or staged.
+     * IOException, or a SecurityException once its read grant is gone or the chat refuses it) or staged.
      */
     suspend fun make(
         chosen: List<Picked>,
@@ -65,7 +65,7 @@ internal class AttachMaker(
         } catch (unreadable: IOException) {
             parts.log("An attachment could not be made ready or staged", unreadable)
         } catch (refused: SecurityException) {
-            parts.log("An attachment could not be read: its grant is gone", refused)
+            parts.log("An attachment was refused, or its grant is gone", refused)
         } finally {
             if (made !is Made.Staged) withContext(NonCancellable + io) { ready.forEach { it.file.delete() } }
         }

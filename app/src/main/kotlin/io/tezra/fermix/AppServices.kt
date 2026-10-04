@@ -246,7 +246,7 @@ class AppServices(
             log = ::logFault,
             files = RoomChatFiles(databases, instanceId, profileId),
             media = PhoneMedia(context, ::logFault),
-            clip = PhoneClip(context),
+            clip = PhoneClip(context, ::logFault),
             recorder = PhoneRecorder(context, ::logFault),
             player = PhonePlayer(),
             scratch = { File.createTempFile("fetch", null, context.cacheDir) },
