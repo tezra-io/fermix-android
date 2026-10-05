@@ -5,14 +5,19 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 class AndroidApplicationConventionPluginTest {
     @TempDir
     lateinit var projectDir: File
 
-    // The probe is a git repository of one commit, as the versionName is its nearest release tag, if any.
-    private fun configured(tag: String? = null): List<String> {
+    // The probe is a git repository of one commit, as the versionName is its nearest release tag, if any. Its build
+    // runs in the worker's environment, which holds no git variable of the caller's (build-logic's build script),
+    // without the caller's FERMIX_ signing keys, as one described in part fails the build, and with [environment]
+    // over it.
+    private fun configured(
+        tag: String? = null,
+        environment: Map<String, String> = emptyMap(),
+    ): List<String> {
         projectDir.resolve("gradle").mkdirs()
         File("../gradle/libs.versions.toml").copyTo(projectDir.resolve("gradle/libs.versions.toml"))
         File("../version.properties").copyTo(projectDir.resolve("version.properties"))
@@ -20,32 +25,21 @@ class AndroidApplicationConventionPluginTest {
         projectDir.resolve("gradle.properties").writeText("android.useAndroidX=true\n")
         projectDir.resolve("build.gradle.kts").writeText(PROBE_BUILD)
         git("init", "--quiet")
-        git(*COMMITTER, "commit", "--quiet", "--allow-empty", "-m", "probe")
+        git("commit", "--quiet", "--allow-empty", "-m", "probe")
         if (tag != null) git("tag", tag)
         val result =
             GradleRunner
                 .create()
                 .withProjectDir(projectDir)
                 .withPluginClasspath()
+                .withEnvironment(System.getenv().filterKeys { !it.startsWith("FERMIX_") } + environment)
                 .withArguments("--warning-mode=fail", "help")
                 .build()
         return result.output.lines()
     }
 
-    // Bounded: git's output goes to a file, so the wait never blocks on a pipe it has not drained.
-    private fun git(vararg arguments: String) {
-        val log = projectDir.resolve("build/git.log").also { it.parentFile.mkdirs() }
-        val process =
-            ProcessBuilder(listOf("git", "-C", projectDir.path) + arguments)
-                .redirectErrorStream(true)
-                .redirectOutput(log)
-                .start()
-        if (!process.waitFor(GIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            error("git ${arguments.toList()} did not finish in $GIT_TIMEOUT_SECONDS s")
-        }
-        check(process.exitValue() == 0) { "git ${arguments.toList()} failed: ${log.readText()}" }
-    }
+    private fun git(vararg arguments: String) =
+        scratchGit(projectDir, projectDir.resolve("build/git.log").also { it.parentFile.mkdirs() }, *arguments)
 
     // A real build of an app that applies the plugin, configured only, on the repository's own catalog and
     // version file (AndroidComposeLibraryConventionPluginTest).
@@ -83,12 +77,21 @@ class AndroidApplicationConventionPluginTest {
         assertTrue("version: 3.4.5, code $repositoryVersionCode" in printed, printed.toString())
     }
 
-    private val repositoryVersionCode by lazy { parseVersionCode(File("../version.properties").readText()) }
-
-    private companion object {
-        const val GIT_TIMEOUT_SECONDS = 30L
-        val COMMITTER = arrayOf("-c", "user.name=Probe", "-c", "user.email=probe@example.com")
+    // Git exports GIT_DIR to a hook or an alias it runs in a linked worktree, and GIT_DIR wins over -C: the version
+    // is still the build's own checkout's, never the caller's repository's.
+    @Test
+    fun `an app takes its version from its own checkout whatever repository GIT_DIR names`(
+        @TempDir other: File,
+    ) {
+        val log = other.resolve("git.log")
+        scratchGit(other, log, "init", "--quiet")
+        scratchGit(other, log, "commit", "--quiet", "--allow-empty", "-m", "other")
+        scratchGit(other, log, "tag", "v9.9.9")
+        val printed = configured(tag = "v3.4.5", environment = mapOf("GIT_DIR" to other.resolve(".git").path))
+        assertTrue("version: 3.4.5, code $repositoryVersionCode" in printed, printed.toString())
     }
+
+    private val repositoryVersionCode by lazy { parseVersionCode(File("../version.properties").readText()) }
 }
 
 private val PROBE_BUILD =

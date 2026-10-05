@@ -48,10 +48,10 @@ class ReleasePreflightTest(ScriptTest):
         self.repository.main_at(commit)
         return commit
 
-    def preflight(self, tag, commit):
-        """The check as candidate.yml's preflight job runs it, with the job's token."""
+    def preflight(self, tag, commit, **extra):
+        """The check as candidate.yml's preflight job runs it, with the job's token and [extra] in its environment."""
         access = push_access("candidate.yml", "preflight")
-        return self.script("release_preflight.sh", tag, commit, cwd=self.repository.path, **access)
+        return self.script("release_preflight.sh", tag, commit, cwd=self.repository.path, **access, **extra)
 
     def test_a_release_tag_on_main_with_its_code_raised_and_its_entry_passes(self):
         commit = self.release()
@@ -91,6 +91,15 @@ class ReleasePreflightTest(ScriptTest):
         commit = self.release(code=1)
         self.repository.tag("v0.2.0")
         self.assertRefused(self.preflight("v0.2.0", commit), "versionCode 1 at v0.2.0 is not above v0.1.0's 1")
+
+    def test_a_versioncode_not_raised_is_refused_whatever_the_machines_git_configuration(self):
+        # column.ui = always, a developer's taste, prints git tag's list in columns, several tags to a line.
+        config = self.scratch / "columns.gitconfig"
+        config.write_text("[column]\n\tui = always\n")
+        commit = self.release(code=1)
+        self.repository.tag("v0.2.0")
+        result = self.preflight("v0.2.0", commit, GIT_CONFIG_GLOBAL=config)
+        self.assertRefused(result, "versionCode 1 at v0.2.0 is not above v0.1.0's 1")
 
     def test_a_commit_without_version_properties_is_refused(self):
         self.repository.git("rm", "--quiet", "version.properties")

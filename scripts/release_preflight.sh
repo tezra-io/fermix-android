@@ -99,7 +99,10 @@ check_code_raised() {
   local tag=$1 commit=$2 code tags count other other_code
   code="$(version_code_at "$commit")"
   [ -n "$code" ] || { refusal "version.properties at $commit holds no versionCode"; return 0; }
-  tags="$(git tag --list "$RELEASE_TAG_GLOB" | awk -v tag="$tag" '/^v[0-9]+[.][0-9]+[.][0-9]+$/ && $0 != tag')"
+  # for-each-ref, git's plumbing, prints a tag a line whatever the machine's configuration; git tag's list is laid out
+  # in columns, several tags to a line, under column.ui = always.
+  tags="$(git for-each-ref --format='%(refname:strip=2)' "refs/tags/$RELEASE_TAG_GLOB" |
+    awk -v tag="$tag" '/^v[0-9]+[.][0-9]+[.][0-9]+$/ && $0 != tag')"
   count="$(awk 'END { print NR }' <<<"$tags")"
   [ "$count" -le "$MAX_RELEASE_TAGS" ] || fatal "$count release tags, past the $MAX_RELEASE_TAGS this script reads"
   for other in $tags; do

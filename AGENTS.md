@@ -81,7 +81,8 @@ docs/                 RELEASING.md: a release, from the tag to Play, and what on
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
                       settle_emulator.sh (the ui job's wait for a booted emulator's home screen), the release
                       pipeline's steps (release_preflight.sh to play_upload.py), lint_workflows.sh and
-                      check_workflows.py; their tests in scripts/tests, with a fake gh and cosign
+                      check_workflows.py, check_git_isolation.sh (the tests' git, on a hostile machine and
+                      under a hostile caller); their tests in scripts/tests, with a fake gh and cosign
 .github/workflows/    ci.yml: contract, build, unit, screens, ui, policy, release-scripts, and gate, the one
                       required check; candidate.yml on a vX.Y.Z tag; promote.yml by hand
 ```
@@ -148,6 +149,14 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   vector key: the on-device Keystore vectors, pairing, attestation, locked-phone push and the pinned
   TLS on the phone's own stack, recorded per handset and OS build (design sections 12.6 and 15.3). A
   test-only key import stays out of the acceptance gate.
+- A git a test starts takes nothing from the machine's git configuration, attributes or template or the caller's
+  `GIT_` variables, and runs and writes only under the test's scratch directory: the tests' own (`scratchGit` in
+  `build-logic/src/test`, `git_environment` and `ScriptTest.script` in `scripts/tests/support.py`), which give an
+  identity to the test's own set-up alone, as CI's runner names none, and the product's describe, which build-logic's
+  test task runs with neither (`build-logic/build.gradle.kts`). A tag whose tagger the owner's configuration named
+  failed on the runner alone, and `GIT_DIR`, which git exports to a hook or an alias in a linked worktree, wins over
+  `-C`, so a test run under it committed into and tagged the repository it named (Task 16b;
+  `scripts/check_git_isolation.sh` runs the tests on such a machine and under such a caller).
 - Instrumented tests (`src/androidTest`, CI's `ui` job) need no daemon and no camera, and never get
   one. The seams are the fake pairing control (`FakeStarter` in `feature-onboarding/src/sharedTest`, the
   JVM tests' too) behind `PairingStarter`, and the stub preview behind `ScanCamera`, whose `allowed`

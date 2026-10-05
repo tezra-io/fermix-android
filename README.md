@@ -1576,6 +1576,7 @@ scripts/verify_protocol_contract.sh               # the vendored contract agains
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
 scripts/check_release_policy.sh app/build/outputs/apk/release/app-release-unsigned.apk   # the release APK against the policy
+scripts/check_git_isolation.sh                    # the tests that start git, on a hostile git configuration and GIT_ variables
 ```
 
 A local build with no release key writes the release unsigned, as `app-release-unsigned.apk`; with
@@ -1885,8 +1886,14 @@ release again. The tag is `promote.yml`'s one input, and none skips a check.
 
 `versionName` is the nearest `vX.Y.Z` tag behind the commit, read from git by the application convention plugin,
 or `0.0.0-dev` with none; a nearest tag the describe matches that is no release tag, `v1.2.3-rc.1`, fails the
-build, and so does a tree that is not a git checkout. `versionCode` is `version.properties`' one line, raised by
-the release pull request with the version's `CHANGELOG.md` entry, and `preflight` refuses a tag without either.
+build, and so does a tree that is not a git checkout of its own: the build names its root's `.git` to git, never a
+repository around the tree or one a `GIT_DIR` in its environment names. The variables that tell any git where to
+read objects, or how far back, still reach the build's. A build under `GIT_COMMON_DIR` or `GIT_OBJECT_DIRECTORY`
+naming a repository without the build's commit fails with git's words. `GIT_SHALLOW_FILE`, which git gives a
+server's receive hooks on a push from a shallow clone, and `GIT_GRAFT_FILE` stop the describe at the commits they
+list: a build under one that lists the build's commit, or one between it and its release tag, is versioned
+`0.0.0-dev` without a word. `versionCode` is `version.properties`' one line, raised by the release pull request
+with the version's `CHANGELOG.md` entry, and `preflight` refuses a tag without either.
 
 Each step is a script the workflows call (`release_preflight.sh`, `release_gate.sh`, `build_candidate.sh`,
 `sign_candidate.sh`, `sign_check.sh`, `verify_candidate.sh`, `stage_candidate.sh`, `check_evidence.py`,

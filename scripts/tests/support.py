@@ -25,7 +25,12 @@ BUILD_TOOLS_VERSION = "36.0.0"
 PLATFORM = "android-36"
 # A script that runs longer than this is stuck, not slow.
 SCRIPT_TIMEOUT_SECONDS = 300
-COMMITTER = ["-c", "user.name=Probe", "-c", "user.email=probe@example.com"]
+# The identity of every commit and annotated tag a test's own set-up makes (Repository), its tagger included. A
+# script under test is given none, as CI's runner names none, so a script that comes to need one fails its tests.
+GIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "Probe", "GIT_AUTHOR_EMAIL": "probe@example.com",
+    "GIT_COMMITTER_NAME": "Probe", "GIT_COMMITTER_EMAIL": "probe@example.com",
+}
 PACKAGE = "io.tezra.fermix"
 
 
@@ -54,6 +59,31 @@ def tool_environment():
     if env.get("JAVA_HOME"):
         env["PATH"] = os.pathsep.join([str(pathlib.Path(env["JAVA_HOME"]) / "bin"), env["PATH"]])
     return env
+
+
+def git_environment(env, scratch):
+    """[env] as a test hands it to a process that runs git (AGENTS.md), in [scratch] or under it, an absolute path,
+    as git ignores a relative ceiling. Nothing of the machine's configuration: no system or global file, which can
+    name an identity, sign every tag with a program that fails or run hooks; no system attributes file; a HOME under
+    [scratch], so none of the machine's own ignore and attributes files either, a HOME rather than none, as the
+    scripts a test runs, unlike git, take the passwd entry's, the developer's own, when there is none; and no
+    template, from which init copies hooks into the repository, as an empty GIT_TEMPLATE_DIR copies none, whatever
+    the machine's git holds or its configuration names. No identity: git guesses none from the machine's user and
+    host name (user.useConfigOnly), so a commit or an annotated tag made without GIT_IDENTITY fails here as on CI's
+    runner. None of the caller's GIT_ variables: git takes the repository from GIT_DIR, GIT_INDEX_FILE,
+    GIT_OBJECT_DIRECTORY and their kin before -C, and exports GIT_DIR to a hook or an alias in a linked worktree, so
+    a test run from there would commit into and tag the caller's repository. Looking for a repository, git climbs no
+    higher than [scratch], its ceiling being the directory above, as a ceiling stops git only from climbing into it:
+    it finds the test's own or none."""
+    scratch = pathlib.Path(scratch)
+    if not scratch.is_absolute():
+        raise AssertionError(f"{scratch} is not absolute, and git would climb past a relative ceiling")
+    given = {name: value for name, value in env.items() if not name.startswith("GIT_") and name != "XDG_CONFIG_HOME"}
+    return {
+        **given, "HOME": str(scratch / "home"), "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_ATTR_NOSYSTEM": "1", "GIT_TEMPLATE_DIR": "", "GIT_CEILING_DIRECTORIES": str(scratch.parent),
+        "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "user.useConfigOnly", "GIT_CONFIG_VALUE_0": "true",
+    }
 
 
 def run(command, cwd=None, env=None, stdin=None):
@@ -117,11 +147,13 @@ class ScriptTest(unittest.TestCase):
     def setUp(self):
         self.scratch = pathlib.Path(tempfile.mkdtemp(prefix="release-scripts-"))
         self.addCleanup(shutil.rmtree, self.scratch)
+        # The HOME of what the test runs (git_environment).
+        (self.scratch / "home").mkdir()
         self.github = self.scratch / "github"
         (self.github / "api").mkdir(parents=True)
 
     def environment(self, **extra):
-        env = tool_environment()
+        env = git_environment(tool_environment(), self.scratch)
         env["PATH"] = os.pathsep.join([str(FAKES), env["PATH"]])
         env["FAKE_GH_ROOT"] = str(self.github)
         env["GH_TOKEN"] = "fake"
@@ -130,7 +162,12 @@ class ScriptTest(unittest.TestCase):
         return env
 
     def script(self, name, *arguments, cwd=None, stdin=None, **extra):
-        return run([SCRIPTS / name, *arguments], cwd=cwd or ROOT, env=self.environment(**extra), stdin=stdin)
+        """Runs the script [name] in [cwd], the scratch directory unless the test names one under it: a git the
+        script starts finds the test's repository or none (git_environment), never the developer's checkout."""
+        where = pathlib.Path(cwd or self.scratch)
+        if not where.resolve().is_relative_to(self.scratch.resolve()):
+            raise AssertionError(f"{where} is not under the test's scratch directory {self.scratch}")
+        return run([SCRIPTS / name, *arguments], cwd=where, env=self.environment(**extra), stdin=stdin)
 
     def answer(self, path, body):
         """GitHub answers GET [path] with [body]: JSON for a value, the bytes for bytes."""
@@ -155,16 +192,17 @@ class ScriptTest(unittest.TestCase):
 
 
 class Repository:
-    """A git repository made for one test, with main as its branch."""
+    """A git repository made for one test in its scratch directory, with main as its branch."""
 
     def __init__(self, path):
         self.path = pathlib.Path(path)
         self.path.mkdir(parents=True)
+        self.env = {**git_environment({"PATH": os.environ["PATH"]}, self.path.parent), **GIT_IDENTITY}
         self.git("init", "--quiet")
         self.git("symbolic-ref", "HEAD", "refs/heads/main")
 
     def git(self, *arguments):
-        return checked(["git", *COMMITTER, "-C", self.path, *arguments]).strip()
+        return checked(["git", "-C", self.path, *arguments], env=self.env).strip()
 
     def commit(self, files, message="change"):
         for name, text in files.items():

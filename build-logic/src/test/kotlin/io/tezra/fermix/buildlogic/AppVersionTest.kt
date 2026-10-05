@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 class AppVersionTest {
     @TempDir
@@ -65,6 +64,14 @@ class AppVersionTest {
         }
     }
 
+    // The describe below runs in this JVM, and the probe builds of AndroidApplicationConventionPluginTest in its
+    // environment, so the test task hands it nothing of the caller's git and nothing of the machine's (AGENTS.md).
+    @Test
+    fun `the describe a test runs is given no git variable of the caller's and no configuration of the machine's`() {
+        val git = System.getenv().filterKeys { it.startsWith("GIT_") }
+        assertEquals(mapOf("GIT_CONFIG_NOSYSTEM" to "1", "GIT_CONFIG_GLOBAL" to "/dev/null"), git)
+    }
+
     // A real repository and a real git, run through the provider the plugin runs it with.
     @Test
     fun `over a repository, the version is the nearest release tag, or the unreleased one with none`() {
@@ -93,12 +100,18 @@ class AppVersionTest {
         assertTrue(message.startsWith("The nearest tag, 'v1.2.4-rc.1', is not a release tag"), message)
     }
 
+    // The directory around it is a repository with a release tag, as a home directory kept in git is: the build
+    // reads its own checkout or none. Git's words are in the machine's language, and name the .git it looked for.
     @Test
-    fun `outside a git checkout the build fails and says why`() {
+    fun `outside a git checkout the build fails and says why, even inside another repository`() {
+        val log = scratch.resolve("git.log")
+        scratchGit(scratch, log, "init", "--quiet")
+        scratchGit(scratch, log, "commit", "--quiet", "--allow-empty", "-m", "around")
+        scratchGit(scratch, log, "tag", "v9.9.9")
         val message = assertThrows<GradleException> { nearestVersionName() }.message.orEmpty()
-        val sentence = "versionName is the nearest release tag, and git describe failed in $repository"
-        assertTrue(message.startsWith(sentence), message)
-        assertTrue("not a git repository" in message, message)
+        val sentence = "versionName is the nearest release tag, and git describe failed in $repository with status 128"
+        assertTrue(message.startsWith("$sentence: "), message)
+        assertTrue(repository.resolve(".git").path in message, message)
     }
 
     private fun nearestVersionName(): String {
@@ -106,25 +119,7 @@ class AppVersionTest {
         return versionNameOf(project.providers.describeNearestReleaseTag(repository))
     }
 
-    private fun commit(message: String) = git(*COMMITTER, "commit", "--quiet", "--allow-empty", "-m", message)
+    private fun commit(message: String) = git("commit", "--quiet", "--allow-empty", "-m", message)
 
-    // Bounded: git's output goes to a file, so the wait never blocks on a pipe it has not drained.
-    private fun git(vararg arguments: String) {
-        val log = scratch.resolve("git.log")
-        val process =
-            ProcessBuilder(listOf("git", "-C", repository.path) + arguments)
-                .redirectErrorStream(true)
-                .redirectOutput(log)
-                .start()
-        if (!process.waitFor(GIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            error("git ${arguments.toList()} did not finish in $GIT_TIMEOUT_SECONDS s")
-        }
-        check(process.exitValue() == 0) { "git ${arguments.toList()} failed: ${log.readText()}" }
-    }
-
-    private companion object {
-        const val GIT_TIMEOUT_SECONDS = 30L
-        val COMMITTER = arrayOf("-c", "user.name=Probe", "-c", "user.email=probe@example.com")
-    }
+    private fun git(vararg arguments: String) = scratchGit(repository, scratch.resolve("git.log"), *arguments)
 }

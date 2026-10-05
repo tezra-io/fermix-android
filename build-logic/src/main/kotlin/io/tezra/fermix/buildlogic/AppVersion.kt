@@ -66,14 +66,25 @@ internal fun versionNameOf(described: String): String {
  * runs it again to see whether a tag moved. It prints the nearest tag [RELEASE_TAG_GLOB] matches, or, with none
  * behind HEAD, the commit's id. Anything else git does, outside a checkout or before the first commit, fails the
  * build with git's own words.
+ *
+ * Git is named [repository]'s `.git`, a directory or a linked worktree's file, and looks for no other: with `-C`,
+ * a GIT_DIR in the build's environment would name the repository instead, and git exports one to a hook or an
+ * alias it runs in a linked worktree; and a [repository] that is no checkout would take the version of whatever
+ * repository holds it. The variables that tell any git where to read objects, or how far back, still reach it.
+ * Under GIT_COMMON_DIR or GIT_OBJECT_DIRECTORY, which git sets for no hook or alias but a pre-receive hook (the
+ * second), naming a repository without HEAD's commit, the describe fails with git's words. GIT_SHALLOW_FILE, which
+ * git gives a server's pre-receive, update and post-receive hooks on a push from a shallow clone, and GIT_GRAFT_FILE
+ * cut history short at the commits they list: under one that lists HEAD, or a commit between HEAD and its nearest
+ * release tag, the describe finds no tag, prints HEAD's id and exits 0, and the build is versioned
+ * [UNRELEASED_VERSION_NAME] without a word. build-logic's tests run it with none of them (its build script).
  */
 internal fun ProviderFactory.describeNearestReleaseTag(repository: File): String {
     // A function value with a named parameter, not an Action lambda (Signing.kt).
     val describe: (ExecSpec) -> Unit = { spec ->
         spec.commandLine(
             "git",
-            "-C",
-            repository.path,
+            "--git-dir",
+            repository.resolve(".git").path,
             "describe",
             "--tags",
             "--abbrev=0",

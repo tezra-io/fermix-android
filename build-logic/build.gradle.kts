@@ -31,6 +31,16 @@ dependencies {
 // :build-logic:test by name, because the root `test` does not reach into an included build.
 tasks.test {
     useJUnitPlatform()
+    // AGENTS.md: the workers run the product's git describe, in their own JVM and in the probe builds they start,
+    // so they are given none of the caller's GIT_ variables, which point git at another repository's objects
+    // (GIT_COMMON_DIR, GIT_OBJECT_DIRECTORY) or stop its describe short (GIT_SHALLOW_FILE), and none of the
+    // machine's git configuration. Taken from the environment the task runs in, as it runs, so the configuration
+    // cache stores no environment.
+    doFirst {
+        val test = this as Test
+        test.environment = test.environment.filterKeys { !it.startsWith("GIT_") } +
+            mapOf("GIT_CONFIG_NOSYSTEM" to "1", "GIT_CONFIG_GLOBAL" to "/dev/null")
+    }
 }
 
 // The same gates the convention plugins put on every module (QualityConventionPlugin).
