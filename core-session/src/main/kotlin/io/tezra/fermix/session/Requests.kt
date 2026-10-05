@@ -30,12 +30,14 @@ internal class Requests(
 
     /**
      * [request], with the [attachments] its `msg` uploads first (Uploads), into the outbox, then on its way if a
-     * connection is up and reconciled.
+     * connection is up and reconciled: whether the outbox took it. One past the [MAX_OUTBOX] it holds is refused,
+     * nothing of it stored, as an owner who stays offline and keeps sending reaches that bound, and the caller hears
+     * it (the chat keeps the words); a request the codec refuses throws, as one the caller should have weighed.
      */
     suspend fun submit(
         request: ClientEvent,
         attachments: List<OutboxAttachment> = emptyList(),
-    ) {
+    ): Boolean {
         core.requireOpen()
         val item = OutboxItem(request, attachments = attachments)
         val profile = (request as? ClientEvent.Msg)?.profileId ?: (request as? ClientEvent.Command)?.profileId
@@ -44,10 +46,11 @@ internal class Requests(
         encodeClientEvent(SESSION_VERSION, 1uL, request)
         attachments.forEach { encodeClientEvent(SESSION_VERSION, 1uL, it.begin()) }
         val items = store.outbox()
-        check(items.size < MAX_OUTBOX) { "the outbox holds $MAX_OUTBOX requests already" }
+        if (items.size >= MAX_OUTBOX) return false
         require(items.none { it.clientMsgId == item.clientMsgId }) { "${item.clientMsgId} is in the outbox already" }
         store.enqueue(item)
         core.live?.offer(store.outbox())
+        return true
     }
 
     /**
@@ -55,12 +58,13 @@ internal class Requests(
      * it. The caller passes the request itself, since `accepted` took it out of the outbox before its run
      * failed; one refused before `accepted` is still there, failed, and leaves now, its attachments going with
      * the new one, those the daemon holds as they are and the others from `attach_begin`, with its restarts
-     * counted afresh. One accepted names blobs the daemon took already.
+     * counted afresh. One accepted names blobs the daemon took already. Whether the outbox took it ([submit]): one it
+     * refuses leaves the failed item where it was.
      */
     suspend fun retry(
         failed: ClientEvent,
         newClientMsgId: String,
-    ) {
+    ): Boolean {
         core.requireOpen()
         val clientMsgId = OutboxItem(failed).clientMsgId
         require(newClientMsgId != clientMsgId) { "running $clientMsgId again is a new request, with a new id" }
@@ -72,9 +76,10 @@ internal class Requests(
                 is ClientEvent.Command -> failed.copy(clientMsgId = newClientMsgId)
                 else -> error("an outbox item holds a msg or a command")
             }
-        submit(again, held?.attachments.orEmpty())
+        if (!submit(again, held?.attachments.orEmpty())) return false
         if (held != null) store.dequeue(clientMsgId)
         core.forgetUploads(clientMsgId)
+        return true
     }
 
     /**

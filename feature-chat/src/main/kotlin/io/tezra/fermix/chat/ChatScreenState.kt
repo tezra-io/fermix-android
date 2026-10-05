@@ -69,9 +69,11 @@ fun chatScreenState(
         name = facts.header.record.title,
         turnRuns = inputs.live.turns.any { it.live },
         commands =
-            facts.header.record.caps
-                ?.commands
-                .orEmpty(),
+            sendableCommands(
+                facts.header.record.caps
+                    ?.commands
+                    .orEmpty(),
+            ),
         newestSeq = newest,
         unseen = unseen(items, seenUpTo),
         older = more,

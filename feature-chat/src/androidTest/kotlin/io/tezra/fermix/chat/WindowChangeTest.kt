@@ -74,7 +74,10 @@ class WindowChangeTest {
     @Test
     fun a_rotation_keeps_the_working_indicators_phrase() {
         val phrase = thinkingPhrase()
-        rule.rotated { rule.onNodeWithText(phrase).assertIsDisplayed() }
+        rule.rotated {
+            rule.awaitDisplayed(phrase)
+            rule.onNodeWithText(phrase).assertIsDisplayed()
+        }
     }
 
     @Test
@@ -88,6 +91,9 @@ class WindowChangeTest {
     @FoldingPhone
     fun a_fold_keeps_the_working_indicators_phrase() {
         val phrase = thinkingPhrase()
-        rule.folded { rule.onNodeWithText(phrase).assertIsDisplayed() }
+        rule.folded {
+            rule.awaitDisplayed(phrase)
+            rule.onNodeWithText(phrase).assertIsDisplayed()
+        }
     }
 }

@@ -45,7 +45,8 @@ import java.util.Locale
 /**
  * The screen as it reads: its state, the composer's field, whether the palette shows, search while it is open,
  * the "Model" sheet while it is, the latest jump to a search hit, which the list scrolls to and pulses, the
- * attachments and voice notes ([media]), and the latest change the chat made to the field ([written]).
+ * attachments and voice notes ([media]), the latest change the chat made to the field ([written]), and whether the
+ * field holds more than one message carries ([tooLong]).
  */
 data class ChatUi(
     val state: ChatScreenState,
@@ -56,6 +57,7 @@ data class ChatUi(
     val jump: Jump? = null,
     val media: MediaUi = MediaUi(),
     val written: FieldWrite = FieldWrite(),
+    val tooLong: Boolean = false,
 )
 
 /**

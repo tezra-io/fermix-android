@@ -250,6 +250,24 @@ fun ModelChipPreview() {
 
 @FermixPreviews
 @Composable
+fun TooLongPreview() {
+    // A field past what one message carries: the line above says Send sends nothing, and the field keeps its words.
+    val chip = ModelChip("GPT-6 Astra", "C", overridden = false, enabled = true)
+    val field = TextFieldValue("The ingest worker's log, pasted whole: ".repeat(120))
+    FermixPreviewTheme {
+        Box(modifier = Modifier.fillMaxSize().background(LocalFermixColors.current.canvas).padding(top = 24.dp)) {
+            FermixColumn(ColumnWidth.Wide) {
+                Column {
+                    ComposerHint(chip, switchPending = false, tooLong = true)
+                    Composer(field, ComposerLook(HOST, stops = false, chip = chip), ACTIONS.composer, false)
+                }
+            }
+        }
+    }
+}
+
+@FermixPreviews
+@Composable
 fun ModelSheetPreview() {
     val entries =
         listOf(

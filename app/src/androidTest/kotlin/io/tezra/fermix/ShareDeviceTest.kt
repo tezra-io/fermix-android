@@ -4,10 +4,12 @@ import android.app.ActivityManager
 import android.app.UiAutomation
 import android.content.ComponentName
 import android.content.Intent
+import android.graphics.Rect
 import android.net.Uri
 import android.os.StrictMode
 import android.os.SystemClock
 import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -20,9 +22,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.navigation3.runtime.NavKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.tezra.fermix.EndlessProvider.ENDLESS_NAME
+import io.tezra.fermix.EndlessProvider.ENDLESS_URI
+import io.tezra.fermix.EndlessProvider.HANDED
+import io.tezra.fermix.EndlessProvider.LONG_NAMED_URI
+import io.tezra.fermix.EndlessProvider.TRICKLE_CLOSED
+import io.tezra.fermix.EndlessProvider.TRICKLE_URI
 import io.tezra.fermix.chat.ChatViewModel
+import io.tezra.fermix.chat.LANDING_MAX_BYTES
 import io.tezra.fermix.chat.Picked
 import io.tezra.fermix.chat.PickedFrom
+import io.tezra.fermix.chat.TooBig
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.Use
@@ -49,16 +59,36 @@ private const val HOST_B = "share-test-b"
 private const val WORDS = "look at this"
 private const val ASKS = "Send to which Fermix?"
 
+/**
+ * How long a landing may take once its turn comes: the app's own time for it (Landings.kt's LANDING_WAIT_MILLIS), its
+ * bound's bytes through a pipe on an emulator well within it.
+ */
+private const val LANDING_MILLIS = 60_000L
+
+/** What a pipe and a copy's reads hold past the bound once the copy stops: their buffers, and some. */
+private const val STREAM_SLACK_BYTES = 1L * 1024 * 1024
+
 /** The phone's screen lock the lock test sets, and takes away again. */
 private const val PIN = "1357"
+
+/**
+ * How long the system prompt's PIN field holds still before the PIN goes in. The prompt slides in once its window has
+ * the focus, its field focused before the slide ends, and a PIN it matches before then comes back to the app as a
+ * cancel (SystemUI's AuthContainerView: "startDismiss(): waiting for onDialogAnimatedIn"); the slide is 250 ms at the
+ * phone's own animation speed.
+ */
+private const val PROMPT_STILL_MILLIS = 500L
 
 /**
  * Another app's share through the share entry, on the device (design section 13.6, "Share into Fermix"): the
  * system starts the entry, which hands the share to the app's one activity in its own task, and each item is copied
  * into the chat's own file as it lands, nothing sent. Most shares are the app's own, of media-store rows it saved and
  * reads with no grant; one is the shell's, another uid, of a row only its grant lets the app read, handed from the
- * entry to the activity, and held through a rotation and the pick. Each test pairs records that no session can
- * open, and removes them, with the media store's rows and the files it made; the app must hold no record before.
+ * entry to the activity, and held through a rotation and the pick; three are the test APK's own provider's
+ * (EndlessProvider): a stream that never ends, which the landing copy stops at the app's own bound, an item named and
+ * typed past any bound, which lands under the app's bounds and outlives the app going home, and a stream that
+ * trickles, which the app closes once the landing's time passes. Each test pairs records that no session can open,
+ * and removes them, with the media store's rows and the files it made; the app must hold no record before.
  */
 @RunWith(AndroidJUnit4::class)
 class ShareDeviceTest {
@@ -134,6 +164,15 @@ class ShareDeviceTest {
     }
 
     private fun tray(model: ChatViewModel): List<Picked> = model.attach.ui.value.picked
+
+    /** The scratch files in the app's cache, a landing copy's among them while it is made (AppServices' scratch). */
+    private fun landingFiles(): Set<String> =
+        app.cacheDir
+            .listFiles()
+            .orEmpty()
+            .filter { it.name.startsWith("fetch") }
+            .map { it.name }
+            .toSet()
 
     /** Nothing of [record]'s chat is waiting to go: no Send was tapped. */
     private fun sentNothing(record: Instance) {
@@ -291,6 +330,66 @@ class ShareDeviceTest {
     }
 
     @Test
+    fun anotherAppsStreamThatNeverEndsSharedIntoAChatWithNoCapsStopsAtTheAppsOwnBoundAndNothingIsKept() {
+        // A record as a pairing leaves it, before the daemon's first hello_ack: no caps, no limit of the daemon's.
+        val a = testRecord(1, HOST_A)
+        assertEquals(null, a.caps)
+        pair(a)
+        start(shareIntent(Intent.ACTION_SEND, "application/octet-stream").putExtra(Intent.EXTRA_STREAM, ENDLESS_URI))
+        val model = opened(a)
+        try {
+            rule.waitUntil("the endless item's line", LANDING_MILLIS) { model.attach.ui.value.tooBig != null }
+            val past = TooBig(ENDLESS_NAME, LANDING_MAX_BYTES + 1, LANDING_MAX_BYTES)
+            assertEquals(past, model.attach.ui.value.tooBig)
+            assertEquals(emptyList<Picked>(), tray(model))
+            val handed = checkNotNull(resolver.call(ENDLESS_URI, HANDED, null, null)).getLong(HANDED)
+            assertTrue("the provider handed over $handed bytes", handed <= LANDING_MAX_BYTES + STREAM_SLACK_BYTES)
+            sentNothing(a)
+        } finally {
+            // What a copy with no bound of its own would have kept: the tray's own files.
+            tray(model).forEach { File(URI(it.uri)).delete() }
+        }
+    }
+
+    @Test
+    fun anItemAnotherAppNamesPastAnyBoundLandsNamedWithinTheAppsAndTheAppOutlivesGoingHome() {
+        val a = testRecord(1, HOST_A)
+        pair(a)
+        start(shareIntent(Intent.ACTION_SEND, "application/octet-stream").putExtra(Intent.EXTRA_STREAM, LONG_NAMED_URI))
+        val model = opened(a)
+        try {
+            rule.waitUntil("the long-named item in the tray", LANDING_MILLIS) { tray(model).isNotEmpty() }
+            // The chat's saved state holds the tray's names, which the platform parcels as the app goes home: a name
+            // past what a parcel holds stopped the app there (TransactionTooLargeException).
+            shell("input keyevent KEYCODE_HOME")
+            rule.waitUntil("the app away", STEP_MILLIS) { services.lockGate.sight.value == Sight.AWAY }
+            val landed = tray(model).single()
+            assertTrue("a name of ${landed.name.length} characters", landed.name.encodeToByteArray().size <= 255)
+            assertTrue(landed.name, landed.name.endsWith(".bin"))
+            assertEquals("application/octet-stream", landed.mime)
+            sentNothing(a)
+        } finally {
+            tray(model).forEach { File(URI(it.uri)).delete() }
+        }
+    }
+
+    @Test
+    fun anotherAppsItemThatTricklesIsLeftOutOnceTheLandingsTimePassesItsStreamClosedAndNothingKept() {
+        val a = testRecord(1, HOST_A)
+        pair(a)
+        val before = landingFiles()
+        start(shareIntent(Intent.ACTION_SEND, "application/octet-stream").putExtra(Intent.EXTRA_STREAM, TRICKLE_URI))
+        val model = opened(a)
+        rule.waitUntil("the trickle's stream closed by the app", LANDING_MILLIS + STEP_MILLIS) {
+            checkNotNull(resolver.call(TRICKLE_URI, TRICKLE_CLOSED, null, null)).getBoolean(TRICKLE_CLOSED)
+        }
+        rule.waitUntil("the trickle's part-copy deleted", STEP_MILLIS) { landingFiles() == before }
+        assertEquals(emptyList<Picked>(), tray(model))
+        assertEquals(null, model.attach.ui.value.tooBig)
+        sentNothing(a)
+    }
+
+    @Test
     fun aTaskAnotherAppsShareStartedIsStartedAgainFromRecentsOnceItsActivityIsGone() {
         val a = testRecord(1, HOST_A)
         pair(a)
@@ -376,19 +475,47 @@ class ShareDeviceTest {
         shows(HOST_A)
         shell("input keyevent KEYCODE_HOME")
         rule.waitUntil(STEP_MILLIS) { services.lockGate.sight.value == Sight.AWAY }
+        // A span the product defines, not a wait for readiness: the lock asks again only once the app was away past
+        // its grace, which runs on the phone's clock, and a second more.
         SystemClock.sleep(BACKGROUND_GRACE_MILLIS + 1_000)
     }
 
-    /** The system's prompt has the focus over the app; the PIN goes into it. */
+    /**
+     * The system's prompt has the focus over the app; the PIN goes into it once its PIN field holds the input focus and
+     * has held still on the screen for [PROMPT_STILL_MILLIS], the prompt done sliding in, waited for, bounded: typed
+     * before the field has the focus the PIN is lost, and matched before the slide ends it comes back as a cancel.
+     */
     private fun unlockWithPin() {
         rule.waitUntil(
             STEP_MILLIS,
         ) { "io.tezra.fermix/" !in focusedWindow() && "mCurrentFocus=null" !in focusedWindow() }
-        // The prompt's PIN field takes the focus as its window comes in.
-        SystemClock.sleep(1_000)
+        var seen: Rect? = null
+        var since = SystemClock.uptimeMillis()
+        rule.waitUntil("the prompt's PIN field focused and still for $PROMPT_STILL_MILLIS ms", STEP_MILLIS) {
+            val now = promptFieldBounds()
+            val at = SystemClock.uptimeMillis()
+            if (now != seen) {
+                seen = now
+                since = at
+            }
+            now != null && at - since >= PROMPT_STILL_MILLIS
+        }
         shell("input text $PIN")
         shell("input keyevent KEYCODE_ENTER")
         rule.waitUntil(STEP_MILLIS) { services.lockGate.sight.value == Sight.OPEN }
+    }
+
+    /**
+     * Where the system prompt's PIN field is on the screen, read afresh: a field of another app's window, editable and
+     * holding the input focus; null while there is none.
+     */
+    private fun promptFieldBounds(): Rect? {
+        val focused = instrumentation.uiAutomation.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val field =
+            focused?.takeIf {
+                it.refresh() && it.isEditable && it.isFocused && it.packageName != app.packageName
+            }
+        return field?.let { Rect().also(it::getBoundsInScreen) }
     }
 
     /**

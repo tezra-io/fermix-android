@@ -16,6 +16,17 @@ fun paletteQuery(field: String): String? {
     return if (word.any { it.isWhitespace() }) null else word
 }
 
+/** The wire's rule for a command's name (PROTOCOL.md: lowercase letters, digits and `_`), which the codec holds. */
+private val COMMAND_NAME = Regex("[a-z0-9_]+")
+
+/**
+ * The daemon's [commands] the phone can send: those whose name keeps the wire's rule ([COMMAND_NAME]). The caps hold a
+ * name to no form (the decoder asks only that it is there), and the codec refuses a `command` whose name breaks it, so
+ * the palette never offers such a command and its words go as a `msg`.
+ */
+fun sendableCommands(commands: List<CommandDescriptor>): List<CommandDescriptor> =
+    commands.filter { COMMAND_NAME.matches(it.name) }
+
 /** [commands] whose name or an alias starts with [query], ignoring case, in the daemon's order. */
 fun paletteCommands(
     commands: List<CommandDescriptor>,

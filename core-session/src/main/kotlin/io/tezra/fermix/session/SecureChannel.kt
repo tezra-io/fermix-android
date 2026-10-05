@@ -55,14 +55,16 @@ internal class SecureChannel(
     /**
      * Sends [event] at the next seq, with [raw] as its tail: a protocol v2 `pair_request` carries its
      * attestation chain there, and an `attach_chunk` its bytes. A link that is closing takes nothing; its
-     * reader then sees the link end and says why, so nothing here waits on the answer.
+     * reader then sees the link end and says why, so nothing here waits on the answer. An event the codec refuses
+     * throws before its seq is taken, so the next one goes at the seq it would have had.
      */
     fun send(
         event: ClientEvent,
         raw: ByteArray = ByteArray(0),
     ) {
+        val frame = encodeClientEvent(SESSION_VERSION, sentSeq + 1uL, event, raw)
         sentSeq++
-        link.send(noise.encrypt(encodeClientEvent(SESSION_VERSION, sentSeq, event, raw)))
+        link.send(noise.encrypt(frame))
     }
 
     /**

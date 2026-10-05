@@ -30,8 +30,8 @@ import kotlinx.serialization.json.JsonPrimitive
 /** How long after the owner stops typing the draft is kept (design section 13.6, "Drafts"). */
 const val DRAFT_DEBOUNCE_MS = 400L
 
-/** The protocol a session speaks, whose `msg` the composer's words are held to. */
-private const val MSG_PROTOCOL = 2
+/** The protocol a session speaks, whose frames the composer's words and every request are weighed in. */
+internal const val MSG_PROTOCOL = 2
 
 /** An id as the phone makes them, a UUID's 36 characters: a `msg`'s own, each attachment's and its `retry_of`. */
 private val ID_SIZED = "0".repeat(36)
@@ -88,6 +88,16 @@ class ChatComposer(
         combine(text, asked) { value, open -> open || paletteQuery(value.text) != null }
             .stateIn(scope, SharingStarted.Eagerly, false)
 
+    /**
+     * Whether the field holds more than one message carries (ChatRequests.carries), as a message, a command or a
+     * caption alike: Send then sends nothing, and the line over the composer says why.
+     */
+    val tooLong: StateFlow<Boolean> =
+        text
+            .map { !requests.carries(it.text) }
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.Eagerly, false)
+
     init {
         scope.launch { restore() }
         scope.launch {
@@ -138,10 +148,12 @@ class ChatComposer(
      * Send: the field's request, the field emptied once the session took it, unless the owner typed on; then
      * [onTaken], where the screen plays send's haptic, which says something went (design section 13.1). A
      * typed `/stop` goes as the Stop control's does (ChatRequests.stopAs), at once or not at all, never into
-     * the outbox, where it would wait for a later connection and stop whatever runs then.
+     * the outbox, where it would wait for a later connection and stop whatever runs then. Words past what one message
+     * carries send nothing and stay in the field, every one of them ([tooLong]).
      */
     fun send(onTaken: () -> Unit) {
         val words = text.value.text
+        if (!requests.carries(words)) return
         val request = requests.of(words, commands()) ?: return
         scope.launch {
             val taken =

@@ -32,7 +32,7 @@ internal fun OnboardingRule.awaitTop(key: OnboardingKey) {
 
 /** The system's back, once the activity's window has the focus Espresso's key event needs. */
 internal fun OnboardingRule.back() {
-    awaitWindowFocus(activity)
+    awaitWindowFocus()
     Espresso.pressBack()
 }
 

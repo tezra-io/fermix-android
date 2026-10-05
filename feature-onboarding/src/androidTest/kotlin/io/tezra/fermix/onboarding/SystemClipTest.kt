@@ -29,8 +29,8 @@ class SystemClipTest {
 
     @Test
     fun the_clip_reads_the_primary_clips_text_and_clearing_it_leaves_none() {
+        rule.awaitWindowFocus()
         val activity = rule.activity
-        rule.awaitWindowFocus(activity)
         val clipboard = activity.getSystemService(ClipboardManager::class.java)
         rule.runOnUiThread { clipboard.setPrimaryClip(ClipData.newPlainText("pairing link", linkText())) }
         val clip = clipboardClip(activity)
@@ -42,8 +42,8 @@ class SystemClipTest {
 
     @Test
     fun a_clips_uri_is_never_opened_and_its_own_words_are_the_text() {
+        rule.awaitWindowFocus()
         val activity = rule.activity
-        rule.awaitWindowFocus(activity)
         val clipboard = activity.getSystemService(ClipboardManager::class.java)
         val note = noteEntry()
         try {

@@ -11,6 +11,7 @@ interface MediaPipeline {
      * What [uri] names, picked from [from]: its kind, type, name and size; none when it cannot be read. A URI the chat
      * may not read as it lands from [from] (mayRead) is a SecurityException. Another app's provider that fails throws
      * what the binder carries back from it, an IllegalArgumentException or an UnsupportedOperationException among them.
+     * It returns as soon as its caller is cancelled, whatever the provider does.
      */
     suspend fun describe(
         uri: String,
@@ -31,7 +32,9 @@ interface MediaPipeline {
 
     /**
      * [picked]'s own bytes written to [into] as it lands, at most [maxBytes] and one byte more, which tells an item
-     * past them, however much its provider would hand over: how many it wrote. Throws as [prepare] does.
+     * past them, however much its provider would hand over: how many it wrote. [maxBytes] is a landing's, at most
+     * LANDING_MAX_BYTES. Throws as [prepare] does. It returns as soon as its caller is cancelled, its stream closed, so
+     * the copy stops.
      */
     suspend fun copyAtMost(
         picked: Picked,

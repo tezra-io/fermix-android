@@ -46,7 +46,7 @@ class WindowChangeTest {
     private fun awaitRecreated(made: Int) {
         val rig = rule.activity.rig
         rule.waitUntil("the activity recreated", STEP_MILLIS) { rig.creations.get() > made }
-        rule.waitForIdle()
+        rule.idleWithin()
     }
 
     /** [check] once the display turned a quarter, then the display as the system turns it again. */
@@ -66,9 +66,14 @@ class WindowChangeTest {
 
     /**
      * Verify shown at 1:42, then ten seconds later recreated: the screen drawn again counts from the end the
-     * ViewModel kept, 1:32, where a countdown begun again would show 2:00, and the code is the same.
+     * ViewModel kept, 1:32, where a countdown begun again would show 2:00, and the code is the same. The window made
+     * again is waited for, bounded, until it shows them: its insets and its layout land a frame or more after the
+     * activity's creation, a step of the system's that Compose's idle does not know.
      */
     private fun assertVerifyKept() {
+        rule.waitUntil("Verify drawn again at 1:32 with its code", STEP_MILLIS) {
+            rule.displayed("1:32") && rule.describedAs(SPOKEN_TEST_SAS)
+        }
         rule.onNodeWithText("1:32").assertIsDisplayed()
         rule.onNodeWithContentDescription(SPOKEN_TEST_SAS).assertIsDisplayed()
         assertEquals(OnboardingKey.Verify, topOf(rule.activity.onboarding.stack.value))
@@ -115,7 +120,7 @@ class WindowChangeTest {
         folded("0")
         try {
             awaitRecreated(made)
-            rule.awaitWindowFocus(rule.activity)
+            rule.awaitWindowFocus()
             assertVerifyKept()
         } finally {
             folded("reset")
@@ -129,6 +134,10 @@ class WindowChangeTest {
         rule.onNodeWithText("Paste a pairing link").performClick()
         rule.onNode(hasSetTextAction()).performTextInput(HALF_TYPED)
         rotated {
+            rule.waitUntil(
+                "the paste sheet drawn again with its half-typed link",
+                STEP_MILLIS,
+            ) { rule.holds(HALF_TYPED) }
             rule.onNode(hasSetTextAction()).assertTextContains(HALF_TYPED)
         }
     }

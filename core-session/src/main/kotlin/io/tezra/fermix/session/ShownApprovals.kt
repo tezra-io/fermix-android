@@ -64,6 +64,16 @@ sealed interface ApprovalAnswer {
     data class Answered(
         val clientMsgId: String,
     ) : ApprovalAnswer
+
+    /**
+     * The answer is past what one `command` carries (PROTOCOL.md: a header of at most 4,096 bytes; `event_part` is the
+     * daemon's alone): a route the wire holds to 1,024 characters, not bytes, or an `approval_id` it holds to none.
+     * Nothing went, and nothing was stored.
+     */
+    data object TooLong : ApprovalAnswer
+
+    /** The outbox holds as many requests as it takes: nothing went, and nothing was stored. */
+    data object OutboxFull : ApprovalAnswer
 }
 
 /** A route as the command the daemon expects (PROTOCOL.md "Approvals"): "/soul apply T" is `soul`, "apply T". */

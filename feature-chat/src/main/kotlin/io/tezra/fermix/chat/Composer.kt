@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -233,7 +232,10 @@ private fun HandsFreeControls(
 /**
  * The field (design section 13.6): its words are the chat's (ChatComposer), kept here in a TextFieldState while the
  * owner types, every change handed back ([ComposerActions.onField]); a change the chat makes ([ComposerLook.written])
- * is written into it once, by its revision, so a frame that brings the owner's typing back late never undoes it.
+ * is written into it once, by its revision, so a frame that brings the owner's typing back late never undoes it. The
+ * TextFieldState is remembered, never saved: a saved state goes to the system through the binder as the app stops,
+ * whose 1 MB a paste outgrows, and that stops the app (Task 14c); the chat brings the words back itself, from its
+ * ViewModel as a rotation makes the field again and from its draft once the process is gone.
  * The TextFieldState takes the keyboard's images ([AttachActions.onKeyboard], IME `commitContent`), which the
  * field over a TextFieldValue refuses.
  */
@@ -247,7 +249,7 @@ private fun Field(
     val colors = LocalFermixColors.current
     val view = LocalView.current
     val placeholder = stringResource(R.string.chat_placeholder, look.title)
-    val state = rememberTextFieldState(field.text, field.selection)
+    val state = remember { TextFieldState(field.text, field.selection) }
     val scroll = rememberScrollState()
     val applied = remember { mutableIntStateOf(look.written.revision) }
     val onField by rememberUpdatedState(actions.onField)

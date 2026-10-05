@@ -43,15 +43,14 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
 }
 
 /**
- * A library's instrumented tests (CI/CD design section 3, `ui`): AndroidX Test's runner and its JUnit 4
- * runner class, and `check` builds their APK ([INSTRUMENTED_TEST_APK]), so they compile under the module's
- * gates and every library they run on is verified. A module that draws adds Compose's test rule and
- * Espresso to the same (AndroidComposeLibraryConventionPlugin), and builds the APK whether it has tests or not.
+ * A library's instrumented tests (CI/CD design section 3, `ui`): AndroidX Test's runner, each test bounded in
+ * time, and its JUnit 4 runner class, and `check` builds their APK ([INSTRUMENTED_TEST_APK]), so they compile
+ * under the module's gates and every library they run on is verified. A module that draws adds Compose's test rule
+ * and Espresso to the same (AndroidComposeLibraryConventionPlugin), and builds the APK whether it has tests or not.
  */
 private fun Project.addInstrumentedTests() {
     val libs = extensions.getByType<VersionCatalogsExtension>().named("libs")
-    extensions.getByType<LibraryExtension>().defaultConfig.testInstrumentationRunner =
-        "androidx.test.runner.AndroidJUnitRunner"
+    extensions.getByType<LibraryExtension>().defaultConfig.runsInstrumentedTests()
     dependencies.addProvider("androidTestImplementation", libs.library("androidx-test-runner"))
     dependencies.addProvider("androidTestImplementation", libs.library("androidx-test-ext-junit"))
     tasks.named<Task>("check") { dependsOn(INSTRUMENTED_TEST_APK) }

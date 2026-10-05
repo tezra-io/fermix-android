@@ -277,7 +277,7 @@ private fun SheetOverChat(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             BottomSheetDefaults.DragHandle()
-            AttachSheetContent(attach, field, ACTIONS.composer, grid)
+            AttachSheetContent(attach, field, ACTIONS.composer, photos = grid)
         }
     }
 }

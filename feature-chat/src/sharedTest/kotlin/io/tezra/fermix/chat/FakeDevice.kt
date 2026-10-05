@@ -1,10 +1,12 @@
 package io.tezra.fermix.chat
 
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.net.URI
 import java.nio.file.Files
 
@@ -69,14 +71,19 @@ class FakeChatFiles(
  * a JPEG comes out "image/jpeg" under a ".jpg" name, its bytes [jpeg]'s of the image's; a URI in [unreadable] throws
  * an IOException, one in [refused] a SecurityException, as a read grant that ended does, its words the platform's,
  * which name the URI whole, and one in [faulty] an IllegalStateException, as another app's provider that fails does
- * across the binder. Every prepare is recorded, with whether it went as a file, and every landing copy ([copied])
- * with the bytes it wrote, which the app's own bounded copy writes.
+ * across the binder. A URI in [stallsDescribing] or [stallsCopying] is a provider that stalls as it is described, or
+ * as its bytes are read: the call waits until the caller is cancelled, as PhoneMedia's do on its landing threads; one
+ * in [streams] is copied from the stream it makes, which may never end. Every prepare is recorded, with whether it
+ * went as a file, and every landing copy ([copied]) with the bytes it wrote, which the app's own bounded copy writes.
  */
 class FakePipeline : MediaPipeline {
     var describe: (String, PickedFrom) -> Picked? = { uri, from ->
         Picked(uri, uri, PickedKind.IMAGE, "image/png", uri.substringAfterLast('/'), DEFAULT_SIZE, from)
     }
     var bytes: Map<String, ByteArray> = emptyMap()
+    var stallsDescribing: Set<String> = emptySet()
+    var stallsCopying: Set<String> = emptySet()
+    var streams: Map<String, () -> InputStream> = emptyMap()
     var unreadable: Set<String> = emptySet()
     var refused: Set<String> = emptySet()
     var faulty: Set<String> = emptySet()
@@ -92,7 +99,10 @@ class FakePipeline : MediaPipeline {
     override suspend fun describe(
         uri: String,
         from: PickedFrom,
-    ): Picked? = describe.invoke(uri, from)
+    ): Picked? {
+        if (uri in stallsDescribing) awaitCancellation()
+        return describe.invoke(uri, from)
+    }
 
     override suspend fun copyAtMost(
         picked: Picked,
@@ -100,8 +110,9 @@ class FakePipeline : MediaPipeline {
         maxBytes: Long,
     ): Long {
         readable(picked)
-        val source = ByteArrayInputStream(bytesOf(picked))
-        val written = into.outputStream().use { copyAtMost(source, it, maxBytes) }
+        if (picked.uri in stallsCopying) awaitCancellation()
+        val source = streams[picked.uri]?.invoke() ?: ByteArrayInputStream(bytesOf(picked))
+        val written = source.use { from -> into.outputStream().use { copyAtMost(from, it, maxBytes) } }
         copied.update { it + (picked.uri to written) }
         return written
     }

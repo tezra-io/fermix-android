@@ -64,6 +64,7 @@ class AndroidComposeLibraryConventionPluginTest {
             assertTrue("$copy enabled: false" in printed, result.output)
         }
         assertTrue("instrumented tests run on: androidx.test.runner.AndroidJUnitRunner" in printed, result.output)
+        assertTrue("runner arguments: {timeout_msec=$INSTRUMENTED_TEST_TIMEOUT_MILLIS}" in printed, result.output)
         assertTrue("check builds $INSTRUMENTED_TEST_APK: true" in printed, result.output)
         // The generated screenshot test is Kotlin under build/, which a test component's analysis reads.
         assertTrue("lintAnalyzeDebugUnitTest runs after: [$PREVIEW_TESTS]" in printed, result.output)
@@ -101,6 +102,7 @@ private val PROBE_BUILD =
             println(copy + " enabled: " + tasks.getByName(copy).enabled)
         }
         println("instrumented tests run on: " + android.defaultConfig.testInstrumentationRunner)
+        println("runner arguments: " + android.defaultConfig.testInstrumentationRunnerArguments)
         println("check builds $INSTRUMENTED_TEST_APK: " + ("$INSTRUMENTED_TEST_APK" in check.dependsOn))
         val analysis = tasks.getByName("lintAnalyzeDebugUnitTest")
         val after = analysis.mustRunAfter.getDependencies(analysis).map { task -> task.name }.sorted()

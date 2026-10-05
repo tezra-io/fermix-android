@@ -5,6 +5,7 @@ import io.tezra.fermix.data.Instance
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.ModelEntry
 import io.tezra.fermix.protocol.ServerEvent
+import io.tezra.fermix.protocol.encodeClientEvent
 import io.tezra.fermix.session.APPROVAL_ANSWER_PREFIX
 import io.tezra.fermix.session.ApprovalAnswer
 import io.tezra.fermix.session.Diagnostic
@@ -28,6 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** A blob's chunk on the wire, 60 KiB. */
 private const val CHUNK_BYTES = 61_440
+
+/** The protocol a session speaks, whose codec holds each request the fake session takes, as Session's does. */
+private const val SESSION_PROTOCOL = 2
 
 /** Connected over the tailnet and caught up: the chat's subtitle reads "Tailscale · 38 ms". */
 internal val UP = SessionState.Connected(Candidate.Scope.TAILNET, latencyMs = 38, caughtUp = true)
@@ -95,8 +99,10 @@ class FakeChatStore(
 }
 
 /**
- * A session as the chat uses it, over [store]: a request it takes goes to the outbox, as Session.send's does;
- * [remove] takes an item out while it was never written or was refused. Every call is recorded, in order. The
+ * A session as the chat uses it, over [store]: a request it takes goes to the outbox, as Session.send's does, and one
+ * the codec refuses, a header past 4,096 bytes among them, its own or an attachment's `attach_begin`, throws its
+ * ProtocolException, as Session's does; [remove]
+ * takes an item out while it was never written or was refused. Every call is recorded, in order. The
  * one-shots answer only while [connected], as Session's never queue: a search, its query at most
  * [MAX_QUERY_SCALARS] as Session's, with [searchPage] or as [searchFails] says, a pull with [models], a fetch
  * with [blobs]' bytes; an older page's pull runs [onOlder]; an approval's answer goes to the outbox as
@@ -145,6 +151,10 @@ class FakeChatSession(
         request: ClientEvent,
         attachments: List<OutboxAttachment>,
     ): Boolean {
+        // As Session.send's: the codec holds the request and each attach_begin to protocol v2's rules, and throws on
+        // one it refuses.
+        encodeClientEvent(SESSION_PROTOCOL, 1uL, request)
+        attachments.forEach { encodeClientEvent(SESSION_PROTOCOL, 1uL, attachBeginOf(it)) }
         if (!takes) return false
         sent.update { it + request }
         store.outbox.update { it + OutboxItem(request, attachments = attachments) }
@@ -155,6 +165,14 @@ class FakeChatSession(
         failed: ClientEvent,
         newClientMsgId: String,
     ): Boolean {
+        val again =
+            when (failed) {
+                is ClientEvent.Msg -> failed.copy(clientMsgId = newClientMsgId, retryOf = failed.clientMsgId)
+                is ClientEvent.Command -> failed.copy(clientMsgId = newClientMsgId)
+                else -> error("only a msg or a command runs again")
+            }
+        // As Session.retry's: the request run again goes through the codec as a new one does.
+        encodeClientEvent(SESSION_PROTOCOL, 1uL, again)
         retried.update { it + (failed to newClientMsgId) }
         return true
     }

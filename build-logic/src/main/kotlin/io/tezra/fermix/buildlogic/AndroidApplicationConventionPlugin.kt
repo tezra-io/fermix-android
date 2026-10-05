@@ -46,7 +46,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
                 defaultConfig.targetSdk = TARGET_SDK
                 defaultConfig.versionCode = version.code
                 defaultConfig.versionName = version.name
-                if (instrumented) defaultConfig.testInstrumentationRunner = INSTRUMENTATION_RUNNER
+                if (instrumented) defaultConfig.runsInstrumentedTests()
                 configureSigning(debugKey, releaseKey)
                 // A named receiver, not an Action lambda, for detekt's type resolution: see
                 // refuseDebugPackagingWithoutKey in Signing.kt.

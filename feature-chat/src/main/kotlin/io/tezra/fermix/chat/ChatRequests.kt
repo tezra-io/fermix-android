@@ -2,6 +2,8 @@ package io.tezra.fermix.chat
 
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.CommandDescriptor
+import io.tezra.fermix.protocol.ProtocolException
+import io.tezra.fermix.protocol.encodeClientEvent
 import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import kotlinx.coroutines.CoroutineScope
@@ -34,20 +36,29 @@ class ChatRequests(
 
     /**
      * Sends [request], with the [attachments] its `msg` uploads first: whether the session took it, none taking it
-     * while the chat has no session.
+     * while the chat has no session, nor one the session's codec would refuse ([carried]).
      */
     suspend fun send(
         request: ClientEvent,
         attachments: List<OutboxAttachment> = emptyList(),
     ): Boolean {
-        val chat = session.value ?: return false
+        val chat = session.value
+        if (chat == null || !carried(request, attachments, log)) return false
         val taken = chat.send(request, attachments)
-        if (taken) remember(request)
+        if (taken) sentRequests.remember(request)
         return taken
     }
 
     /** Whether the chat has a session to take a request now; [send] refuses one while it has none. */
     fun hasSession(): Boolean = session.value != null
+
+    /**
+     * Whether [words], trimmed as a request takes them, fit one `msg` of the chat's profile (fitsOneMsg): the one bound
+     * the owner's field is held to, a `command` by its words as typed, "/name arguments", whose header is smaller than
+     * the one fitsOneMsg weighs, with ten attachments' ids and a `retry_of`. What goes is weighed again as the session
+     * encodes it ([send], [retry]).
+     */
+    fun carries(words: String): Boolean = fitsOneMsg(words.trim(), profileId)
 
     /** The request the composer's [words] make, by the daemon's [commands] (requestOf); none for blank words. */
     fun of(
@@ -122,14 +133,16 @@ class ChatRequests(
 
     /**
      * "Run again" on a turn that ran and failed (design section 13.5; Session.retry): [request] again as a new
-     * request, which names it in `retry_of`.
+     * request, which names it in `retry_of`; never one the session's codec would refuse as Session.retry makes it, its
+     * words whole and its `retry_of` the failed request's own id, a row's from the wire among them ([carried]).
      */
     fun retry(request: ClientEvent) {
         val failed = OutboxItem(request).clientMsgId
         val again = idLike(failed, newId())
+        if (!carried(retried(request, again, failed), emptyList(), log)) return
         scope.launch {
             val taken = whileWithdrawn(failed) { session.value?.retry(request, again) == true }
-            if (taken) remember(retried(request, again, failed))
+            if (taken) sentRequests.remember(retried(request, again, failed))
         }
     }
 
@@ -146,15 +159,47 @@ class ChatRequests(
         if (!done) withdrawnIds.update { it - clientMsgId }
         return done
     }
+}
 
-    private fun remember(request: ClientEvent) {
-        val id = OutboxItem(request).clientMsgId
-        sentRequests.update { sent ->
-            val kept = sent - id + (id to request)
-            if (kept.size <= MAX_REMEMBERED_REQUESTS) kept else kept.entries.drop(1).associate { it.toPair() }
-        }
+/** [request] among what was sent, by its id, the newest [MAX_REMEMBERED_REQUESTS] kept. */
+private fun MutableStateFlow<Map<String, ClientEvent>>.remember(request: ClientEvent) {
+    val id = OutboxItem(request).clientMsgId
+    update { sent ->
+        val kept = sent - id + (id to request)
+        if (kept.size <= MAX_REMEMBERED_REQUESTS) kept else kept.entries.drop(1).associate { it.toPair() }
     }
 }
+
+/**
+ * Whether [request], with each of [attachments]' `attach_begin`, is one the session's codec takes, weighed as it
+ * encodes them, at the largest seq: its words whole, its ids as they are, a command's name by the wire's rule. The
+ * codec throws on a header past 4,096 bytes (PROTOCOL.md; `event_part` is the daemon's alone) and on a field its
+ * rules refuse, so a request it would refuse never reaches the session: the owner's field stays as it was
+ * (ChatComposer.tooLong says why), and one the owner did not type, Run again's of a row's words or a model the daemon
+ * named, is told to [log], by the refusal's class alone, as its words may hold the wire's.
+ */
+private fun carried(
+    request: ClientEvent,
+    attachments: List<OutboxAttachment>,
+    log: (String, Throwable?) -> Unit,
+): Boolean {
+    require(request is ClientEvent.Msg || request is ClientEvent.Command) { "only a msg or a command is sent" }
+    val refused = (listOf(request) + attachments.map(::attachBeginOf)).firstNotNullOfOrNull(::refusalOf)
+    if (refused != null) {
+        val id = OutboxItem(request).clientMsgId
+        log("A request the session's codec refuses was not sent: $id (${refused.javaClass.simpleName})", null)
+    }
+    return refused == null
+}
+
+/** What the session's codec refuses [event] with, encoding it at the largest seq; none when it takes it. */
+private fun refusalOf(event: ClientEvent): ProtocolException? =
+    try {
+        encodeClientEvent(MSG_PROTOCOL, ULong.MAX_VALUE, event)
+        null
+    } catch (refused: ProtocolException) {
+        refused
+    }
 
 /** [fresh] as the id of a request sent again in place of [old]'s: a model pick's stays one, drawn as it was. */
 private fun idLike(
@@ -187,3 +232,14 @@ private fun retried(
         is ClientEvent.Command -> request.copy(clientMsgId = id)
         else -> error("only a msg or a command is sent again")
     }
+
+/** [attachment]'s `attach_begin`, as the session sends it ahead of its bytes (Uploads). */
+internal fun attachBeginOf(attachment: OutboxAttachment): ClientEvent.AttachBegin =
+    ClientEvent.AttachBegin(
+        attachment.attachId,
+        attachment.kind,
+        attachment.mime,
+        attachment.sizeBytes,
+        attachment.name,
+        attachment.sha256,
+    )

@@ -153,6 +153,10 @@
     <string name="chat_palette_footer">From %1$s · updates automatically</string>
     <!-- Not the design's: the palette's label (section 13.8). -->
     <string name="chat_palette">Commands</string>
+    <!-- Not the design's, which names no bound on a message's words, for the owner to settle: the line over the
+         composer, and in the attach sheet, while the field holds more than one message carries (PROTOCOL.md: a
+         header of at most 4,096 bytes); Send then sends nothing and the field keeps every word. -->
+    <string name="chat_too_long">This message is too long to send</string>
 
     <!-- Attachments and voice notes (sections 8.5, 13.5, 13.6 and 13.9). -->
     <string name="chat_camera">Camera</string>

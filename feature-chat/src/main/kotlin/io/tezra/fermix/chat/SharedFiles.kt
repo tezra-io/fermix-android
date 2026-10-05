@@ -64,21 +64,25 @@ internal fun liesUnder(
 }
 
 /** The most UTF-8 bytes a file's name takes on the phone's filesystems, ext4 and f2fs (NAME_MAX). */
-private const val NAME_MAX_BYTES = 255
+internal const val NAME_MAX_BYTES = 255
+
+/** [media]'s name as a file of its own ([fileNameOf] of its name). */
+internal fun fileNameOf(media: ShownMedia): String = fileNameOf(media.name)
 
 /**
- * [media]'s name as a file of its own: its last part after any `/` or `\`, its control characters and its lone
- * surrogates dropped, which no filesystem holds and ART's path calls throw on, past [NAME_MAX_BYTES] its last
- * characters that fit, which keeps its extension, and trimmed; [UNNAMED_FILE] when that leaves nothing, `.` or `..`.
+ * [name], the wire's or another app's, as a file's own: its last part after any `/` or `\`, its control characters
+ * and its lone surrogates dropped, which no filesystem holds and ART's path calls throw on, past [NAME_MAX_BYTES] its
+ * last characters that fit, which keeps its extension, and trimmed; [UNNAMED_FILE] when that leaves nothing, `.` or
+ * `..`. Its JSON is at most twice [NAME_MAX_BYTES], so it fits a frame's header whatever the other side named.
  */
-internal fun fileNameOf(media: ShownMedia): String {
+internal fun fileNameOf(name: String?): String {
     val last =
-        media.name
+        name
             .orEmpty()
             .substringAfterLast('/')
             .substringAfterLast('\\')
-    val name = lastBytes(nameCharacters(last), NAME_MAX_BYTES).trim()
-    return if (name.isEmpty() || name == "." || name == "..") UNNAMED_FILE else name
+    val kept = lastBytes(nameCharacters(last), NAME_MAX_BYTES).trim()
+    return if (kept.isEmpty() || kept == "." || kept == "..") UNNAMED_FILE else kept
 }
 
 /** [words]' code points but its control characters and its lone surrogates: well-formed UTF-16, as a name holds. */

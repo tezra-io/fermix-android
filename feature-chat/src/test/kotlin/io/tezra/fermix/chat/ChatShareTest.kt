@@ -256,7 +256,7 @@ class ChatShareTest {
         runTest(main) {
             val rig = Rig(this)
             rig.records.value = listOf(limitedTo(1_000L))
-            val size = IMAGE_LANDING_MAX_BYTES + 1
+            val size = LANDING_MAX_BYTES + 1
             rig.pipeline.describe =
                 { uri, from -> Picked(uri, uri, PickedKind.IMAGE, "image/png", "huge.png", size, from) }
             runCurrent()
@@ -264,7 +264,7 @@ class ChatShareTest {
             runCurrent()
             assertEquals(emptyList<Pair<String, Long>>(), rig.pipeline.copied.value)
             assertEquals(emptyList<Picked>(), rig.ui.picked)
-            assertEquals(TooBig("huge.png", size, IMAGE_LANDING_MAX_BYTES), rig.ui.tooBig)
+            assertEquals(TooBig("huge.png", size, LANDING_MAX_BYTES), rig.ui.tooBig)
         }
 
     @Test
@@ -293,12 +293,12 @@ class ChatShareTest {
             rig.records.value = emptyList()
             rig.model.share(shared(listOf("content://media/9")))
             runCurrent()
-            advanceTimeBy(LIMIT_WAIT_MILLIS + 1)
+            advanceTimeBy(READ_WAIT_MILLIS + 1)
             runCurrent()
             assertEquals(emptyList<Pair<String, Long>>(), rig.pipeline.copied.value)
             assertEquals(emptyList<Picked>(), rig.ui.picked)
             assertTrue(
-                "The daemon's limit was not known in time: 1 pasted, typed-in or shared items were not copied" in
+                "The chat's record was not read in time: 1 pasted, typed-in or shared items were not copied" in
                     rig.log.lines.value,
                 "${rig.log.lines.value}",
             )

@@ -62,6 +62,7 @@ class PhoneVoiceDeviceTest {
     @Test
     fun a_take_records_ogg_opus_whose_length_and_levels_the_player_reads() {
         record { error("nothing cut the take") }
+        // The take's own length, which its length and its levels are checked against: a span, not a wait for readiness.
         SystemClock.sleep(TAKE_MS)
         var kept = false
         instrumentation.runOnMainSync { kept = recorder.stop() }

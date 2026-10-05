@@ -39,7 +39,7 @@ import java.time.ZoneId
 /**
  * A chat's session as the screen uses it: core-session's Session for the app ([SessionChat]), a fake for the
  * tests. A request it takes is in the outbox when the call returns; one it cannot take, since the session
- * ended, returns false and leaves the field as it was.
+ * ended or its outbox is full, returns false and leaves the field as it was.
  */
 interface ChatSession : ChatCalls {
     val state: StateFlow<SessionState>
@@ -112,12 +112,21 @@ class SessionChat(
     override suspend fun send(
         request: ClientEvent,
         attachments: List<OutboxAttachment>,
-    ): Boolean = session.unlessEnded("send", log) { session.send(request, attachments) } != null
+    ): Boolean = took("send", session.unlessEnded("send", log) { session.send(request, attachments) })
 
     override suspend fun retry(
         failed: ClientEvent,
         newClientMsgId: String,
-    ): Boolean = session.unlessEnded("retry", log) { session.retry(failed, newClientMsgId) } != null
+    ): Boolean = took("retry", session.unlessEnded("retry", log) { session.retry(failed, newClientMsgId) })
+
+    /** Whether the outbox took [call]'s request: one it refused, full, is told to [log]; none as the session ended. */
+    private fun took(
+        call: String,
+        taken: Boolean?,
+    ): Boolean {
+        if (taken == false) log("$call was refused: the outbox holds as many requests as it takes", null)
+        return taken == true
+    }
 
     override suspend fun stop(clientMsgId: String): Boolean =
         session.unlessEnded("stop", log) { session.stop(clientMsgId) } == true

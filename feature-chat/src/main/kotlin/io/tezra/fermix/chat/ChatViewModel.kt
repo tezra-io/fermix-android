@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Rows the list asks of the cache at a time. */
 const val PAGE_ROWS = 60
@@ -140,19 +141,21 @@ class ChatViewModel(
             viewModelScope,
             parts.background,
             {
-                record.value
-                    ?.caps
-                    ?.commands
-                    .orEmpty()
+                sendableCommands(
+                    record.value
+                        ?.caps
+                        ?.commands
+                        .orEmpty(),
+                )
             },
         )
 
-    // None until the chat's record is read; a record whose daemon sent no caps holds nothing to a limit.
-    private val maxBytes: StateFlow<Long?> =
+    // None until the chat's record is read; then its daemon's limit, none while the daemon has sent no caps.
+    private val mediaLimit: StateFlow<MediaLimit?> =
         record
-            .map { read -> read?.let { it.caps?.maxMediaBytes ?: Long.MAX_VALUE } }
+            .map { read -> read?.let { MediaLimit(it.caps?.maxMediaBytes) } }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    val attach = ChatAttach(parts, requests, composer, viewModelScope, maxBytes, saved)
+    val attach = ChatAttach(parts, requests, composer, viewModelScope, mediaLimit, saved)
     val voice = ChatVoice(parts, requests, viewModelScope)
     val playback = ChatPlayback(parts, viewModelScope)
     val notes = ChatNotes(voice, playback, blobs, parts.io)
@@ -275,13 +278,18 @@ class ChatViewModel(
     /**
      * Another app's share landing here (design section 13.6, "Share into Fermix"): its items into the tray up to the
      * ten, each copied into a file of the chat's own as it lands, and its words at the end of the draft, cut to what
-     * one message carries. Nothing is sent: only the owner's Send sends.
+     * one message carries, once the stored draft is back in the field, waited for at most [READ_WAIT_MILLIS].
+     * Nothing is sent: only the owner's Send sends.
      */
     fun share(shared: Shared) {
         attach.add(shared.uris, PickedFrom.SHARE)
         val words = shared.words ?: return
         viewModelScope.launch {
-            composer.restored.first { it }
+            val back = withTimeoutOrNull(READ_WAIT_MILLIS) { composer.restored.first { it } }
+            if (back == null) {
+                parts.log("The chat's draft was not read back in time; a share's words were left out", null)
+                return@launch
+            }
             val field = composer.field.value.text
             val landed = withSharedWords(field, words, parts.profileId)
             if (landed != field) composer.replace(landed)

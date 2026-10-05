@@ -51,6 +51,18 @@ class OutboxTest {
         }
 
     @Test
+    fun `a request past what the outbox holds is refused, never thrown, and nothing of it is stored`() =
+        runTest {
+            val harness = Harness(this)
+            harness.open()
+            repeat(MAX_OUTBOX) { assertTrue(harness.session.send(msg("m$it"))) }
+            assertFalse(harness.session.send(msg("past")))
+            assertFalse(harness.session.retry(msg("ran"), "again"))
+            assertEquals(MAX_OUTBOX, harness.store.items.size)
+            assertTrue(harness.store.items.none { it.clientMsgId == "past" || it.clientMsgId == "again" })
+        }
+
+    @Test
     fun `accepted clears the item and shows the card, and a duplicate clears it with no card`() =
         runTest {
             val harness = Harness(this)

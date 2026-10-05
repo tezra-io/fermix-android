@@ -162,11 +162,30 @@ whose version matches `version.properties`.
   taken straight into, though its Direct Share target stays and asks among the others. Items land in the chat's
   tray, copied as they land, up to ten, and words at the end of the draft; nothing is sent until Send. An item
   past the daemon's limit is never copied in full, but an image, which goes as a smaller JPEG, is copied up to
-  128 MiB as a picked one goes; a provider that fails drops its item and not the app, a `file:` URI or one of the
+  128 MiB as a picked one goes; no copy holds more than 128 MiB whatever the computer's limit, or before the
+  computer has said it, so a stream that never ends fills nothing; an item's name and type are held to a file's
+  name and a plain type, however long another app made them; shares that come at once land one after another, ten
+  at most in the tray, each waiting its turn a minute at most and then given a minute to land, after which what had
+  not landed is left out and the next share lands; the owner's own picks never wait behind another app's share; a
+  provider that fails drops its item and not the app, a `file:` URI or one of the
   app's own is refused, the app lock comes first, a share is never taken again from Recents, a task a share
   started comes back from Recents, and the tray survives a rotation and a process death. The launcher icon has a
   round variant beside its themed monochrome layer. The release policy check holds the exported components to
   `policy/exported.txt`, each filter whole.
+- **A message too long for one frame never stops the app.** Words past what one message carries, typed,
+  pasted, edited back from the outbox or as a caption, are kept in the field and not sent, with "This message is
+  too long to send" above the composer, the slash palette open or not; another app's shared words are cut to what
+  one message carries as they land, which only the app's log says. A slash command's words, "Run again" on a long
+  message, a model's name, a command's name, a picture's address and an approval's answer from the computer are
+  weighed as they would go on the wire, so none of them stops the app; a message sent once the outbox holds 128
+  waiting is refused and stays in the field, and so does an approval's answer. A paste of any length into the
+  field outlives the app going to the background, the words kept by the chat rather than in the state the system
+  saves for it.
+- **A picture whose few bytes say it is huge is not decoded.** One another app shares, pastes or types in, or
+  one picked, that says it is past a quarter of a gigapixel, draws no thumbnail in the tray and is not sent, refused
+  before a pixel is decoded, so it holds no thread for the minutes its pixels would take.
+- **A device test that hangs fails by its name.** Every instrumented test has three minutes, and the wait for the
+  screen to settle after a rotation or a fold has fifteen seconds, so a run that would hang fails the test instead.
 - **Who is paired and whether the app is locked are read as written.** Anything that reads the paired Fermix
   list or the app lock while it is being written, a screen, the lock, a notification or a push, gets what the
   write wrote once it ends, never the list or the lock from before it, nor an empty list with the lock off; and

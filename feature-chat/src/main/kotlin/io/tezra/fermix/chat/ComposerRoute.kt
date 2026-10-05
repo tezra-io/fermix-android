@@ -238,8 +238,9 @@ internal fun MicRationale(
 
 /**
  * A picked item's thumbnail for the tray, at [TRAY_PX]: a provider's from its own thumbnail, a file the chat made
- * decoded; none for an item that draws none (a document), logged. An item the chat may not read as the tray holds
- * it (readableUri) is a SecurityException: the tray holds none such.
+ * decoded; none for an item that draws none (a document), logged, nor for a file past the pixels the app decodes
+ * (refusePastPixels), refused before a pixel is decoded. An item the chat may not read as the tray holds it
+ * (readableUri) is a SecurityException: the tray holds none such.
  */
 internal suspend fun trayThumbnail(
     context: Context,
@@ -256,6 +257,7 @@ internal suspend fun trayThumbnail(
                     ImageDecoder.decodeBitmap(
                         ImageDecoder.createSource(File(requireNotNull(uri.path))),
                     ) { decoder, info, _ ->
+                        refusePastPixels(info.size)
                         val (width, height) = cappedSize(info.size.width, info.size.height, TRAY_PX)
                         decoder.setTargetSize(width, height)
                     }

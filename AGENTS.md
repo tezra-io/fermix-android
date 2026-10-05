@@ -173,7 +173,22 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   makes again, the soft keyboard a typed draft brought up stays, or comes back, until that window takes the
   focus, on Android 15 and 16 alike, and a phone on its side has no room for the list under it, so
   `WindowChangeTest` waits, bounded, for the row it asserts on to be displayed. A fold shares that assertion
-  and its wait; the fold's one failure in Task 13 was never reproduced (48 runs before the fix).
+  and its wait; the fold's one failure in Task 13 was never reproduced (48 runs before the fix). Every assertion
+  on what a rotation, a fold or a relaunch draws waits so, and a wait reads the rule's activity again at each
+  poll, as the one a test held may be gone (`awaitWindowFocus`). Compose's own idle after a rotation or a fold is
+  waited for with a bound too (`idleWithin`): Espresso's idle has none, and once, after a fold on
+  `Pixel_Fold_API_36.1`, it never came back (Task 14c, README). Every instrumented test runs under
+  AndroidJUnitRunner's `timeout_msec` from the convention plugins (`INSTRUMENTED_TEST_TIMEOUT_MILLIS`), so a wait
+  that hangs anyway fails its test by name. The rename dialog of the Chats list and the Instance screen is taller
+  than the room above a phone's landscape keyboard, and after a rotation the platform pans it to keep its field in
+  view, its title out of sight in about a third of runs and its buttons in the rest (Task 14c; what decides which
+  was not shown, only the settled state): a product defect for the owner to settle
+  (README), not a rule for tests. Until it is settled `WindowChangeTest` asserts that dialog there and its field
+  displayed with the name, and says why beside it. A sleep is for a span the product or the test defines (the
+  lock's grace, a take's length), said so beside it; anything the system makes ready is waited for, bounded, a
+  system prompt among it: its field takes the focus while the prompt still slides in, and a PIN it matches before
+  the slide ends comes back as a cancel, so `ShareDeviceTest` types once the focused field has held still (Task
+  14c).
 - Screenshots: every preview in a `fermix.android.library.compose` module is a screenshot test, and
   `verifyRoborazziDebug` (in `check`, and CI's `screens` job) compares it with its reference image
   in the module's `src/test/screenshots/`, and fails on a reference no preview drew. A reference
@@ -244,6 +259,34 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   definition); a link that opens nothing, a reference's among them, draws as its words with no link on
   them (`LiteralMarkup`); and a link's touch target is its words alone, so the words beside it stay the
   message's (`InlineLinks`).
+- A size, a count or a time that another app or the wire gives is never the only bound. What lands from outside
+  has a bound of the app's own beside the other side's number: a landing copy's bytes stop at the app's
+  `LANDING_MAX_BYTES` whatever the daemon's `caps.max_media_bytes` says (any integer, or none before its first
+  `hello_ack`) and whatever the provider's size column says; an item's name and type, which go into its
+  `attach_begin` and the chat's saved state, are held to a file's name (`fileNameOf`, 255 bytes) and a
+  `type/subtype` (`mediaTypeOf`); the tray takes ten, and another app's landings (a paste's, the keyboard's, a
+  share's) run one at a time, so each counts the room once those before it have landed, each waiting its turn
+  `LANDING_WAIT_MILLIS` at most and then landing within as long, on the app's `LANDING_THREADS`, what had not
+  landed left out, logged, its provider's call cancelled and its stream closed; the owner's own picks wait behind
+  none of it, on `io`; and what a landing waits for of the chat's own (its record, its draft) is waited for
+  `READ_WAIT_MILLIS` at most. An image the tray or Send decodes is refused from its decoder's header listener,
+  before a pixel is decoded, past `MAX_IMAGE_PIXELS`: a decode reads every pixel whatever size it draws at, so its
+  time is the image's. What goes out is weighed as the codec encodes it: a request, each `attach_begin`, an
+  approval's answer (`ApprovalAnswer.TooLong`) and a `media_fetch` of a ref from the wire, before the session takes
+  it, and a command the daemon names past the wire's rule for a name is never offered; the outbox's 128 is a
+  refusal the caller hears (`Session.send`'s false), never a throw. What the owner pastes is the clipboard's, and
+  never enters a saved state, which goes through the binder as the app stops, whose 1 MB a paste outgrows: the
+  composer's `TextFieldState` is remembered, not saved, and the chat brings its words back; search saves the query
+  it took. A path that takes something new from outside names its three bounds in
+  the same change, with a test that feeds it the other side's worst: a stream that never ends, many at once, a call
+  that never answers, a string past one frame. On the device the other app is the test APK's own provider
+  (`EndlessProvider`), written in Java: the platform runs it in the test APK's own process, which has no Kotlin
+  runtime, as the build leaves it out of the test APK. The paths this rule does not yet hold are listed for the
+  owner in README (Task 14c): Send's copy of a Photo Picker or Files pick (`PhoneMedia.copyInto`), a fetched blob's
+  size past its `media_begin`'s own word, a bubble's image read whole into memory and decoded with no bound on its
+  pixels, a provider's thumbnail of a pick (`ContentResolver.loadThumbnail`), the field's and the draft's length, the
+  ids from the wire a screen saves across a rotation (a selection's, the viewer's, the turns an arrival played), and
+  another app's provider that ignores its cancel holding the landing threads for other apps' shares.
 - The app's exported components are these four, as the merged release manifest has them, and no other: the
   activity, `MainActivity`, for the launcher (`MAIN`/`LAUNCHER`), which acts only on a chat's
   `fermix://chat/{instance}/{profile}` link naming a paired Fermix and on "Add Fermix", and never on an intent
@@ -268,10 +311,11 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   `file:` URI, the app's own providers (`ownsProvider`, with or without a `user@` prefix) and any other scheme
   are refused, logged by scheme and authority alone. At most ten are weighed, each copied into the chat's own
   file as it lands, while the grant the activity took from the entry holds. A landing copy is bounded, once the
-  chat's record has given the daemon's limit (waited for, bounded): an item past the room the tray has, or whose
-  provider says it is past what its copy may hold, is never copied, and the copy stops a byte past that
-  (`copyAtMost`); what a copy may hold is the limit, or for an image, which goes as a JPEG made from it, the larger
-  of the limit and the app's own `IMAGE_LANDING_MAX_BYTES`. A provider's `RuntimeException` carried across the
+  chat's record is read (waited for, bounded): an item past the room the tray has, or whose provider says it is
+  past what its copy may hold, is never copied, and the copy stops a byte past that (`copyAtMost`); what a copy may
+  hold is the daemon's limit under the app's own `LANDING_MAX_BYTES`, that bound alone while the record holds no
+  caps, and for an image, which goes as a JPEG made from it, `LANDING_MAX_BYTES` whatever the limit (the rule
+  above). A provider's `RuntimeException` carried across the
   binder, from describing or copying an item, drops that item, logged by its class alone (its message is the
   provider's), never the app, and a `SecurityException` there is logged by its class alone too (the platform's
   message names the URI whole). Its words are words, bounded to what one `msg` carries; a Direct Share's shortcut

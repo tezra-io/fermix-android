@@ -1,5 +1,6 @@
 package io.tezra.fermix.buildlogic
 
+import com.android.build.api.dsl.DefaultConfig
 import com.android.build.api.dsl.LibraryExtension
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import io.github.takahirom.roborazzi.RoborazziExtension
@@ -78,6 +79,20 @@ internal const val INSTRUMENTED_TEST_APK = "assembleDebugAndroidTest"
 internal const val INSTRUMENTATION_RUNNER = "androidx.test.runner.AndroidJUnitRunner"
 
 /**
+ * How long one instrumented test may run, in milliseconds (AndroidJUnitRunner's `timeout_msec`): past it the test fails
+ * by its name, with its thread's stack, and the run goes on to the next. Three times the longest test's own span (a
+ * landing's minute, ShareDeviceTest), well inside CI's `ui` job's 25 minutes: a wait with no bound of its own once hung
+ * a fold test for 15 minutes (Task 14c, Pixel_Fold_API_36.1: Espresso's idle after the fold, the main thread idle).
+ */
+internal const val INSTRUMENTED_TEST_TIMEOUT_MILLIS = 180_000L
+
+/** Instrumented tests on AndroidX Test's runner, each bounded in time ([INSTRUMENTED_TEST_TIMEOUT_MILLIS]). */
+internal fun DefaultConfig.runsInstrumentedTests() {
+    testInstrumentationRunner = INSTRUMENTATION_RUNNER
+    testInstrumentationRunnerArguments["timeout_msec"] = INSTRUMENTED_TEST_TIMEOUT_MILLIS.toString()
+}
+
+/**
  * Instrumented tests in `src/androidTest` (CI/CD design section 3, `ui`): AndroidX Test's runner, its
  * JUnit 4 runner class, and Compose's test rule, on the Espresso that runs on API 36.
  */
@@ -85,7 +100,7 @@ private fun Project.configureInstrumentedTests(
     android: LibraryExtension,
     libs: VersionCatalog,
 ) {
-    android.defaultConfig.testInstrumentationRunner = INSTRUMENTATION_RUNNER
+    android.defaultConfig.runsInstrumentedTests()
     addComposeInstrumentedTests(libs)
 }
 

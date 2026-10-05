@@ -205,6 +205,36 @@ class ApprovalTest {
         }
 
     @Test
+    fun `an answer past one frame's header is not sent and says so, the card's other answer still going`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            // A route of 1,009 scalars, under PROTOCOL.md's 1,024, of 4,009 bytes; an approval_id held to no length.
+            val wide = card.copy(approvalId = "emoji-1", approveCommand = "/confirm " + "\uD83D\uDE00".repeat(1_000))
+            val named = card.copy(approvalId = "a".repeat(4_200))
+            connection.sendRun(wide, 3)
+            connection.sendRun(named, 3)
+            harness.settle()
+            assertEquals(ApprovalAnswer.TooLong, harness.session.answerApproval("emoji-1", true))
+            assertEquals(ApprovalAnswer.TooLong, harness.session.answerApproval(named.approvalId, false))
+            assertTrue(harness.store.items.isEmpty(), "nothing of an answer the codec refuses is stored")
+            assertInstanceOf<ApprovalAnswer.Sent>(harness.session.answerApproval("emoji-1", false))
+            assertEquals("deny" to "opaque-token", connection.expect<ClientEvent.Command>().let { it.name to it.args })
+        }
+
+    @Test
+    fun `an answer to a full outbox is not sent and says so`() =
+        runTest {
+            val harness = Harness(this)
+            harness.cardShown()
+            repeat(MAX_OUTBOX) { assertTrue(harness.session.send(msg("m$it"))) }
+            assertEquals(ApprovalAnswer.OutboxFull, harness.session.answerApproval(card.approvalId, true))
+            assertEquals(MAX_OUTBOX, harness.store.items.size)
+            harness.settle()
+            assertTrue(harness.events.none { it is SessionEvent.ApprovalAnswered })
+        }
+
+    @Test
     fun `a route that is no command closes the connection as a protocol error`() =
         runTest {
             val harness = Harness(this)

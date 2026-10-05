@@ -248,6 +248,29 @@ class MediaFetchTest {
         }
 
     @Test
+    fun `a ref past what one media_fetch carries is no fetch, holds no place, and skips no seq`() =
+        runTest {
+            val harness = Harness(this)
+            val connection = harness.connect()
+            val first = async { harness.session.fetchMedia("a".repeat(64), File(dir, "first")) }
+            val before = connection.next()
+            assertEquals(ClientEvent.MediaFetch("a".repeat(64)), before.event)
+            // A row's ref, which the wire holds to no length, past one frame; more of them than a connection's places.
+            repeat(MAX_FETCHES) {
+                assertEquals(OneShot.TooLong, harness.session.fetchMedia("r".repeat(5_000), File(dir, "long")))
+            }
+            assertFalse(File(dir, "long").exists())
+            val second = async { harness.session.fetchMedia("b".repeat(64), File(dir, "second")) }
+            val after = connection.next()
+            assertEquals(ClientEvent.MediaFetch("b".repeat(64)), after.event)
+            assertEquals(before.seq + 1uL, after.seq)
+            connection.send(vendoredError("media_fetch_backlog_full"))
+            connection.send(vendoredError("media_fetch_backlog_full").copy(ref = "b".repeat(64)))
+            assertEquals(OneShot.Refused("media_fetch_backlog_full"), first.await())
+            assertEquals(OneShot.Refused("media_fetch_backlog_full"), second.await())
+        }
+
+    @Test
     fun `an empty ref is refused before anything goes`() =
         runTest {
             val harness = Harness(this)

@@ -11,6 +11,7 @@ import io.tezra.fermix.attest.HardwareGate
 import io.tezra.fermix.chat.ChatClock
 import io.tezra.fermix.chat.ChatLive
 import io.tezra.fermix.chat.ChatParts
+import io.tezra.fermix.chat.LANDING_THREADS
 import io.tezra.fermix.chat.PhoneClip
 import io.tezra.fermix.chat.PhoneMedia
 import io.tezra.fermix.chat.PhonePlayer
@@ -96,6 +97,9 @@ class AppServices(
     private val keys: DeviceKeyFacade = DeviceKeys(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + io)
+
+    /** The few threads every chat's landings ask another app's providers on (PhoneMedia's LANDING_THREADS). */
+    private val landing = io.limitedParallelism(LANDING_THREADS)
     private val sessionScope = CoroutineScope(SupervisorJob() + work)
 
     /**
@@ -346,7 +350,7 @@ class AppServices(
             newId = { UUID.randomUUID().toString() },
             log = ::logFault,
             files = RoomChatFiles(databases, instanceId, profileId),
-            media = PhoneMedia(context, ::logFault),
+            media = PhoneMedia(context, ::logFault, landing),
             clip = PhoneClip(context, ::logFault),
             recorder = PhoneRecorder(context, ::logFault),
             player = PhonePlayer(),

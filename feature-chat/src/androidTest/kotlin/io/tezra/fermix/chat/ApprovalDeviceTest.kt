@@ -46,9 +46,14 @@ class ApprovalDeviceTest {
         rule.activity.rig.clock.mono += GONE_MS
     }
 
-    /** The card drawn again counts from the clock, its buttons there, and Approve answers it. */
+    /**
+     * The card drawn again counts from the clock, its buttons there, once the window made again has laid them out
+     * (awaitDisplayed), and Approve answers it.
+     */
     private fun assertCountingAndAnswering() {
-        rule.onNodeWithText(string(R.string.chat_approval_expires, LEFT_S)).assertIsDisplayed()
+        val expires = string(R.string.chat_approval_expires, LEFT_S)
+        rule.awaitDisplayed(expires, string(R.string.chat_deny), string(R.string.chat_approve))
+        rule.onNodeWithText(expires).assertIsDisplayed()
         rule.onNodeWithText(string(R.string.chat_deny)).assertIsDisplayed().assertIsEnabled()
         rule
             .onNodeWithText(string(R.string.chat_approve))

@@ -102,7 +102,8 @@ internal fun Dock(
     val state = ui.state
     FermixColumn(ColumnWidth.Wide) {
         Column(modifier = sheet.navigationBarsPadding().imePadding()) {
-            if (!ui.palette) ComposerHint(state.model, state.switchPending)
+            // The palette hides the model's hint, never why Send sends nothing: one word after a "/" opens it.
+            if (!ui.palette || ui.tooLong) ComposerHint(state.model, state.switchPending, ui.tooLong)
             val nothingToSend =
                 ui.field.text.isBlank() &&
                     ui.media.attach.picked

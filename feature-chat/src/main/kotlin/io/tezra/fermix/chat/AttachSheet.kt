@@ -83,6 +83,7 @@ private val BOX_SHAPE = RoundedCornerShape(6.dp)
 internal fun AttachSheet(
     attach: AttachUi,
     field: TextFieldValue,
+    tooLong: Boolean,
     actions: ComposerActions,
     photos: @Composable (AttachUi, AttachActions, Modifier) -> Unit,
 ) {
@@ -93,7 +94,7 @@ internal fun AttachSheet(
         shape = FermixShapes.sheet,
         containerColor = colors.tonalSolid,
     ) {
-        AttachSheetContent(attach, field, actions) { photos(attach, actions.attach, it) }
+        AttachSheetContent(attach, field, actions, tooLong) { photos(attach, actions.attach, it) }
     }
 }
 
@@ -101,14 +102,15 @@ internal fun AttachSheet(
  * The sheet's body: the chips Camera · Files · Paste, never tabs, scrolled sideways where large type outgrows the
  * row; the photos' grid with its numbered multi-select ([photos]), which draws the photos picked in it; the tray
  * with its ✕ for every other item the send holds, files, a paste, the keyboard's, so "Send {n}" counts nothing the
- * sheet does not show; the first item too big to go, inline; the caption, one per send, which is the composer's
- * words; "Send as files" and "Send {n}".
+ * sheet does not show; the first item too big to go, inline, and a caption past what one message carries
+ * ([tooLong]); the caption, one per send, which is the composer's words; "Send as files" and "Send {n}".
  */
 @Composable
 internal fun AttachSheetContent(
     attach: AttachUi,
     field: TextFieldValue,
     actions: ComposerActions,
+    tooLong: Boolean = false,
     photos: @Composable (Modifier) -> Unit,
 ) {
     val locale = LocalConfiguration.current.locales[0]
@@ -124,6 +126,7 @@ internal fun AttachSheetContent(
                     }
                 }
                 attach.tooBig?.let { TooBigLine(it, locale) }
+                if (tooLong) InlineLine(stringResource(R.string.chat_too_long))
                 CaptionField(field, actions.attach.onCaption)
                 SendRow(attach, actions)
             }
@@ -215,6 +218,12 @@ private fun TooBigLine(
             sizeText(tooBig.sizeBytes, locale),
             sizeText(tooBig.maxBytes, locale),
         )
+    InlineLine(words)
+}
+
+/** An inline line under the grid (the canon's `.inl`): what keeps the send from going. */
+@Composable
+private fun InlineLine(words: String) {
     Text(
         words,
         style = INLINE_TYPE,

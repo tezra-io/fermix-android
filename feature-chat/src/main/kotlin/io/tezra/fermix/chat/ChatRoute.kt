@@ -47,6 +47,7 @@ fun ChatRoute(
     val field by model.composer.field.collectAsStateWithLifecycle()
     val written by model.composer.written.collectAsStateWithLifecycle()
     val palette by model.composer.palette.collectAsStateWithLifecycle()
+    val tooLong by model.composer.tooLong.collectAsStateWithLifecycle()
     val search by model.search.state.collectAsStateWithLifecycle()
     val sheet by model.models.sheet.collectAsStateWithLifecycle()
     val jump by model.jumps.jump.collectAsStateWithLifecycle()
@@ -70,9 +71,10 @@ fun ChatRoute(
                 jump.takeIf { search != null },
                 media.copy(micOff = composer.micOff),
                 written,
+                tooLong,
             )
         CompositionLocalProvider(LocalUriHandler provides links) { ChatScreen(ui, actions) }
-        if (media.attach.sheet) AttachSheet(media.attach, field, actions.composer, outside.photos)
+        if (media.attach.sheet) AttachSheet(media.attach, field, tooLong, actions.composer, outside.photos)
     }
     ComposerOverlays(model, outside, composer)
 }

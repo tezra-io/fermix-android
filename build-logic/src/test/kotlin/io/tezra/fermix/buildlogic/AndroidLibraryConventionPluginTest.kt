@@ -33,6 +33,7 @@ class AndroidLibraryConventionPluginTest {
         projectDir.resolve(INSTRUMENTED_TEST_SOURCES).mkdirs()
         val printed = configured()
         assertTrue("instrumented tests run on: androidx.test.runner.AndroidJUnitRunner" in printed, printed.toString())
+        assertTrue("runner arguments: {timeout_msec=$INSTRUMENTED_TEST_TIMEOUT_MILLIS}" in printed, printed.toString())
         assertTrue("check builds $INSTRUMENTED_TEST_APK: true" in printed, printed.toString())
         assertTrue("runs on the test runner: true" in printed, printed.toString())
     }
@@ -41,6 +42,7 @@ class AndroidLibraryConventionPluginTest {
     fun `a library with none builds no test APK`() {
         val printed = configured()
         assertTrue("instrumented tests run on: null" in printed, printed.toString())
+        assertTrue("runner arguments: {}" in printed, printed.toString())
         assertTrue("check builds $INSTRUMENTED_TEST_APK: false" in printed, printed.toString())
     }
 }
@@ -59,6 +61,7 @@ private val PROBE_BUILD =
         val android = extensions.getByType<com.android.build.api.dsl.LibraryExtension>()
         val check = tasks.getByName("check")
         println("instrumented tests run on: " + android.defaultConfig.testInstrumentationRunner)
+        println("runner arguments: " + android.defaultConfig.testInstrumentationRunnerArguments)
         println("check builds $INSTRUMENTED_TEST_APK: " + ("$INSTRUMENTED_TEST_APK" in check.dependsOn))
         val declared = configurations.getByName("androidTestImplementation").dependencies
         println("runs on the test runner: " + declared.any { it.group == "androidx.test" && it.name == "runner" })

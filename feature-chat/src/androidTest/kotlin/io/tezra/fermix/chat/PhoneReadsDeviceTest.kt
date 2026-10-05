@@ -136,7 +136,7 @@ class PhoneReadsDeviceTest {
             val into = File(directory, "prepared-$at")
             assertRefused(uri) { runBlocking { pipeline.prepare(picked(uri), asFile = true, into) } }
             assertRefused(uri) { runBlocking { pipeline.prepare(picked(uri, PickedKind.IMAGE), asFile = false, into) } }
-            assertRefused(uri) { runBlocking { pipeline.copyAtMost(picked(uri), into, Long.MAX_VALUE) } }
+            assertRefused(uri) { runBlocking { pipeline.copyAtMost(picked(uri), into, LANDING_MAX_BYTES) } }
             assertFalse("$uri was copied", into.exists())
         }
     }

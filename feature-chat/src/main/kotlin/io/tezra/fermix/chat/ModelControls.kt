@@ -139,16 +139,19 @@ internal fun ModelChipButton(
 }
 
 /**
- * The line above the composer (the canon's `.hint`): "Connect to change the model" while the chip is disabled,
+ * The line above the composer (the canon's `.hint`): that the field holds more than one message carries while it
+ * does ([tooLong]), which is why Send sends nothing; else "Connect to change the model" while the chip is disabled,
  * else "Switches after this reply" while a model picked during the turn waits for it; nothing otherwise.
  */
 @Composable
 internal fun ComposerHint(
     chip: ModelChip?,
     switchPending: Boolean,
+    tooLong: Boolean = false,
 ) {
     val words =
         when {
+            tooLong -> stringResource(R.string.chat_too_long)
             chip != null && !chip.enabled -> stringResource(R.string.chat_connect_to_change_model)
             chip != null && switchPending -> stringResource(R.string.chat_switches_after_reply)
             else -> return

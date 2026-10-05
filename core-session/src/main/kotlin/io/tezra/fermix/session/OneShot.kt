@@ -2,7 +2,9 @@ package io.tezra.fermix.session
 
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.ModelEntry
+import io.tezra.fermix.protocol.ProtocolException
 import io.tezra.fermix.protocol.ServerEvent
+import io.tezra.fermix.protocol.encodeClientEvent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -55,6 +57,12 @@ sealed interface OneShot<out T> {
 
     /** The connection ended before the answer was whole. */
     data object Interrupted : OneShot<Nothing>
+
+    /**
+     * The request is past what one frame carries, its header over 4,096 bytes (PROTOCOL.md), as a fetch of a ref the
+     * wire gave at any length is: nothing went, and nothing waits.
+     */
+    data object TooLong : OneShot<Nothing>
 }
 
 /** A blob [fetchMedia] wrote whole: as its `media_begin` described it, its [sha256] the one its bytes hash to. */
@@ -96,7 +104,8 @@ suspend fun Session.pullModels(): OneShot<List<ModelEntry>> = calls.models()
  * Downloads the blob [ref] names into [into], which it creates or empties (PROTOCOL.md "Media downloads"): its
  * chunks are written as they come, and at its end its size and SHA-256 are checked against its `media_begin`
  * and `media_end`. A blob whose bytes do not match throws [MediaMismatchException]; on that and on every other
- * way it ends unanswered the file is deleted. Asked as [search] is; 30 s without a frame of it, or of a blob
+ * way it ends unanswered the file is deleted. A [ref] past what one `media_fetch` carries is [OneShot.TooLong], asked
+ * of no one. Asked as [search] is; 30 s without a frame of it, or of a blob
  * the daemon serves before it, is [OneShot.TimedOut]. [firstChunk] is handed a copy of the blob's first chunk as
  * it comes, in the caller's coroutine: an image's bubble paints its dominant colour from it while the rest
  * streams (design section 13.5), since the wire carries no colour of its own.
@@ -112,7 +121,8 @@ suspend fun Session.fetchMedia(
  * sent as the `command` the daemon expects, the leading "/" dropped, the first word the name and the rest the
  * args. It is an outbox item like any `command`, at least once, under an id that starts with
  * [APPROVAL_ANSWER_PREFIX]; the token travels in it and nowhere else. A card the session does not show, one
- * answered already or one whose `ttl_s` ran out is not answered, and says so.
+ * answered already or one whose `ttl_s` ran out is not answered, and says so; so is an answer past what one `command`
+ * carries ([ApprovalAnswer.TooLong]) and one the full outbox refuses ([ApprovalAnswer.OutboxFull]).
  */
 suspend fun Session.answerApproval(
     approvalId: String,
@@ -144,12 +154,17 @@ internal class OneShotCalls(
 
     suspend fun models(): OneShot<List<ModelEntry>> = asking({ it.asked.pullModels() }, ::modelPages)
 
+    /**
+     * The blob [ref] into [into]: [OneShot.TooLong] for a ref past what one `media_fetch` carries, which the wire holds
+     * to no length, before anything goes or waits.
+     */
     suspend fun fetch(
         ref: String,
         into: File,
         firstChunk: (ByteArray) -> Unit,
     ): OneShot<FetchedMedia> {
         require(ref.isNotEmpty()) { "a fetch names its blob" }
+        if (headerPast(ClientEvent.MediaFetch(ref)) != null) return OneShot.TooLong
         return asking({ it.fetches.fetch(ref) }) { waiter -> blob(waiter, into, firstChunk) }
     }
 
@@ -166,7 +181,12 @@ internal class OneShotCalls(
         }
     }
 
-    /** The card's route into the outbox as a command, then the card waits on it and the app hears it went. */
+    /**
+     * The card's route into the outbox as a command, then the card waits on it and the app hears it went. The
+     * command, the card's id in its own, is weighed as the codec encodes it first, at the largest seq: one past one
+     * frame's header is [ApprovalAnswer.TooLong], and one the full outbox refuses [ApprovalAnswer.OutboxFull],
+     * nothing stored of either.
+     */
     private suspend fun sendAnswer(
         approvalId: String,
         approve: Boolean,
@@ -177,7 +197,14 @@ internal class OneShotCalls(
                 .toHex()
         val clientMsgId = "$APPROVAL_ANSWER_PREFIX$approvalId:$suffix"
         val route = core.approvals.route(approvalId, approve)
-        requests.submit(ClientEvent.Command(clientMsgId, core.instance.profileId, route.name, route.args))
+        val answer = ClientEvent.Command(clientMsgId, core.instance.profileId, route.name, route.args)
+        val refused =
+            when {
+                headerPast(answer) != null -> ApprovalAnswer.TooLong
+                !requests.submit(answer) -> ApprovalAnswer.OutboxFull
+                else -> null
+            }
+        if (refused != null) return refused
         core.approvals.answered(approvalId, clientMsgId)
         core.emit(SessionEvent.ApprovalAnswered(approvalId, approve, clientMsgId))
         return ApprovalAnswer.Sent(clientMsgId)
@@ -334,5 +361,14 @@ private class BlobWrite(
         return FetchedMedia(begun.kind, begun.mime, begun.sizeBytes, actual, begun.filename)
     }
 }
+
+/** The codec's refusal of [event] as past one frame's header, encoded at the largest seq; none when it fits. */
+private fun headerPast(event: ClientEvent): ProtocolException.HeaderTooLong? =
+    try {
+        encodeClientEvent(SESSION_VERSION, ULong.MAX_VALUE, event)
+        null
+    } catch (past: ProtocolException.HeaderTooLong) {
+        past
+    }
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(Locale.ROOT, it) }

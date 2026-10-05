@@ -81,7 +81,9 @@ private val QUERY_STYLE = FermixType.body.copy(fontSize = 16.sp, lineHeight = 24
  * The search bar in place of the chat's (design section 13.7): back, the query, and ✕ once there is one to
  * clear. The field takes the focus as search opens in its list; nothing of what it holds is logged. The field
  * keeps its caret and selection across a rotation; a query it did not type itself (the one kept as the screen
- * comes back, a clear, the 256-scalar cut) puts the caret after the query's last character.
+ * comes back, a clear, the 256-scalar cut) puts the caret after the query's last character. What it saves is the
+ * query search took, never more: a paste of any length is cut before it is kept, as a saved state goes through the
+ * binder as the app stops.
  */
 @Composable
 internal fun SearchBar(
@@ -109,7 +111,8 @@ internal fun SearchBar(
             BasicTextField(
                 value = field,
                 onValueChange = { next ->
-                    typed = next
+                    val query = boundedQuery(next.text)
+                    typed = if (query == next.text) next else TextFieldValue(query, TextRange(query.length))
                     if (next.text != search.query) actions.onQuery(next.text)
                 },
                 textStyle = QUERY_STYLE.copy(color = colors.ink),

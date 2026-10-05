@@ -4,10 +4,17 @@ import android.app.Activity
 import android.app.UiAutomation
 import android.os.ParcelFileDescriptor
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /** How long a step of a test may take on an emulator: a recreation, a window's focus. */
 internal const val STEP_MILLIS = 15_000L
@@ -45,6 +52,36 @@ internal fun AndroidComposeTestRule<*, *>.awaitAppFocus(activity: Activity) {
 /** The window with the focus, as `dumpsys window` names it. */
 private fun focusedWindow(): String = shell("dumpsys window").lines().filter { "mCurrentFocus" in it }.joinToString()
 
+/**
+ * Compose's idle, waited for [STEP_MILLIS] at most: Espresso's idle waits for the main thread with no bound of its own,
+ * and after a fold it once never came back (Task 14c, Pixel_Fold_API_36.1: the instrumentation parked in Espresso's
+ * FutureTask.get for 15 minutes, the main thread idle, until the emulator was killed). Past the bound it fails with the
+ * window that has the focus, as `dumpsys window` names it, and the idle left waiting is interrupted.
+ */
+internal fun AndroidComposeTestRule<*, *>.idleWithin() {
+    val idling = Executors.newSingleThreadExecutor()
+    try {
+        idling.submit { waitForIdle() }.get(STEP_MILLIS, TimeUnit.MILLISECONDS)
+    } catch (stuck: TimeoutException) {
+        throw AssertionError("the app was not idle after $STEP_MILLIS ms: ${focusedWindow()}", stuck)
+    } catch (failed: ExecutionException) {
+        throw failed.cause ?: failed
+    } finally {
+        idling.shutdownNow()
+    }
+}
+
+/**
+ * Waits, bounded, for one node with each of [texts] displayed: a window a rotation or a fold made again takes its
+ * insets and its layout a frame or more after the activity's creation, a step of the system's that Compose's idle
+ * does not know, so what it shows is asked for again until it lands, for at most [STEP_MILLIS].
+ */
+internal fun AndroidComposeTestRule<*, *>.awaitDisplayed(vararg texts: String) {
+    waitUntil("${texts.joinToString()} displayed", STEP_MILLIS) {
+        texts.all { onAllNodesWithText(it).fetchSemanticsNodes().size == 1 && onNodeWithText(it).isDisplayed() }
+    }
+}
+
 /** [check] once the display turned a quarter and the activity was made again, then the display as it was. */
 internal fun AndroidComposeTestRule<*, ChatTestActivity>.rotated(check: () -> Unit) {
     val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -81,7 +118,7 @@ internal fun AndroidComposeTestRule<*, ChatTestActivity>.folded(check: () -> Uni
 private fun AndroidComposeTestRule<*, ChatTestActivity>.awaitRecreated(made: Int) {
     val rig = activity.rig
     waitUntil("the activity recreated", STEP_MILLIS) { rig.creations.get() > made }
-    waitForIdle()
+    idleWithin()
 }
 
 /** The foldable put in device [state]; a fold can lock the phone, which is woken and unlocked here. */

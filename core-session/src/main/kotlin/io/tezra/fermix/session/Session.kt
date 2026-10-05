@@ -128,22 +128,25 @@ class Session private constructor(
      * persisted with each one's digest, kind, type, size, name and local file before anything is written; each
      * goes up in its turn, and the `msg` only once every one is in (design section 8.5). The app keeps each
      * file until the item leaves the outbox.
+     *
+     * Whether the outbox took it: false, with nothing stored, once it holds the most requests it takes.
      */
     suspend fun send(
         request: ClientEvent,
         attachments: List<OutboxAttachment> = emptyList(),
-    ): Unit = withContext(confined) { runner.request { requests.submit(request, attachments) } }
+    ): Boolean = withContext(confined) { runner.request { requests.submit(request, attachments) } }
 
     /**
      * "Run again" (design section 13.5): runs [failed], the `msg` or `command` whose run failed or which
      * the daemon refused, again as a new request, [newClientMsgId], which names it in `retry_of` (design
      * section 7, the `msg.retry_of?` row). The app passes the request as it sent it, since one the daemon
-     * accepted left the outbox then; a refused one still in the outbox leaves it now.
+     * accepted left the outbox then; a refused one still in the outbox leaves it now. Whether the outbox took it, as
+     * [send] says.
      */
     suspend fun retry(
         failed: ClientEvent,
         newClientMsgId: String,
-    ): Unit = withContext(confined) { runner.request { requests.retry(failed, newClientMsgId) } }
+    ): Boolean = withContext(confined) { runner.request { requests.retry(failed, newClientMsgId) } }
 
     /**
      * Stop on the composer (design section 8.1, the "Stop generation" row: `command{name:"stop"}`) as

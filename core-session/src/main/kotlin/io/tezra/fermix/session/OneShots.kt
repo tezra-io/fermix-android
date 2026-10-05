@@ -194,12 +194,15 @@ internal class Fetches(
 ) {
     private val waiting = ArrayDeque<Waiter>()
 
-    /** A `media_fetch` of [ref]; none while [MAX_FETCHES] wait, which the daemon would refuse. */
+    /**
+     * A `media_fetch` of [ref]; none while [MAX_FETCHES] wait, which the daemon would refuse. It waits only once it
+     * went: one the codec refuses holds no place.
+     */
     fun fetch(ref: String): Waiter? {
         if (waiting.size >= MAX_FETCHES) return null
         val waiter = Waiter(Asking.MEDIA, ref)
-        waiting.addLast(waiter)
         post(ClientEvent.MediaFetch(ref))
+        waiting.addLast(waiter)
         return waiter
     }
 

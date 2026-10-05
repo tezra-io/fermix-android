@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The test APK's own components. EndlessProvider is another app's provider to the app under test, the test APK being
+    a package and a uid of its own: its stream never ends, and ShareDeviceTest shares it into a chat to show that the
+    landing copy holds the app's own bound. Exported with no permission, as a share's provider may be: the app reads it
+    by its own rights, as it reads any app's that is.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <provider
+            android:name="io.tezra.fermix.EndlessProvider"
+            android:authorities="io.tezra.fermix.test.endless"
+            android:exported="true" />
+    </application>
+</manifest>
