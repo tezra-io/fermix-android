@@ -2,8 +2,9 @@
 
 All notable changes to the Fermix Android app are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). A release is a `vX.Y.Z` tag on `main`
-whose version matches `version.properties`.
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). A release is a `vX.Y.Z` tag on `main`, and
+the app's version is the tag's; its release pull request raises `versionCode` in `version.properties` and
+renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 
 ## [Unreleased]
 
@@ -192,3 +193,15 @@ whose version matches `version.properties`.
   each file is on the disk whole before it replaces the old one in one step, so a phone that stops mid-write,
   the app killed or the power cut, keeps them as they were or as written. A window keeps its preview
   out of Recents until the app lock's setting is read. FCM's new token is taken before the app lets FCM go.
+- **Releases.** A `vX.Y.Z` tag on `main` builds one candidate, signed with the release key once the build that
+  never sees the key has ended, and stages it as a draft release with its universal APK, its app bundle, R8's
+  mapping and `SHA256SUMS`, signed with cosign; a tag off `main`, one that is not the build's version, a
+  `versionCode` not raised, a version with no changelog entry, a contract from an unreleased engine or from one
+  that does not serve the app's protocol, a commit whose CI is not green, an APK or app bundle that breaks the
+  release policy and a build signed by any key but the release entry of the engine's `android_signers.json` are
+  each refused. A candidate is published, and its bundle sent to Play's internal testing track, only on a merged
+  record of the device gate and all eight release scenarios passed on real phones, for that candidate's very APK,
+  against a released engine, with the owner's approval; its files are checked again before they are published and
+  after; no input skips a check. The app's version name is now its release tag, or `0.0.0-dev` on a build with no
+  tag behind it. Until the engine serves the app's protocol 2 (stage D1) and ships `android_signers.json` (stage
+  D2), every candidate is refused.

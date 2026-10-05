@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""A stand-in for cosign in the release scripts' tests, which have no workflow identity to sign with.
+
+  cosign sign-blob --yes --bundle <bundle> <blob>
+      Writes a bundle that names the blob's sha256 and the identity in $FAKE_COSIGN_IDENTITY.
+  cosign verify-blob --bundle <bundle> --certificate-identity <identity>
+                     --certificate-oidc-issuer <issuer> <blob>
+      Verifies when the bundle names the blob's sha256 and the identity asked for, and the issuer is
+      GitHub Actions'. So a changed byte in the blob fails it, as a real signature would.
+"""
+import hashlib
+import json
+import os
+import pathlib
+import sys
+
+ISSUER = "https://token.actions.githubusercontent.com"
+
+
+def options(arguments):
+    named, positional = {}, []
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--yes":
+            index += 1
+        elif argument.startswith("--"):
+            named[argument] = arguments[index + 1]
+            index += 2
+        else:
+            positional.append(argument)
+            index += 1
+    return named, positional
+
+
+def digest(path):
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+
+
+def sign(named, blob):
+    bundle = {"sha256": digest(blob), "identity": os.environ["FAKE_COSIGN_IDENTITY"]}
+    pathlib.Path(named["--bundle"]).write_text(json.dumps(bundle), encoding="utf-8")
+
+
+def verify(named, blob):
+    bundle = json.loads(pathlib.Path(named["--bundle"]).read_text(encoding="utf-8"))
+    if bundle["sha256"] != digest(blob):
+        sys.exit("Error: none of the signatures in the bundle verify the blob")
+    if bundle["identity"] != named["--certificate-identity"]:
+        sys.exit(f"Error: the certificate's identity is {bundle['identity']}")
+    if named["--certificate-oidc-issuer"] != ISSUER:
+        sys.exit("Error: the certificate's issuer is not the one asked for")
+    print("Verified OK", file=sys.stderr)
+
+
+def main():
+    command, arguments = sys.argv[1], sys.argv[2:]
+    named, positional = options(arguments)
+    if command == "sign-blob":
+        sign(named, positional[0])
+    elif command == "verify-blob":
+        verify(named, positional[0])
+    else:
+        sys.exit(f"fake cosign: no answer for {sys.argv[1:]}")
+
+
+main()

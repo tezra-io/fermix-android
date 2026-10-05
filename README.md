@@ -21,6 +21,7 @@ app/                    the application module (io.tezra.fermix)
 build-logic/            the convention plugins every module applies, and their tests
 config/detekt/          the detekt configuration; there is no baseline
 contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned by contracts/CHECKSUMS.txt and contracts/SOURCE.json
+docs/                   RELEASING.md: how a release goes from a tag to a draft, to real phones, to GitHub and Play
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
@@ -31,8 +32,9 @@ data/                   the instance records, each profile's database and media 
 push/                   a push's envelope, keys, trial decryption and plaintext, and its diagnostics lines (io.tezra.fermix.push)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 policy/                 permissions.txt and exported.txt, the permissions the release APK requests and the components it exports, exactly
-scripts/                verify_protocol_contract.sh, check_release_policy.sh
-version.properties      versionName and versionCode
+release-evidence/       schema.json, and per release vX.Y.Z.json: the device gate and the eight scenarios on real phones
+scripts/                verify_protocol_contract.sh, check_release_policy.sh, and the release pipeline's steps with their tests
+version.properties      versionCode; versionName is the nearest vX.Y.Z tag, read by the build
 ```
 
 ## Modules
@@ -1869,6 +1871,53 @@ and a setup that failed before the AVD existed is not retried. The job's summary
 says which happened, or that the tests never ran, and whether KVM was open, and the reports are
 uploaded. `gate` requires it.
 
+## Releasing
+
+A release is a `vX.Y.Z` tag on `main`, and `docs/RELEASING.md` walks it end to end
+(`MILESTONE_51_ANDROID_CI_CD.md` section 4). The tag runs `.github/workflows/candidate.yml`: `preflight`,
+`build`, `sign` in the `release` environment, `verify` and `stage`, which leaves a draft release
+holding the universal APK, the app bundle, R8's `mapping.txt`, `SHA256SUMS` and its cosign bundle, signed
+keyless as the workflow. A person tests that draft's APK on real phones and merges
+`release-evidence/vX.Y.Z.json` to `main`; then `gh workflow run promote.yml --ref vX.Y.Z -f tag=vX.Y.Z` checks
+the record against `release-evidence/schema.json` and the draft, checks the draft's files again and publishes
+them after the owner approves, sends the bundle to Play's internal testing track and verifies the published
+release again. The tag is `promote.yml`'s one input, and none skips a check.
+
+`versionName` is the nearest `vX.Y.Z` tag behind the commit, read from git by the application convention plugin,
+or `0.0.0-dev` with none; a nearest tag the describe matches that is no release tag, `v1.2.3-rc.1`, fails the
+build, and so does a tree that is not a git checkout. `versionCode` is `version.properties`' one line, raised by
+the release pull request with the version's `CHANGELOG.md` entry, and `preflight` refuses a tag without either.
+
+Each step is a script the workflows call (`release_preflight.sh`, `release_gate.sh`, `build_candidate.sh`,
+`sign_candidate.sh`, `sign_check.sh`, `verify_candidate.sh`, `stage_candidate.sh`, `check_evidence.py`,
+`publish_release.sh`, `check_release.sh`, `play_upload.py`), and each refusal is a test in `scripts/tests`
+that plants it, with a fake GitHub (`scripts/tests/fakes/gh`, which hides a draft from a token that cannot push,
+as GitHub does), a fake cosign, keys made for the test and small packages aapt2 links; a script runs with the
+token its job holds, read from the workflow. CI's `release-scripts` job runs them, then
+`scripts/lint_workflows.sh`: actionlint, shellcheck and ruff, each pinned by the sha256 of its release, over the
+three workflows, `scripts/*.sh` and the scripts' Python, and `scripts/check_workflows.py`, which holds the
+workflows to the house's block layout, refusing a line or a value it cannot place (an anchor, an alias, a
+tag, a flow mapping, an escape, a quoted value left open), and refuses a job without
+`timeout-minutes`, an action not pinned by a full commit with its version in a comment, `pull_request_target`,
+an input named for a way around a check, and any input of `promote.yml` but the tag or of `candidate.yml` at
+all. On Linux x86-64, with build tools 36.0.0 and platform 36 (`docs/RELEASING.md` lists the tools):
+
+```bash
+JAVA_HOME=... ANDROID_HOME=... python3 -m unittest discover --start-directory scripts/tests --verbose
+scripts/lint_workflows.sh
+```
+
+Gradle never holds the release key: `sign` builds the release unsigned, with the owner's
+`google-services.json` from the environment in `app/src/release/`, then signs it with `apksigner` and
+`jarsigner`; its certificate must be the `release` entry of `contracts/mobile/android_signers.json`. The build
+and the key share that job's runner, as CI/CD design section 4.5 has it (`docs/RELEASING.md`). That file joins the engine's export in stage D2 (CI/CD design E1),
+which has not shipped, so until a re-vendor brings it `sign` refuses every candidate and no release can
+complete. Nor can a tag pass `preflight` before then: the app speaks mobile protocol 2 (design section 7), and
+the pinned engine release serves protocol 1, so the first release waits for the engine release that serves
+protocol 2 (stage D1), re-vendored. The `release` environment, its reviewer and its secrets, made before the
+first tag is pushed, Play enrolment and developer verification are the owner's to set up
+(`docs/RELEASING.md`).
+
 ## Firebase
 
 The Google services Gradle plugin reads the app's Firebase configuration, `google-services.json`, into
@@ -1879,9 +1928,10 @@ FCM for a token and gets none, logs so, and registers nothing. Push needs the ow
 package name `io.tezra.fermix` and the signing certificates' SHA-256, and its `google-services.json` is
 downloaded from the Firebase console. Put that file at `app/src/debug/google-services.json` for your debug
 builds, or `app/src/release/google-services.json` for a release, where the plugin looks before
-`app/google-services.json`; `.gitignore` keeps both out of the tree. Never put it over
-`app/google-services.json`, Firebase's default path: that file is tracked, and `GoogleServicesPlaceholderTest`
-fails the build on one that is not the placeholder's. The file is not a secret, but it is
+`app/google-services.json`; `.gitignore` keeps both out of the tree. A release candidate gets the owner's
+file from the `release` environment, written into `app/src/release/` and shredded after the build
+(`docs/RELEASING.md`). Never put it over `app/google-services.json`, Firebase's default path: that file is
+tracked, and `GoogleServicesPlaceholderTest` fails the build on one that is not the placeholder's. The file is not a secret, but it is
 the owner's project, so it never enters the repository. The service account a daemon sends with is a
 secret and lives on the daemon alone.
 
@@ -1924,7 +1974,8 @@ FERMIX_DEBUG_KEY_ALIAS=fermix-dev FERMIX_DEBUG_KEY_PASSWORD=... ./gradlew assemb
 
 The release key is read the same way, from `release.*` in `keystore.properties` or from
 `FERMIX_RELEASE_*`. It is the owner's alone, so on a developer machine it is not configured, and
-the release build comes out unsigned. A release build is never debuggable and is shrunk by R8. The
+the release build comes out unsigned. CI never gives it to Gradle either: `candidate.yml` signs the unsigned
+release outside the build (`docs/RELEASING.md`). A release build is never debuggable and is shrunk by R8. The
 R8 mapping is kept at `app/build/outputs/mapping/release/mapping.txt`.
 
 Before a daemon will pair with your debug builds, your certificate's digest has to reach the
@@ -1965,7 +2016,8 @@ git -C "$engine" ls-tree -r --name-only "$sha" -- apps/fermix_core/priv/mobile |
 (cd contracts && find mobile -type f | LC_ALL=C sort | xargs shasum -a 256 > CHECKSUMS.txt)
 ```
 
-Then update `contracts/SOURCE.json` in the same change: `upstream.commit`, `upstream.branch`,
+Then update `contracts/SOURCE.json` in the same change: `upstream.commit`, `upstream.release` (the engine
+release tag built from that commit, which a candidate's `preflight` requires to be published), `upstream.branch`,
 `retrieved_at`, `protocol_version` and `supported_version_range` (from the schema's
 `x-protocol-version` and `x-supported-version-range`), the `provenance_note` saying what changed,
 and one `files` entry per file with its digest; the script refuses a protocol window the schema

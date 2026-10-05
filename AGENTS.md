@@ -76,9 +76,14 @@ feature-chat/         design sections 8 and 13.5 to 13.7 as a screen, io.tezra.f
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 policy/               permissions.txt and exported.txt: the permissions the release APK requests and
                       the components it exports, exactly
+release-evidence/     schema.json, and per release vX.Y.Z.json: what a person saw a candidate do on real phones
+docs/                 RELEASING.md: a release, from the tag to Play, and what only the owner does
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
-                      settle_emulator.sh (the ui job's wait for a booted emulator's home screen)
-.github/workflows/    ci.yml: contract, build, unit, screens, ui, policy, and gate, the one required check
+                      settle_emulator.sh (the ui job's wait for a booted emulator's home screen), the release
+                      pipeline's steps (release_preflight.sh to play_upload.py), lint_workflows.sh and
+                      check_workflows.py; their tests in scripts/tests, with a fake gh and cosign
+.github/workflows/    ci.yml: contract, build, unit, screens, ui, policy, release-scripts, and gate, the one
+                      required check; candidate.yml on a vX.Y.Z tag; promote.yml by hand
 ```
 
 ## The contract with the engine
@@ -352,5 +357,33 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
 - Code: linear flow, small functions, no fallbacks, surgical changes.
 - Work on `dev`. `main` moves only by pull request, and a release is a `vX.Y.Z` tag on `main`
   (CI/CD design C1). Never tag unless the owner asks.
+- A release goes through `candidate.yml` and `promote.yml` alone (`docs/RELEASING.md`). `versionName` is the nearest
+  `vX.Y.Z` tag, read by the build from git, and never a line of `version.properties`, which holds `versionCode`
+  alone; the release pull request raises it and writes the version's `CHANGELOG.md` entry, and a discarded
+  candidate's numbers are never reused (C7).
+- No workflow takes an input, a variable or a flag that lets a release past a check: no "skip", "force",
+  "override" or "bypass", by that name or any other (CI/CD design section 8). `check_workflows.py` refuses an input
+  named so, and holds `promote.yml` to the tag as its one input and `candidate.yml` to none, so no other name
+  carries one either. A refusal is fixed where it is true, never routed around.
+- `release-evidence/vX.Y.Z.json` lands on `main` only by pull request, once its candidate exists, written by the
+  person who ran the device gate and the scenarios on real phones. It records what was seen, a failed scenario
+  as failed, and is never edited to make `promote.yml` pass: a candidate that failed is discarded.
+- The release keystore, its passwords, the Play service account and the owner's `google-services.json` live in
+  the `release` environment alone, never in the tree, a log or a repository secret. A real `google-services.json`
+  goes in `app/src/debug/` or `app/src/release/`, which `.gitignore` keeps out, never over the tracked
+  placeholder `app/google-services.json`. `candidate.yml`'s `sign` writes the owner's file into
+  `app/src/release/` of a clean checkout for its build and shreds it on every way out, then writes the keystore
+  under the runner's temporary directory and shreds it on every way out. Gradle never holds the key: the build
+  ends unsigned, and `apksigner` and `jarsigner` sign it. The build and the key do share that job's runner, as
+  section 4.5 has it, so no dependency or action enters without its checksum or commit (C12).
+- A release workflow's logic lives in a script under `scripts/`, with a test in `scripts/tests` that plants each
+  refusal it makes; the workflow only wires them. Every workflow names its `permissions:`, a job that needs more
+  names its own, and a job that reads a draft release holds `contents: write`, as GitHub shows a draft to no
+  other token; every job has `timeout-minutes`, every action is pinned by its full commit with its version in a
+  comment, nothing runs on `pull_request_target`, and nothing retries. The workflows keep the house's block
+  layout, every value whole on its line, with no anchor, alias, tag, flow mapping or escape: each of those can
+  carry what the text does not show, so `check_workflows.py` refuses what it cannot place.
+  `scripts/lint_workflows.sh` (actionlint, shellcheck, ruff and `check_workflows.py`) runs in CI's
+  `release-scripts` job.
 - No AI attribution anywhere: commits, pull requests or docs. Never push to `main` without a pull
   request. Never commit or push unless the owner says so.

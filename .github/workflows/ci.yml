@@ -1,8 +1,9 @@
 # The Android app's pull-request pipeline (MILESTONE_51_ANDROID_CI_CD.md section 3), on every pull
 # request and every push to main or dev: the vendored contract against its pins and the engine, the
 # build with every quality gate and the dependency checksums, the JVM tests, the screenshot tests,
-# the instrumented tests on the emulator, and the release APK's policy, folded into one job named gate
-# that branch protection requires (C3). It needs no secret, so a fork's pull request runs all of it.
+# the instrumented tests on the emulator, the release APK's policy, and the release pipeline's scripts
+# and workflows, folded into one job named gate that branch protection requires (C3). It needs no
+# secret, so a fork's pull request runs all of it.
 # No job retries, except that ui runs its tests once more when the emulator did not boot, and says so
 # in its summary (section 3's one exception).
 #
@@ -445,11 +446,41 @@ jobs:
         timeout-minutes: 2
         run: scripts/check_release_policy.sh app/build/outputs/apk/release/app-release.apk
 
+  # The release pipeline's own gate (section 4, C12): the tests of the scripts candidate.yml and promote.yml call,
+  # each of which plants the failure a refusal exists for (a tag off main, a versionCode not raised, a key that
+  # is not the release key, seven scenarios, a changed byte in SHA256SUMS, ...) with throwaway keys made by the
+  # test; then actionlint, shellcheck and ruff, pinned by checksum, over the three workflows, scripts/*.sh and the
+  # scripts' Python, and the house rules actionlint does not hold (scripts/check_workflows.py: every job timed,
+  # every action pinned by a commit, no input named for a way around a check, promote.yml's tag its one input).
+  # The tests link small APKs with build tools 36.0.0's aapt2 against platform 36 and sign them with its
+  # apksigner.
+  release-scripts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build tools 36.0.0 and platform 36
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0" "platforms;android-36"'
+
+      - name: The release scripts' tests
+        run: python3 -m unittest discover --start-directory scripts/tests --verbose
+
+      - name: actionlint, shellcheck, ruff and the house rules
+        run: scripts/lint_workflows.sh
+
   # C3: the one required check. It runs even when a job it needs failed or was cancelled, so a
   # failure can never show up as a skipped, and therefore passing, required check.
   gate:
     if: always()
-    needs: [contract, build, unit, screens, ui, policy]
+    needs: [contract, build, unit, screens, ui, policy, release-scripts]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -461,6 +492,7 @@ jobs:
           SCREENS_RESULT: ${{ needs.screens.result }}
           UI_RESULT: ${{ needs.ui.result }}
           POLICY_RESULT: ${{ needs.policy.result }}
+          RELEASE_SCRIPTS_RESULT: ${{ needs.release-scripts.result }}
         run: |
           echo "contract result: $CONTRACT_RESULT"
           echo "build result: $BUILD_RESULT"
@@ -468,9 +500,11 @@ jobs:
           echo "screens result: $SCREENS_RESULT"
           echo "ui result: $UI_RESULT"
           echo "policy result: $POLICY_RESULT"
+          echo "release-scripts result: $RELEASE_SCRIPTS_RESULT"
           [ "$CONTRACT_RESULT" = "success" ] || exit 1
           [ "$BUILD_RESULT" = "success" ] || exit 1
           [ "$UNIT_RESULT" = "success" ] || exit 1
           [ "$SCREENS_RESULT" = "success" ] || exit 1
           [ "$UI_RESULT" = "success" ] || exit 1
           [ "$POLICY_RESULT" = "success" ] || exit 1
+          [ "$RELEASE_SCRIPTS_RESULT" = "success" ] || exit 1

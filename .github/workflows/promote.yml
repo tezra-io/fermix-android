@@ -1,0 +1,165 @@
+# A tested candidate becomes the release (MILESTONE_51_ANDROID_CI_CD.md section 4.3), run by hand on the tag
+# itself, as the release environment lets only v* tags in:
+#
+#   gh workflow run promote.yml --ref vX.Y.Z -f tag=vX.Y.Z
+#
+# evidence checks release-evidence/vX.Y.Z.json on main against the draft (check_evidence.py); publish, in the
+# release environment, whose required reviewer approves it, checks the whole draft again and makes it the
+# release, rebuilding nothing (C7); play sends its app bundle to Play's internal testing track (C10), in the
+# release environment too, as the Play service account is its secret, so the reviewer approves that as well;
+# after-publish downloads the published files again and verifies them, whatever Play said. The tag is the only
+# input: there is no input, variable or flag that lets a release past the evidence (section 8), and
+# check_workflows.py refuses any other input, whatever its name. No job retries.
+name: promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The candidate's tag, vX.Y.Z; run the workflow on that tag too (--ref vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  # Section 4.2's checks: the file parses against release-evidence/schema.json, names the draft's APK and a
+  # published engine no older than the contract's, and records the device gate and all eight scenarios passed
+  # on listed handsets, scenario 8 on two. Its apk_sha256 is passed on to every job after it. The job writes
+  # nothing, but GitHub shows a draft release only to a token that can push, so it holds contents: write to see
+  # the draft it checks, as the engine's verify-published does.
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      apk_sha256: ${{ steps.evidence.outputs.apk_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # main too, where the evidence lands by pull request.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The evidence releases the draft
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: scripts/check_evidence.py "$TAG" "$GITHUB_REF" "$GITHUB_OUTPUT"
+
+  # The owner approves in the release environment. Someone with write access could have changed the draft since
+  # evidence, so it is checked again whole, as after-publish checks the release: its five files, cosign's
+  # signature of SHA256SUMS as candidate.yml on the tag, the evidence's APK and the release certificate
+  # (check_release.sh); then the draft that was checked becomes the release, by its id (publish_release.sh).
+  publish:
+    needs: evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build tools 36.0.0
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"'
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Publish the draft, once it is the tested candidate's still
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          APK_SHA256: ${{ needs.evidence.outputs.apk_sha256 }}
+        run: scripts/publish_release.sh "$TAG" "$APK_SHA256" contracts/mobile/android_signers.json
+
+  # The published bundle, once its files are verified as after-publish verifies them, to internal testing
+  # with the Play service account (play_upload.py). Moving it to any other track is the owner's act in the
+  # Play Console.
+  play:
+    needs: [evidence, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build tools 36.0.0
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"'
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: The published files are the tested candidate's
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          APK_SHA256: ${{ needs.evidence.outputs.apk_sha256 }}
+        run: |
+          scripts/check_release.sh "$TAG" published "$APK_SHA256" contracts/mobile/android_signers.json \
+            "$RUNNER_TEMP/published"
+
+      - name: The app bundle to internal testing
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          TAG: ${{ inputs.tag }}
+        run: scripts/play_upload.py "$TAG" "$RUNNER_TEMP/published/fermix-android-${TAG#v}.aab"
+
+  # The published release downloaded again on a runner of its own: SHA256SUMS's cosign bundle as candidate.yml
+  # signed it, the files' sums, the evidence's APK, and the certificate against android_signers.json once
+  # more (check_release.sh). It needs publish alone, so a Play refusal never leaves the release unchecked.
+  after-publish:
+    needs: [evidence, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build tools 36.0.0
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"'
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Verify the published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          APK_SHA256: ${{ needs.evidence.outputs.apk_sha256 }}
+        run: |
+          scripts/check_release.sh "$TAG" published "$APK_SHA256" contracts/mobile/android_signers.json \
+            "$RUNNER_TEMP/published"

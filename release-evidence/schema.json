@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tezra-io/fermix-android/blob/main/release-evidence/schema.json",
+  "title": "Release evidence",
+  "description": "What a person recorded about one candidate on real phones (MILESTONE_51_ANDROID_CI_CD.md section 4.2): the device gate of design section 12.6 and the eight release scenarios of section 15.3, against a released engine installed as a user installs it. It lands on main as release-evidence/vX.Y.Z.json by pull request; promote.yml reads it through scripts/check_evidence.py, which also refuses a failed or missing scenario, a handset that is not listed, and an APK that is not the draft's. The file records what was seen, a failure included; the check decides whether it releases.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "apk_sha256", "engine", "recorded_by", "handsets", "device_gate", "scenarios"],
+  "properties": {
+    "version": {
+      "description": "The candidate's versionName: its tag without the v.",
+      "$ref": "#/$defs/version"
+    },
+    "apk_sha256": {
+      "description": "The sha256 of the draft release's APK that was installed and tested, lower-case hex.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "engine": {
+      "description": "The released engine the phones paired with.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit", "install"],
+      "properties": {
+        "version": {"$ref": "#/$defs/version"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "install": {
+          "description": "How it was installed: the ways a user installs a released engine (section 6, step 6).",
+          "enum": ["homebrew", "macos_app", "linux_package", "standalone"]
+        }
+      }
+    },
+    "recorded_by": {
+      "description": "Who ran the scenarios: a role or a name, never a contact detail.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "handsets": {
+      "description": "The real phones, stock with a locked bootloader, that the gate and the scenarios ran on.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/handset"}
+    },
+    "device_gate": {
+      "description": "Design section 12.6, on a real phone with a freshly generated Keystore key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handset", "pairing", "attestation", "locked_push", "at"],
+      "properties": {
+        "handset": {"$ref": "#/$defs/handset_id"},
+        "pairing": {"type": "boolean"},
+        "attestation": {"type": "boolean"},
+        "locked_push": {"type": "boolean"},
+        "at": {"$ref": "#/$defs/date"}
+      }
+    },
+    "scenarios": {
+      "description": "Design section 15.3's release scenarios, each once.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/scenario"}
+    }
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "handset_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$"},
+    "handset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "model", "os_build", "patch"],
+      "properties": {
+        "id": {"$ref": "#/$defs/handset_id"},
+        "model": {"type": "string", "minLength": 1, "maxLength": 80},
+        "os_build": {"type": "string", "minLength": 1, "maxLength": 80},
+        "patch": {
+          "description": "The security patch level the phone reported.",
+          "$ref": "#/$defs/date"
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["n", "name", "passed", "handset", "at", "note"],
+      "properties": {
+        "n": {"type": "integer", "minimum": 1, "maximum": 8},
+        "name": {
+          "enum": [
+            "process_death",
+            "doze",
+            "lost_acknowledgement",
+            "network_change",
+            "daemon_restart",
+            "approval_away",
+            "frozen_socket",
+            "two_devices"
+          ]
+        },
+        "passed": {"type": "boolean"},
+        "handset": {"$ref": "#/$defs/handset_id"},
+        "second_handset": {
+          "description": "Scenario 8 alone: the second phone, which stays idle.",
+          "$ref": "#/$defs/handset_id"
+        },
+        "at": {"$ref": "#/$defs/date"},
+        "note": {"type": "string", "maxLength": 2000}
+      }
+    }
+  }
+}

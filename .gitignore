@@ -33,6 +33,9 @@ google-services.json
 !/app/google-services.json
 *service-account*.json
 
+# What Python writes running the release scripts' tests (scripts/tests)
+__pycache__/
+
 # OS and editors
 .DS_Store
 *.swp

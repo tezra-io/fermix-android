@@ -1,0 +1,224 @@
+# A release candidate, on a vX.Y.Z tag (MILESTONE_51_ANDROID_CI_CD.md section 4.1): preflight, then build, then
+# sign in the release environment, whose required reviewer approves it, then verify, then stage a draft release
+# that only people with write access see. Nothing here is published, and nothing goes to Play: a person installs
+# the draft's APK on real phones, records the device gate and the eight scenarios in
+# release-evidence/vX.Y.Z.json, merges it to main by pull request, and runs promote.yml (docs/RELEASING.md).
+#
+# Every step's logic is a script under scripts/, tested by scripts/tests (ci.yml's release-scripts job), so this
+# file only wires them. No job retries. sign is the one job that holds a secret: it builds the release with the
+# owner's google-services.json, unsigned, and signs it with apksigner and jarsigner, so Gradle never holds the
+# release key. The Gradle cache is off in the building jobs, so no task output from another run enters a
+# release. The contract's android_signers.json joins the engine's export in stage D2 (section 5, E1): until a
+# re-vendor brings it, sign refuses every candidate (README.md).
+#
+# The files pass from job to job as workflow artifacts kept for a day, the signed candidate and then the
+# verified one, as the engine's release.yml passes its own; in a public repository anyone signed in to GitHub
+# can download them for that day, an exposure docs/RELEASING.md names.
+name: candidate
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+# One candidate per tag at a time; a second push of the tag waits rather than cancel a signing.
+concurrency:
+  group: candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The tag's commit is on main, unreleased, the build's versionName, with its versionCode raised, its
+  # changelog entry, and a contract from a published engine release that serves the app's protocol
+  # (release_preflight.sh). The job writes nothing, but GitHub shows a draft release only to a token that can
+  # push, so it holds contents: write to see a draft this tag staged already, as the engine's verify-published
+  # does; with read alone, a tag pushed again would reach the release key before stage refused it.
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The full history and every tag: main's ancestry, the earlier tags' versionCodes, and describe.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse a tag that is no release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: scripts/release_preflight.sh "$TAG" "$COMMIT"
+
+  # ci.yml's gate is green on the commit (release_gate.sh), and the release variant builds, here with the
+  # placeholder google-services.json and no key, as every pull request's does. actions: read is for ci.yml's
+  # runs of the commit, which say which gate check run is ci's.
+  build:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse a commit whose ci gate is not green
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: scripts/release_gate.sh "$COMMIT"
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-disabled: true
+
+      - name: The release variant builds
+        run: ./gradlew --warning-mode fail --console=plain :app:assembleRelease :app:bundleRelease
+
+  # Section 4.1's sign, in the release environment (C8), whose reviewer approves it: the release built again
+  # from a clean checkout with the owner's google-services.json, unsigned (build_candidate.sh); then signed
+  # with the release key by apksigner and jarsigner (sign_candidate.sh), and the signed APK's and bundle's
+  # certificate must be the release entry of android_signers.json (sign_check.sh). Each script shreds its
+  # secret's file however it ends, and the last step shreds both once more for a step that was killed, by its
+  # timeout or a cancel. Gradle never holds the key, but the build and the key share this runner, as section
+  # 4.5 has it, and the runner holds every secret of the environment from the job's start (docs/RELEASING.md).
+  sign:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          validate-wrappers: true
+          cache-disabled: true
+
+      - name: Build tools 36.0.0
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"'
+
+      - name: Build the release with the real google-services.json, unsigned
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: scripts/build_candidate.sh "$RUNNER_TEMP/unsigned"
+
+      - name: Sign with the release key
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          TAG: ${{ github.ref_name }}
+        run: scripts/sign_candidate.sh "$TAG" "$RUNNER_TEMP/unsigned" "$RUNNER_TEMP/signed"
+
+      - name: The signer is the release entry of android_signers.json
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          scripts/sign_check.sh contracts/mobile/android_signers.json \
+            "$RUNNER_TEMP/signed/fermix-android-${VERSION#v}.apk" "$RUNNER_TEMP/signed/fermix-android-${VERSION#v}.aab"
+
+      - name: Upload the signed candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: signed-candidate
+          path: ${{ runner.temp }}/signed/
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Shred whatever the secrets left behind
+        if: always()
+        run: |
+          find app/src -type f -path app/src/release/google-services.json -exec shred -u -- {} +
+          find "$RUNNER_TEMP" -type f -name release.jks -exec shred -u -- {} +
+
+  # apksigner verifies the APK, nothing is debuggable, scripts/check_release_policy.sh passes on the signed APK
+  # as it is, and the APK and the bundle carry the tag's versionName and version.properties' versionCode; then
+  # SHA256SUMS over what was verified (verify_candidate.sh).
+  verify:
+    needs: sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build tools 36.0.0
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;36.0.0"'
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: signed-candidate
+          path: ${{ runner.temp }}/candidate
+
+      - name: Verify the signed candidate
+        env:
+          TAG: ${{ github.ref_name }}
+        run: scripts/verify_candidate.sh "$TAG" "$RUNNER_TEMP/candidate"
+
+      - name: Upload the verified candidate with SHA256SUMS
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verified-candidate
+          path: ${{ runner.temp }}/candidate/
+          if-no-files-found: error
+          retention-days: 1
+
+  # The draft release: the universal APK, the app bundle, R8's mapping, SHA256SUMS and its cosign bundle,
+  # keyless as this workflow on this tag (C9), staged only once the files still hash to what verify wrote
+  # (stage_candidate.sh). id-token is for cosign's certificate, contents for the draft.
+  stage:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: verified-candidate
+          path: ${{ runner.temp }}/candidate
+
+      - name: Stage the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: scripts/stage_candidate.sh "$TAG" "$RUNNER_TEMP/candidate"

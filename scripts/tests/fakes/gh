@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""A stand-in for the GitHub CLI in the release scripts' tests.
+
+It answers the two forms the scripts use, from files under $FAKE_GH_ROOT, and records every call in
+$FAKE_GH_ROOT/calls.jsonl:
+
+  gh api [--paginate [--slurp]] [-H header]... [-X method] [-F|-f key=value]... [--jq expression] <path>
+      A GET answers with the file api/<path without its query>/_, a 404 when there is none, as one page:
+      --slurp wraps it in an array of pages; once a call of another method was made to the path, the file
+      api/<path>/_.after answers instead when it exists, as what someone changed meanwhile. A --jq
+      expression runs through the real jq. Any other method answers {} and changes nothing, unless the
+      file api/<path>/_.<METHOD> exists, which is then its answer. (A path's answer is a file in a
+      directory of its own, so that a path and the paths under it, a release list and a release's asset,
+      each have one.)
+      As GitHub does, it shows a draft release only to a token that can push, contents: write: unless
+      FAKE_GH_CAN_PUSH is 1, a release list leaves its drafts out, and a draft, or an asset of a draft
+      in the release list, is a 404.
+  gh release create <tag> [options] <files>...
+      Copies each file it is given into created/, the values of --title and --notes-file not among them,
+      and answers nothing.
+
+Anything else fails loudly, so a script that starts to call something new is seen at once.
+"""
+import json
+import os
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+
+ROOT = pathlib.Path(os.environ["FAKE_GH_ROOT"])
+VALUE_OPTIONS = {"-H", "--header", "-X", "--method", "-F", "--field", "-f", "--raw-field", "--jq", "-q"}
+RELEASE_VALUE_OPTIONS = {"--repo", "--title", "-t", "--notes-file", "-F", "--notes", "-n", "--target"}
+RELEASES = re.compile(r"^repos/[^/]+/[^/]+/releases$")
+RELEASE = re.compile(r"^(repos/[^/]+/[^/]+/releases)/([0-9]+)$")
+ASSET = re.compile(r"^(repos/[^/]+/[^/]+/releases)/assets/([0-9]+)$")
+
+
+def record(arguments):
+    with open(ROOT / "calls.jsonl", "a", encoding="utf-8") as calls:
+        calls.write(json.dumps(arguments) + "\n")
+
+
+def parse_api(arguments):
+    options, path = {"method": "GET", "jq": None, "slurp": False}, None
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in VALUE_OPTIONS:
+            value = arguments[index + 1]
+            if argument in ("-X", "--method"):
+                options["method"] = value
+            if argument in ("--jq", "-q"):
+                options["jq"] = value
+            index += 2
+            continue
+        if argument == "--slurp":
+            options["slurp"] = True
+        elif argument != "--paginate":
+            path = argument
+        index += 1
+    return options, path
+
+
+def changed(plain):
+    """Whether a call other than a GET was made to [plain] before this one, which record() logged last."""
+    with open(ROOT / "calls.jsonl", encoding="utf-8") as log:
+        earlier = [json.loads(line) for line in log][:-1]
+    for call in earlier:
+        if call[:1] != ["api"]:
+            continue
+        options, path = parse_api(call[1:])
+        if options["method"] != "GET" and path.split("?", 1)[0].strip("/") == plain:
+            return True
+    return False
+
+
+def can_push():
+    return os.environ.get("FAKE_GH_CAN_PUSH") == "1"
+
+
+def hidden(plain, answer):
+    """Whether GitHub hides [plain] from the token: a draft, or an asset of a draft the release list holds."""
+    if can_push():
+        return False
+    release = RELEASE.match(plain)
+    if release:
+        return json.loads(answer.read_bytes()).get("draft") is True
+    asset = ASSET.match(plain)
+    listing = ROOT / "api" / asset.group(1) / "_" if asset else None
+    if listing is None or not listing.is_file():
+        return False
+    drafts = [release for release in json.loads(listing.read_bytes()) if release.get("draft") is True]
+    return any(str(item.get("id")) == asset.group(2) for release in drafts for item in release.get("assets", []))
+
+
+def api(arguments):
+    options, path = parse_api(arguments)
+    if path is None:
+        sys.exit("fake gh: api with no path")
+    plain = path.split("?", 1)[0].strip("/")
+    answer = ROOT / "api" / plain / "_"
+    if options["method"] != "GET":
+        answer = ROOT / "api" / plain / f"_.{options['method']}"
+        if not answer.is_file():
+            sys.stdout.write("{}\n")
+            return
+    after = ROOT / "api" / plain / "_.after"
+    if options["method"] == "GET" and after.is_file() and changed(plain):
+        answer = after
+    if not answer.is_file() or hidden(plain, answer):
+        sys.stderr.write("gh: Not Found (HTTP 404)\n")
+        sys.exit(1)
+    body = answer.read_bytes()
+    if RELEASES.match(plain) and not can_push():
+        body = json.dumps([release for release in json.loads(body) if release.get("draft") is not True]).encode()
+    if options["slurp"]:
+        body = b"[" + body + b"]"
+    if options["jq"] is None:
+        sys.stdout.buffer.write(body)
+        return
+    filtered = subprocess.run(["jq", "-r", options["jq"]], input=body, capture_output=True, check=False)
+    sys.stdout.buffer.write(filtered.stdout)
+    sys.stderr.buffer.write(filtered.stderr)
+    sys.exit(filtered.returncode)
+
+
+def release_create(arguments):
+    created = ROOT / "created"
+    created.mkdir(exist_ok=True)
+    values = {index + 1 for index, argument in enumerate(arguments) if argument in RELEASE_VALUE_OPTIONS}
+    files = [
+        argument for index, argument in enumerate(arguments)
+        if index not in values and pathlib.Path(argument).is_file()
+    ]
+    for name in files:
+        shutil.copy(name, created / pathlib.Path(name).name)
+
+
+def main():
+    arguments = sys.argv[1:]
+    record(arguments)
+    if arguments[:1] == ["api"]:
+        api(arguments[1:])
+    elif arguments[:2] == ["release", "create"]:
+        release_create(arguments[2:])
+    else:
+        sys.exit(f"fake gh: no answer for {arguments}")
+
+
+main()

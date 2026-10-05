@@ -4,6 +4,7 @@
   "upstream": {
     "repository": "tezra-io/fermix",
     "commit": "df8d8a4d911b64458a9c908a39de64d817fa5e07",
+    "release": "v0.12.1",
     "branch": "main",
     "working_tree": "clean",
     "retrieved_at": "2026-09-30"

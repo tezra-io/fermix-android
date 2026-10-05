@@ -11,7 +11,11 @@ import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.protocol.decodeServerEvent
 import io.tezra.fermix.protocol.encodeClientEvent
 
-/** The protocol version this app speaks (design section 7, D1); the daemon's window must hold it. */
+/**
+ * The protocol version this app speaks (design section 7, D1); the daemon's window must hold it. A release's
+ * preflight reads this line as it stands, to refuse a candidate the pinned engine release does not serve
+ * (scripts/release_preflight.sh).
+ */
 internal const val SESSION_VERSION = 2
 
 /**

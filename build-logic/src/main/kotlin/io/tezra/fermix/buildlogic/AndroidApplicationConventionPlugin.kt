@@ -10,15 +10,15 @@ import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.named
 
 /**
- * The phone app: Compose, the shared Android settings, the version from version.properties,
- * signing from outside the repository, an R8-shrunk release that is never debuggable, and unit tests on
- * JUnit 5 and on Robolectric, as a Compose library's, for what only the app does: its window, its
- * activity's lifecycle and its foreground service, with the bundled SQLite library its screens' databases
- * open on. Google's services plugin reads the Firebase project from `google-services.json` into the app's
- * resources (design section 10): the stub with a placeholder project in `app/`, or a developer's or the
- * release's own file in `app/src/<build type>/`, which the plugin reads first and git never takes. Instrumented
- * tests in [INSTRUMENTED_TEST_SOURCES], when the app has any, run on what a Compose library's run on, and `check`
- * builds their APK ([INSTRUMENTED_TEST_APK]).
+ * The phone app: Compose, the shared Android settings, the versionName from the nearest release tag and the
+ * versionCode from version.properties ([appVersion]), signing from outside the repository, an R8-shrunk release
+ * that is never debuggable, and unit tests on JUnit 5 and on Robolectric, as a Compose library's, for what only
+ * the app does: its window, its activity's lifecycle and its foreground service, with the bundled SQLite library
+ * its screens' databases open on. Google's services plugin reads the Firebase project from `google-services.json`
+ * into the app's resources (design section 10): the stub with a placeholder project in `app/`, or a developer's or
+ * the release's own file in `app/src/<build type>/`, which the plugin reads first and git never takes.
+ * Instrumented tests in [INSTRUMENTED_TEST_SOURCES], when the app has any, run on what a Compose library's run on,
+ * and `check` builds their APK ([INSTRUMENTED_TEST_APK]).
  */
 class AndroidApplicationConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -29,7 +29,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             pluginManager.apply(QualityConventionPlugin::class.java)
 
             val versionFile = rootProject.layout.projectDirectory.file("version.properties")
-            val version = parseAppVersion(providers.fileContents(versionFile).asText.get())
+            val version = providers.appVersion(rootDir, providers.fileContents(versionFile).asText.get())
             val signing = readSigningInputs()
             val debugKey = signingKey(SigningRole.DEBUG, signing)
             val releaseKey = signingKey(SigningRole.RELEASE, signing)
