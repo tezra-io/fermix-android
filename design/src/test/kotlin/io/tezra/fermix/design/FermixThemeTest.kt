@@ -2,6 +2,8 @@ package io.tezra.fermix.design
 
 import android.provider.Settings
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -16,10 +18,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-// Design section 13.1 composed: Material 3 handed the design's colours, type and shapes in each mode,
-// the standard springs app-wide, the expressive ones inside ExpressiveMotion, and reduce-motion read from
-// the system once the owner removes animations. JUnit 4 on Robolectric, in Roborazzi's activity, the one
-// ComponentActivity the module's test manifest declares.
+// Design section 13.1 composed: Material 3 handed the design's colours (the M51 update's section 1), type and
+// shapes in each mode, the text selection in the selection token, the standard springs app-wide, the expressive
+// ones inside ExpressiveMotion, and reduce-motion read from the system once the owner removes animations. JUnit 4
+// on Robolectric, in Roborazzi's activity, the one ComponentActivity the module's test manifest declares.
 @RunWith(RobolectricTestRunner::class)
 class FermixThemeTest {
     @get:Rule
@@ -78,13 +80,20 @@ class FermixThemeTest {
         val colorScheme: ColorScheme,
         val typography: Typography,
         val shapes: Shapes,
+        val selection: TextSelectionColors,
     )
 
     private fun handedToMaterial(darkTheme: Boolean): Handed {
         var handed: Handed? = null
         rule.setContent {
             FermixTheme(darkTheme = darkTheme) {
-                handed = Handed(MaterialTheme.colorScheme, MaterialTheme.typography, MaterialTheme.shapes)
+                handed =
+                    Handed(
+                        MaterialTheme.colorScheme,
+                        MaterialTheme.typography,
+                        MaterialTheme.shapes,
+                        LocalTextSelectionColors.current,
+                    )
             }
         }
         rule.waitForIdle()
@@ -96,12 +105,15 @@ class FermixThemeTest {
         handed: Handed,
     ) {
         val scheme = handed.colorScheme
-        assertEquals(colors.accent, scheme.primary)
-        assertEquals(colors.onAccent, scheme.onPrimary)
+        assertEquals(colors.ink, scheme.primary)
+        assertEquals(colors.onInk, scheme.onPrimary)
         assertEquals(colors.canvas, scheme.surface)
         assertEquals(colors.tonalSolid, scheme.surfaceContainerHigh)
         assertEquals(colors.hairline, scheme.outlineVariant)
-        assertEquals(colors.err, scheme.error)
+        assertEquals(colors.errText, scheme.error)
+        // Material selects text in its primary at 40 %, which is the ink: the update's selection is the ink at 20 %.
+        val selection = TextSelectionColors(handleColor = colors.ink, backgroundColor = colors.selection)
+        assertEquals(selection, handed.selection)
         assertEquals(FermixType.body, handed.typography.bodyLarge)
         assertEquals(FermixType.labelSmall, handed.typography.labelSmall)
         assertEquals(FermixShapes.card, handed.shapes.medium)

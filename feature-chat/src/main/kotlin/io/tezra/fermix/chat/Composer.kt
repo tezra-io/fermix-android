@@ -275,7 +275,7 @@ private fun Field(
         state = state,
         scrollState = scroll,
         textStyle = FermixType.body.copy(color = colors.ink),
-        cursorBrush = SolidColor(colors.accentInk),
+        cursorBrush = SolidColor(colors.ink),
         lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = FIELD_LINES),
         modifier =
             Modifier
@@ -287,7 +287,7 @@ private fun Field(
                 .semantics { contentDescription = placeholder },
         decorator = { inner ->
             Box {
-                if (state.text.isEmpty()) Text(placeholder, style = FermixType.body, color = colors.inkSecondary)
+                if (state.text.isEmpty()) Text(placeholder, style = FermixType.body, color = colors.textSecondary)
                 inner()
             }
         },
@@ -383,7 +383,7 @@ private fun EndControls(
                     .minimumInteractiveComponentSize()
                     .size(40.dp)
                     .graphicsLayer { rotationZ = turn }
-                    .background(if (stop) colors.ink else colors.accent, CircleShape)
+                    .background(colors.ink, CircleShape)
                     .combinedClickable(
                         onClick = { pressed(view, stop, actions) },
                         onLongClick = actions.onPalette,
@@ -394,7 +394,7 @@ private fun EndControls(
             contentAlignment = Alignment.Center,
         ) {
             val icon = if (stop) R.drawable.ic_chat_stop else R.drawable.ic_chat_send
-            Icon(painterResource(icon), null, tint = if (stop) colors.canvas else colors.onAccent)
+            Icon(painterResource(icon), null, tint = colors.onInk)
         }
     }
 }

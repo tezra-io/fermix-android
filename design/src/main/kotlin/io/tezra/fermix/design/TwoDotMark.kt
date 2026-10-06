@@ -69,10 +69,10 @@ enum class MarkMotion {
 }
 
 /**
- * Fermix's two-dot mark (design section 13.10, item 1) at [size], in ink and the accent, moving as [motion]
- * asks on the scheme the screen provides; under reduce-motion the springs snap (section 13.1) and the orbit
- * holds its pose. The dots assemble or merge once: a rotation, a fold or a return to the screen draws them
- * where they arrived.
+ * Fermix's two-dot mark (design section 13.10, item 1) at [size], both dots in the ink (the M51 update's 7.3),
+ * moving as [motion] asks on the scheme the screen provides; under reduce-motion the springs snap (section 13.1)
+ * and the orbit holds its pose. The dots assemble or merge once: a rotation, a fold or a return to the screen
+ * draws them where they arrived.
  */
 @Composable
 fun TwoDotMark(
@@ -92,7 +92,7 @@ fun TwoDotMark(
     val still = if (motion == MarkMotion.ORBIT) ORBIT_POSE else 0f
     val angle = if (motion == MarkMotion.ORBIT && !reduced) orbitAngle() else remember { mutableFloatStateOf(still) }
     val colors = LocalFermixColors.current
-    val second = if (motion == MarkMotion.MERGE) colors.accent.copy(alpha = MERGED_ALPHA) else colors.accent
+    val second = if (motion == MarkMotion.MERGE) colors.ink.copy(alpha = MERGED_ALPHA) else colors.ink
     Canvas(modifier = modifier.size(width = size.dot * MARK_SPAN, height = size.dot)) {
         drawDots(size.dot.toPx() / 2f, distance.value, angle.value, colors.ink, second)
     }

@@ -164,7 +164,7 @@ internal fun RepairRowItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Line(stringResource(R.string.chats_repair), colors.accentInk)
+            Line(stringResource(R.string.chats_repair), colors.ink)
         }
         LongPressMenu(open = open, rowHeight = height, onDismiss = { open = false }) {
             MenuEntry(R.string.chats_remove, R.drawable.ic_chats_menu_remove) {
@@ -256,26 +256,26 @@ internal fun Title(row: ChatRow) {
     }
 }
 
-/** The second line in its colour: red for a revoked phone, the accent's ink for "thinking…". */
+/** The second line in its colour: the error text's for a revoked phone, the ink for "thinking…". */
 @Composable
 private fun SecondLine(row: ChatRow) {
     val colors = LocalFermixColors.current
     when (val line = row.line) {
         is RowLine.Speaks -> {
             val words = linkWords(line.link, row.record.host) ?: return
-            Line(words, if (line.link == Link.Revoked) colors.err else colors.inkSecondary)
+            Line(words, if (line.link == Link.Revoked) colors.errText else colors.textSecondary)
         }
 
         RowLine.Thinking -> {
-            Line(stringResource(R.string.chats_thinking), colors.accentInk)
+            Line(stringResource(R.string.chats_thinking), colors.ink)
         }
 
         is RowLine.Draft -> {
-            Line(stringResource(R.string.chats_draft, line.text), colors.inkSecondary)
+            Line(stringResource(R.string.chats_draft, line.text), colors.textSecondary)
         }
 
         is RowLine.Message -> {
-            Line(line.text, colors.inkSecondary)
+            Line(line.text, colors.textSecondary)
         }
 
         // A chat with nothing in it yet has no second line.
@@ -299,17 +299,17 @@ private fun Meta(
 ) {
     val colors = LocalFermixColors.current
     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(META_GAP)) {
-        if (time != null) Text(text = time, style = FermixType.labelSmall, color = colors.inkSecondary)
+        if (time != null) Text(text = time, style = FermixType.labelSmall, color = colors.textSecondary)
         if (unread > 0) {
             Text(
                 text = unread.toString(),
                 style = BADGE_STYLE,
-                // The canon's badge is white on the accent in both modes, as the mark is on a tint.
-                color = colors.onTint,
+                // Fermix blue marks what is unread, and nothing else (README, the owner's decision of 2026-10-05).
+                color = colors.onSignal,
                 textAlign = TextAlign.Center,
                 modifier =
                     Modifier
-                        .background(colors.accent, CircleShape)
+                        .background(colors.signal, CircleShape)
                         .wideAsTall()
                         .widthIn(min = BADGE)
                         .heightIn(min = BADGE)

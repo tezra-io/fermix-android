@@ -45,8 +45,8 @@ object FermixMotion {
     const val DATE_PILL_FADE_DELAY_MILLIS = 500
 
     /**
-     * A message jumped to is highlighted for this long, in accentInk at [JUMP_HIGHLIGHT_ALPHA]: the visual
-     * canon's 6 dp ring around the bubble, which in dark mode is the lifted blue.
+     * A message jumped to is highlighted for this long, in the ink at [JUMP_HIGHLIGHT_ALPHA]: the visual canon's
+     * 6 dp ring around the bubble, on the canvas past its edge.
      */
     const val JUMP_HIGHLIGHT_MILLIS = 1_500
     const val JUMP_HIGHLIGHT_ALPHA = 0.12f

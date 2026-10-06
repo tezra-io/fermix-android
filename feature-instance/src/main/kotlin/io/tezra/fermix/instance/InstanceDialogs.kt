@@ -38,7 +38,7 @@ fun UnpairDialog(
             Text(
                 text = stringResource(R.string.instance_unpair_body, host),
                 style = FermixType.bodyMedium,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
             )
         },
         confirmButton = {
@@ -84,8 +84,8 @@ fun RenameDialog(
                 textStyle = FermixType.body,
                 colors =
                     OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accentInk,
-                        cursorColor = colors.accentInk,
+                        focusedBorderColor = colors.ink,
+                        cursorColor = colors.ink,
                     ),
             )
         },

@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
@@ -27,8 +28,9 @@ private val MARK_BELOW = 20.dp
 
 /**
  * Step 1 (design section 13.3): the two-dot mark assembling, the name, the tagline, "Get started", and
- * "Don't have Fermix yet?", which opens the install page. The canon sets that link in 12 / 16, a size the
- * type scale does not have; it takes the scale's supporting text, 14 / 20.
+ * "Don't have Fermix yet?", which opens the install page: a link, in the ink and underlined (the M51 update's
+ * 1.3). The canon sets that link in 12 / 16, a size the type scale does not have; it takes the scale's supporting
+ * text, 14 / 20.
  */
 @Composable
 fun WelcomeScreen(
@@ -46,7 +48,11 @@ fun WelcomeScreen(
                 modifier = Modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget),
                 colors = textButtonColors(colors),
             ) {
-                Text(text = stringResource(R.string.onboarding_welcome_no_fermix), style = FermixType.bodyMedium)
+                Text(
+                    text = stringResource(R.string.onboarding_welcome_no_fermix),
+                    style = FermixType.bodyMedium,
+                    textDecoration = TextDecoration.Underline,
+                )
             }
         },
     ) {
@@ -64,7 +70,7 @@ fun WelcomeScreen(
             Text(
                 text = stringResource(R.string.onboarding_welcome_tagline),
                 style = FermixType.body,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 textAlign = TextAlign.Center,
             )
         }

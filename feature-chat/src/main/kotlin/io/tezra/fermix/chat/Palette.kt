@@ -86,7 +86,7 @@ internal fun Palette(
         Text(
             text = stringResource(R.string.chat_palette_footer, host),
             style = FermixType.labelSmall,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier = Modifier.padding(start = 24.dp, top = 8.dp, end = 24.dp),
         )
     }
@@ -135,11 +135,11 @@ private fun CommandRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val danger = command.name == STOP_COMMAND
-        Text("/${command.name}", style = COMMAND_STYLE, color = if (danger) colors.err else colors.ink)
+        Text("/${command.name}", style = COMMAND_STYLE, color = if (danger) colors.errText else colors.ink)
         Text(
             command.description,
             style = DESCRIPTION_STYLE,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier = Modifier.weight(1f),
         )
     }

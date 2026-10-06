@@ -228,7 +228,7 @@ class MessageLinksTest {
             val link = linksIn(open).single()
             assertEquals("'$words' is a web link", "https://example.com/w", link.url)
             assertEquals("'$words' draws the web link's words", open.text, closed.text)
-            // A link's own look (accent, underline) is laid out as a span of its own, which no closed link has.
+            // A link's own look (the ink, underlined) is laid out as a span of its own, which no closed link has.
             val marks = open.spanStyles.filterNot { it.item == link.styles?.style }
             assertEquals("'$words' is marked up as the web link's words", marks, closed.spanStyles)
         }

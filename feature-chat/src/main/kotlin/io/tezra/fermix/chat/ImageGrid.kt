@@ -280,11 +280,11 @@ private fun GoneCell(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         val glyph = Modifier.size(20.dp)
-        Icon(painterResource(R.drawable.ic_chat_image), null, tint = colors.inkSecondary, modifier = glyph)
+        Icon(painterResource(R.drawable.ic_chat_image), null, tint = colors.textSecondary, modifier = glyph)
         Text(
             stringResource(R.string.chat_media_gone, host),
             style = FermixType.bodyMedium,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -307,9 +307,13 @@ internal fun GoneFrame(
         Icon(
             painterResource(R.drawable.ic_chat_image),
             null,
-            tint = colors.inkSecondary,
+            tint = colors.textSecondary,
             modifier = Modifier.size(20.dp),
         )
-        Text(stringResource(R.string.chat_media_gone, host), style = FermixType.bodyMedium, color = colors.inkSecondary)
+        Text(
+            stringResource(R.string.chat_media_gone, host),
+            style = FermixType.bodyMedium,
+            color = colors.textSecondary,
+        )
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -164,28 +165,41 @@ internal class Overlays(
     var selected by selected
 }
 
+/** The overlays, nothing open, with [selected] the messages selected as the screen first shows. */
 @Composable
-private fun rememberOverlays(): Overlays {
+private fun rememberOverlays(selected: Set<String>): Overlays {
     val keys = listSaver<MutableState<Set<String>>, String>({ it.value.toList() }, { mutableStateOf(it.toSet()) })
     return Overlays(
         rememberSaveable { mutableStateOf(null) },
         rememberSaveable { mutableStateOf(null) },
         rememberSaveable { mutableStateOf(null) },
         rememberSaveable { mutableStateOf(null) },
-        rememberSaveable(saver = keys) { mutableStateOf(emptySet()) },
+        rememberSaveable(saver = keys) { mutableStateOf(selected) },
     )
 }
 
 /**
+ * What a preview holds as it stands, and the running app never holds: the date pill up as a fast scroll shows it
+ * ([datePill]), a jumped-to hit's pulse ([pulsing]), and the messages selected as the screen first shows
+ * ([selected]).
+ */
+@Immutable
+data class PreviewHeld(
+    val datePill: Boolean = false,
+    val pulsing: Jump? = null,
+    val selected: Set<String> = emptySet(),
+)
+
+/**
  * The Chat screen (design sections 13.5 to 13.7, 13.11): the bar, or the selection's while messages are
  * selected; the banner; the timeline in the 640 dp column, with the scroll pill and, during a fast scroll, the
- * date pill ([datePillHeld] keeps it up for a preview); the palette as a sheet the dock opens into, over a scrim
- * on the whole window; a lifted message with its menu; Info, Select text and the "Model" sheet as sheets (the
- * attach sheet is the route's, over the screen, ChatRoute); search (design section 13.7), its bar over its list
- * or over the chat it steps through, opened from the bar or with Ctrl+F; a hit jumped to pulses, and [pulsing]
- * holds a preview's pulse as it stands; the media viewer over everything, its image moving from its bubble and
- * back. Back puts down what is open first. An answer's arrival plays its haptic and is announced only while the
- * chat is on screen.
+ * date pill; the palette as a sheet the dock opens into, over a scrim on the whole window; a lifted message with
+ * its menu; Info, Select text and the "Model" sheet as sheets (the attach sheet is the route's, over the screen,
+ * ChatRoute); search (design section 13.7), its bar over its list or over the chat it steps through, opened from
+ * the bar or with Ctrl+F; a hit jumped to pulses; the media viewer over everything, its image moving from its
+ * bubble and back. Back puts down what is open first. An answer's arrival plays its haptic and is announced only
+ * while the chat is on screen. [held] is a preview's, which holds still what the running screen only passes
+ * through.
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -193,12 +207,11 @@ fun ChatScreen(
     ui: ChatUi,
     actions: ChatScreenActions,
     listState: LazyListState = rememberLazyListState(),
-    datePillHeld: Boolean = false,
-    pulsing: Jump? = null,
+    held: PreviewHeld = PreviewHeld(),
 ) {
-    val overlays = rememberOverlays()
+    val overlays = rememberOverlays(held.selected)
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
-    val highlight = jumpHighlight(ui, listState) ?: pulsing
+    val highlight = jumpHighlight(ui, listState) ?: held.pulsing
     val media = TimelineMedia(ui.media, actions.media) { key, index -> viewing = cellKey(key, index) }
     val context =
         timelineContext(ui.state, actions, overlays)
@@ -216,7 +229,7 @@ fun ChatScreen(
     BackHandler(enabled = viewing != null) { viewing = null }
     SharedTransitionLayout {
         CompositionLocalProvider(LocalViewerTransition provides ViewerTransition(this, viewing)) {
-            Screen(ui, actions, ScreenParts(overlays, context, listState, datePillHeld), shown)
+            Screen(ui, actions, ScreenParts(overlays, context, listState, held.datePill), shown)
             val scope = rememberCoroutineScope()
             val viewer =
                 ViewerActions(

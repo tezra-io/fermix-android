@@ -167,15 +167,16 @@ internal fun EmptyChat(
         Text(
             text = stringResource(R.string.chat_empty, name),
             style = FermixType.body,
-            color = LocalFermixColors.current.inkSecondary,
+            color = LocalFermixColors.current.textSecondary,
             textAlign = TextAlign.Center,
         )
     }
 }
 
 /**
- * The unread divider (the canon's `.unread`): a 1 dp line in the accent ink at 70 %, across the timeline, its
- * gutters included (the canon's `margin: 0 -12px`).
+ * The unread divider (the canon's `.unread`): a 1 dp line in the signal, Fermix blue, which marks what is unread
+ * and nothing else (README), across the timeline, its gutters included (the canon's `margin: 0 -12px`). The
+ * canon's 70 % is left out: Fermix blue at 70 % reads at 2.4 : 1 on the dark canvas, under a mark's 3 : 1.
  */
 @Composable
 internal fun UnreadDivider() {
@@ -187,7 +188,7 @@ internal fun UnreadDivider() {
                 .acrossGutters()
                 .padding(top = 2.dp, bottom = 2.dp)
                 .height(FermixSpacing.hairline)
-                .background(LocalFermixColors.current.accentInk.copy(alpha = UNREAD_ALPHA))
+                .background(LocalFermixColors.current.signal)
                 .semantics { contentDescription = label },
     )
 }
@@ -201,5 +202,3 @@ private fun Modifier.acrossGutters(): Modifier =
         val placeable = measurable.measure(constraints.copy(minWidth = wide, maxWidth = wide))
         layout(constraints.maxWidth, placeable.height) { placeable.place(-gutter, 0) }
     }
-
-private const val UNREAD_ALPHA = 0.7f

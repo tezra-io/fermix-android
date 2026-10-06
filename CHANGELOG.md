@@ -53,9 +53,12 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   the type scale in the bundled Google Sans Flex and Google Sans Code (google/fonts' files,
   unmodified, with their OFL), the shapes, spacing, the centred column, motion with reduce-motion,
   and the haptics, all handed to Material 3, never Dynamic Color. The launcher icon is the two-dot
-  mark, with a themed monochrome layer. Every preview is drawn at twelve windows and compared with
-  its reference image, in `check` and in CI's new `screens` job, which uploads any image that changed
-  and also fails on a reference image that no preview drew.
+  mark, with a themed monochrome layer. Every preview is drawn at twelve windows by
+  `./gradlew recordRoborazziDebug`, which CI's new `screens` job runs on every run, failing on a
+  preview that cannot be drawn and on a module whose previews are no longer found. No screenshot is
+  kept in the repository (the owner's decision of 2026-10-05), so nothing compares the screens with
+  stored images: a developer sees what a change moved against a recording made on their own machine
+  before it.
 - **The phone's durable state.** `data` keeps the paired daemons' records, public data only, in a
   typed DataStore, with the re-pairing and renaming rules of the design; one database per paired
   daemon and profile, holding the timeline cache with its offline full-text search, the outbox, the
@@ -205,3 +208,17 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   after; no input skips a check. The app's version name is now its release tag, or `0.0.0-dev` on a build with no
   tag behind it. Until the engine serves the app's protocol 2 (stage D1) and ships `android_signers.json` (stage
   D2), every candidate is refused.
+- **The app's screens from every CI run.** CI's `screens` job keeps every screen's preview in a phone's window,
+  light and dark, as its `app-shots` download for 30 days (`app-shots-incomplete` when a preview failed to draw),
+  and `scripts/app_shots.sh` makes the same pictures from a developer's own recording.
+
+### Changed
+
+- **A monochrome look.** The app is drawn in one ink, near-black on white in light mode and a soft off-white on
+  near-black in dark mode: primary buttons, your own messages, links (always underlined), switches, chosen
+  chips, progress and the running tool's arc are the ink, and Material's components are given the same colours,
+  so none falls back to a colour of its own. Fermix blue is kept for one thing, what is unread: the count on a
+  Chats row, the line above the first unread message and the count on the scroll-to-latest button. Error text
+  in dark mode is a lighter red that reads on the dark background. A link to a web page is underlined, such as
+  "Don't have Fermix yet?" and "Troubleshooting", and so is an action in the app that only the blue told apart
+  from the words around it, such as "Test connection", "Run again" or "Try again".

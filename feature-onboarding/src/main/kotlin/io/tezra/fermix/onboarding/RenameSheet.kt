@@ -64,9 +64,9 @@ fun RenameSheet(
                 singleLine = true,
                 colors =
                     OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accentInk,
-                        focusedLabelColor = colors.accentInk,
-                        cursorColor = colors.accentInk,
+                        focusedBorderColor = colors.ink,
+                        focusedLabelColor = colors.ink,
+                        cursorColor = colors.ink,
                     ),
             )
             PrimaryAction(

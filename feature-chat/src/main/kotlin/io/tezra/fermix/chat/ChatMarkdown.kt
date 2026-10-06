@@ -65,7 +65,7 @@ import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 
 /**
  * The renderer's look in an answer bubble (design sections 8.3 and 13.1): body 16/24 in the ink, headings as
- * bold body, inline code in mono on the hairline, links in the accent ink, underlined.
+ * bold body, inline code in mono on the hairline, links in the ink, always underlined (the M51 update's 1.3).
  */
 @Composable
 private fun colorsOf(colors: FermixColors): MarkdownColors =
@@ -81,7 +81,7 @@ private fun colorsOf(colors: FermixColors): MarkdownColors =
 private fun typographyOf(colors: FermixColors): MarkdownTypography {
     val body = FermixType.body.copy(color = colors.ink)
     val heading = body.copy(fontWeight = FontWeight.SemiBold)
-    val link = SpanStyle(color = colors.accentInk, textDecoration = TextDecoration.Underline)
+    val link = SpanStyle(color = colors.ink, textDecoration = TextDecoration.Underline)
     return markdownTypography(
         h1 = heading,
         h2 = heading,
@@ -92,7 +92,7 @@ private fun typographyOf(colors: FermixColors): MarkdownTypography {
         text = body,
         code = FermixType.mono,
         inlineCode = FermixType.mono.copy(color = colors.ink),
-        quote = body.copy(color = colors.inkSecondary),
+        quote = body.copy(color = colors.textSecondary),
         paragraph = body,
         ordered = body,
         bullet = body,
@@ -239,7 +239,7 @@ private fun CursorParagraph(
 ) {
     val style = model.typography.paragraph
     val settings = annotatorSettings()
-    val wash = SpanStyle(background = LocalFermixColors.current.accentInk.copy(alpha = MARK_ALPHA))
+    val wash = SpanStyle(background = LocalFermixColors.current.selection)
     val words =
         buildAnnotatedString {
             pushStyle(style.toSpanStyle())
@@ -282,7 +282,7 @@ internal fun CodePlaceholder(cursor: Boolean) {
         Text(
             text = stringResource(R.string.chat_code_placeholder),
             style = FermixType.mono,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier =
                 Modifier
                     .background(colors.hairline, RoundedCornerShape(10.dp))

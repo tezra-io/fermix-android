@@ -90,7 +90,7 @@ internal fun italicName(
 /**
  * The model chip in the composer's second row (design section 8.6; the canon's `.mc`): the provider's glyph in a
  * ring, the model's short name and ▾; at 70 % while the chat runs the config's default, tonal-filled with the
- * accent's dot once it has its own, and at 38 %, taking no press, with no connection: the one control that is
+ * ink's dot once it has its own, and at 38 %, taking no press, with no connection: the one control that is
  * disabled, the hint above the composer saying why.
  */
 @Composable
@@ -133,7 +133,7 @@ internal fun ModelChipButton(
             contentAlignment = Alignment.Center,
         ) { Text(chip.glyph, style = glyph, color = colors.ink, textAlign = TextAlign.Center) }
         Text(chip.label, style = CHIP_STYLE, color = colors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (chip.overridden) Box(Modifier.size(6.dp).background(colors.accentInk, CircleShape))
+        if (chip.overridden) Box(Modifier.size(6.dp).background(colors.ink, CircleShape))
         Icon(painterResource(R.drawable.ic_chat_down), null, tint = colors.ink, modifier = Modifier.size(16.dp))
     }
 }
@@ -159,7 +159,7 @@ internal fun ComposerHint(
     Text(
         words,
         style = FermixType.labelSmall,
-        color = LocalFermixColors.current.inkSecondary,
+        color = LocalFermixColors.current.textSecondary,
         modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 6.dp),
     )
 }
@@ -202,7 +202,7 @@ internal fun ModelSheetContent(
         Text(
             italicName(stringResource(R.string.chat_model_subtitle, NAME_MARK), record.title),
             style = SHEET_SUBTITLE,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier = Modifier.padding(start = 24.dp, top = 2.dp, end = 24.dp, bottom = 8.dp),
         )
         if (sheet == ModelSheet.Loading) {
@@ -250,7 +250,7 @@ private fun GroupLine(group: ModelRow.Group) {
     Text(
         group.name,
         style = FermixType.labelSmall,
-        color = if (group.unavailable) colors.inkTertiary else colors.inkSecondary,
+        color = if (group.unavailable) colors.inkTertiary else colors.textSecondary,
         modifier = Modifier.padding(start = 24.dp, top = 10.dp, end = 24.dp, bottom = 2.dp),
     )
 }
@@ -278,8 +278,8 @@ private fun Choice(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(words, style = FermixType.body, color = colors.ink)
-            under?.let { Text(it, style = SHEET_SUBTITLE, color = colors.inkSecondary) }
+            under?.let { Text(it, style = SHEET_SUBTITLE, color = colors.textSecondary) }
         }
-        if (active) Icon(painterResource(R.drawable.ic_chat_check), null, tint = colors.accentInk)
+        if (active) Icon(painterResource(R.drawable.ic_chat_check), null, tint = colors.ink)
     }
 }

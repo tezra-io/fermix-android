@@ -116,7 +116,7 @@ fun AppLockScreen(
                     Text(
                         text = stringResource(R.string.chats_lock_needs_screen_lock),
                         style = FermixType.bodyMedium,
-                        color = colors.inkSecondary,
+                        color = colors.textSecondary,
                         modifier = Modifier.padding(horizontal = ROW_SIDES),
                     )
                 }

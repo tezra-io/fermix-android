@@ -117,7 +117,7 @@ private fun Subtitle(line: String?) {
             Text(
                 shown,
                 style = SUBTITLE_STYLE,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -171,7 +171,7 @@ internal fun BannerLine(
                 .padding(horizontal = 16.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = words, style = FermixType.labelSmall, color = colors.inkSecondary, textAlign = TextAlign.Center)
+        Text(text = words, style = FermixType.labelSmall, color = colors.textSecondary, textAlign = TextAlign.Center)
     }
 }
 

@@ -98,8 +98,8 @@ internal fun verbWords(verb: ToolVerb): String = stringResource(VERB_WORDS.getVa
 
 /**
  * The card's tool chips (design section 13.5): the latest two, stacked, each 28 dp with its 16 dp glyph and
- * verb, a thin accent arc turning while it runs and a check in the second ink once it stopped; "+n more" for
- * the rest. A chip scales in from 0.92 as it lands (section 13.1), at once under reduce-motion. TalkBack reads
+ * verb, a thin arc of the ink turning while it runs and a check in the secondary text once it stopped; "+n more"
+ * for the rest. A chip scales in from 0.92 as it lands (section 13.1), at once under reduce-motion. TalkBack reads
  * each as "{verb}, started" or "{verb}, finished" (section 13.8).
  */
 @Composable
@@ -119,7 +119,7 @@ internal fun ToolChips(
             Text(
                 text = pluralStringResource(R.plurals.chat_chips_more, more, more),
                 style = CHIP_STYLE,
-                color = LocalFermixColors.current.inkSecondary,
+                color = LocalFermixColors.current.textSecondary,
                 modifier = Modifier.padding(start = 4.dp),
             )
         }
@@ -163,18 +163,18 @@ private fun ToolChip(chip: LiveChip) {
             Icon(
                 painterResource(R.drawable.ic_chat_check),
                 null,
-                tint = colors.inkSecondary,
+                tint = colors.textSecondary,
                 modifier = Modifier.size(16.dp),
             )
         }
-        Text(words, style = CHIP_STYLE, color = if (chip.running) colors.ink else colors.inkSecondary)
+        Text(words, style = CHIP_STYLE, color = if (chip.running) colors.ink else colors.textSecondary)
     }
 }
 
 /**
- * The running arc (the canon's `.arc`): a hairline ring, half of it in the accent ink, turning, around the
- * tool's glyph. The glyph is 16 dp, as design section 13.5 says, in a 22 dp ring; the canon draws 11 in 20,
- * and the doc wins (reported to the owner).
+ * The running arc (the canon's `.arc`): a hairline ring, half of it in the ink (the M51 update's 1.3), turning,
+ * around the tool's glyph. The glyph is 16 dp, as design section 13.5 says, in a 22 dp ring; the canon draws 11
+ * in 20, and the doc wins (reported to the owner).
  */
 @Composable
 private fun RunningArc(glyph: Int) {
@@ -199,7 +199,7 @@ private fun RunningArc(glyph: Int) {
         Canvas(modifier = Modifier.size(ARC_RING).rotate(turn)) {
             val stroke = Stroke(width = 1.5.dp.toPx())
             drawCircle(colors.hairline, style = stroke)
-            drawArc(colors.accentInk, ARC_START, ARC_SWEEP, useCenter = false, style = stroke)
+            drawArc(colors.ink, ARC_START, ARC_SWEEP, useCenter = false, style = stroke)
         }
         Icon(painterResource(glyph), null, tint = colors.ink, modifier = Modifier.size(GLYPH))
     }

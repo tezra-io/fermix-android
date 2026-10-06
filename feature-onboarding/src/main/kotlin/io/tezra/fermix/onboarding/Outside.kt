@@ -25,12 +25,23 @@ fun openOutside(
     when (action) {
         FailureAction.OPEN_TAILSCALE -> start(context, tailscale(context))
         FailureAction.OPEN_VPN_SETTINGS -> start(context, Intent(Settings.ACTION_VPN_SETTINGS))
-        FailureAction.OPEN_RELEASE_PAGE -> openPage(context, R.string.onboarding_url_release)
-        FailureAction.LEARN_MORE -> openPage(context, R.string.onboarding_url_learn_more)
-        FailureAction.TROUBLESHOOTING -> openPage(context, R.string.onboarding_url_troubleshooting)
-        else -> throw IllegalArgumentException("$action stays in the app")
+        else -> openPage(context, requireNotNull(pageOf(action)) { "$action stays in the app" })
     }
 }
+
+/**
+ * The web page [action] opens in the browser, its address in strings.xml, or null for an action that opens none. A
+ * failure screen draws an action with a page as a link, underlined (the M51 update's 1.3: links are the ink, always
+ * underlined), and the others as text buttons.
+ */
+@StringRes
+internal fun pageOf(action: FailureAction): Int? =
+    when (action) {
+        FailureAction.OPEN_RELEASE_PAGE -> R.string.onboarding_url_release
+        FailureAction.LEARN_MORE -> R.string.onboarding_url_learn_more
+        FailureAction.TROUBLESHOOTING -> R.string.onboarding_url_troubleshooting
+        else -> null
+    }
 
 /**
  * "Open settings" on the scan's "Camera is off for Fermix" (design section 13.3, step 3): the app's own page

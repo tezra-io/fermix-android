@@ -47,7 +47,7 @@ fun AlreadyPairedDialog(
             Text(
                 text = stringResource(R.string.onboarding_already_paired),
                 style = FermixType.bodyMedium,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
             )
         },
         confirmButton = {

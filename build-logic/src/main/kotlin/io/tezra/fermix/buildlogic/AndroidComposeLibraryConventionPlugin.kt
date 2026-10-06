@@ -19,24 +19,15 @@ import org.gradle.kotlin.dsl.named
 import org.gradle.process.CommandLineArgumentProvider
 
 /**
- * The task that renders every preview of the module on Robolectric and compares each image with its
- * reference under [SCREENSHOT_DIRECTORY]. A changed or missing image fails it (CI/CD design section 3,
- * `screens`), within Roborazzi's default comparator: a pixel whose colour moves by less than 0.007 (the
- * distance between RGBA values on 0 to 1) counts as unchanged, so a token nudged by a step or two passes
- * here and fails its value test instead (FermixColorsTest pins every colour). A reference that no preview
- * drew fails it too ([ORPHAN_CHECK]). A failing test names its preview, and the twelve windows of one preview
- * share that name; the images it leaves under build/outputs/roborazzi are named for the preview, its
- * window, mode and font scale. `recordRoborazziDebug` writes the references, on Linux x86-64 only.
+ * Where `recordRoborazziDebug` draws a module's previews: the machine's own references, which git ignores (the
+ * owner, 2026-10-05), so a clone has none.
  */
-internal const val SCREENSHOT_VALIDATION = "verifyRoborazziDebug"
-
-/** Where a module keeps its reference images, committed with the change that moved them. */
 internal const val SCREENSHOT_DIRECTORY = "src/test/screenshots"
 
 /**
  * A library module that draws: the library convention, Compose, a screenshot test of every `@Preview` in
- * the module's package, validated by `check`, and instrumented tests, built by `check`. The design module
- * and every feature module apply it.
+ * the module's package, which a record draws and nothing `check` runs draws or compares (no reference is
+ * tracked), and instrumented tests, built by `check`. The design module and every feature module apply it.
  */
 class AndroidComposeLibraryConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -62,8 +53,8 @@ class AndroidComposeLibraryConventionPlugin : Plugin<Project> {
             guardScreenshotReferences()
             addComposeDependencies(libs)
             configureInstrumentedTests(android, libs)
-            // The tasks are named, not matched, so a build that loses one fails instead of skipping it.
-            tasks.named<Task>("check") { dependsOn(SCREENSHOT_VALIDATION, INSTRUMENTED_TEST_APK) }
+            // The task is named, not matched, so a build that loses it fails instead of skipping it.
+            tasks.named<Task>("check") { dependsOn(INSTRUMENTED_TEST_APK) }
         }
     }
 }
@@ -168,8 +159,14 @@ internal class RobolectricSdkDirectory(
 }
 
 /**
- * One generated test per preview in the module's own package, on the targetSdk, with the reference
- * images committed under [SCREENSHOT_DIRECTORY] and a failed comparison's images under build/.
+ * One generated test per preview in the module's own package, on the targetSdk. It draws only when Roborazzi
+ * records or compares; in a plain `test` it passes without composing its preview, one that throws included.
+ * `recordRoborazziDebug` (AGENTS.md's done, and CI's `screens` job) writes each image into [SCREENSHOT_DIRECTORY],
+ * and a developer who recorded before a change runs `compareRoborazziDebug` or `verifyRoborazziDebug` after it,
+ * which leave their images under build/outputs/roborazzi, named for the preview, its window, mode and font scale.
+ * Each such run ends with [PREVIEWS_DRAWN]. A verify fails on an image that moved past Roborazzi's default
+ * comparator: a pixel whose colour moves by less than 0.007 (the distance between RGBA values on 0 to 1) counts as
+ * unchanged, and FermixColorsTest pins every colour's value.
  */
 @OptIn(ExperimentalRoborazziApi::class)
 private fun Project.configurePreviewScreenshots(android: LibraryExtension) {

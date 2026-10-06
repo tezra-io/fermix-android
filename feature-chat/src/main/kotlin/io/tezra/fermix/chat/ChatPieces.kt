@@ -36,6 +36,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixShapes
@@ -55,8 +56,8 @@ private val PILL_STYLE = FermixType.bodyMedium.copy(fontSize = 13.sp, lineHeight
 
 /**
  * An error card (design sections 13.5 and 13.9): the agent's surface with the error colour's 3 dp rule on the
- * left, the deck's sentence for its code, the follow-up line when it has one, and its one action. [host] and
- * [model] fill the sentence.
+ * left, the deck's sentence for its code, the follow-up line when it has one, and its one action, underlined, as
+ * the M51 update's reference player draws a text button. [host] and [model] fill the sentence.
  */
 @Composable
 internal fun ErrorCard(
@@ -84,7 +85,7 @@ internal fun ErrorCard(
             Text(
                 body,
                 style = FermixType.bodyMedium,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
@@ -93,7 +94,7 @@ internal fun ErrorCard(
             Spacer(Modifier.height(8.dp))
         } else {
             TextButton(onClick = { onAction(error) }, modifier = Modifier.offset(x = (-12).dp).heightIn(min = 48.dp)) {
-                Text(action, style = FermixType.label, color = colors.accentInk)
+                Text(action, style = FermixType.label, color = colors.ink, textDecoration = TextDecoration.Underline)
             }
         }
     }
@@ -185,7 +186,7 @@ private fun Pill(
             Text(
                 text = words,
                 style = style,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 textAlign = TextAlign.Center,
                 modifier =
                     Modifier
@@ -199,15 +200,16 @@ private fun Pill(
 /**
  * The line under the owner's bubble (the canon's `.state`): queued, pending, or not sent in the error colour with
  * its ⚠; at the end of the column, as wide as the bubble may be, so a line that wraps stays under it, flush to its
- * end, the glyph beside its first words.
+ * end, the glyph beside its first words. On a selected row's wash ([washed]) it is the ink (rowLine).
  */
 @Composable
 internal fun StateLine(
     words: String,
     error: Boolean,
+    washed: Boolean,
 ) {
     val colors = LocalFermixColors.current
-    val tint = if (error) colors.err else colors.inkSecondary
+    val tint = rowLine(colors, if (error) colors.errText else colors.textSecondary, washed)
     Box(
         modifier = Modifier.fillMaxWidth(FermixSpacing.USER_BUBBLE_MAX_WIDTH).padding(top = 4.dp),
         contentAlignment = Alignment.CenterEnd,

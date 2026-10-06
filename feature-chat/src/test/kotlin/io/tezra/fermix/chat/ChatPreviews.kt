@@ -22,8 +22,9 @@ import java.time.LocalDate
 // unseen answers, then mid-scroll with its date pill, and with an older page on its way; the thinking card
 // while the daemon speaks and with a pool phrase; an answer mid-stream; a sealed answer with its code and table
 // cards; answers made only of a card, a job's table and a command; the outbox's queued and failed bubbles; the
-// error cards; the centred lines and a job's delivery; the empty chat; the composer's six lines and its
-// palette; the banners. Each list is scrolled so that what its preview shows is in view at every window.
+// error cards; the centred lines and a job's delivery; three messages selected, a job's report, a refused
+// message of the owner's and an answer with a link; the empty chat; the composer's six lines and its palette;
+// the banners. Each list is scrolled so that what its preview shows is in view at every window.
 
 /** The indicator's clock in every preview; each card's turn started its elapsed time before it. */
 private const val NOW_MONO = 100_000L
@@ -158,7 +159,7 @@ private val THREAD_SCROLL = 12.dp
 fun FastScrollPreview() {
     // Mid-scroll: the date pill names the day of the topmost item in view.
     FermixPreviewTheme {
-        ChatScreen(ui(THREAD, unseen = 2), NO_ACTIONS, rememberLazyListState(1), datePillHeld = true)
+        ChatScreen(ui(THREAD, unseen = 2), NO_ACTIONS, rememberLazyListState(1), PreviewHeld(datePill = true))
     }
 }
 
@@ -274,13 +275,12 @@ fun SealedPreview() {
 fun CardsPreview() {
     // Answers made only of a card: a command's fence, and a job's table, which wears its tag and the time.
     val command = said("r6", Sender.Agent, "```sh\nsystemctl --user restart fermix-export\n```", minutes = 42)
-    val report =
-        ChatItem.Message(
-            "r7",
-            ShownMessage(Sender.Agent, TABLE, wallAt(60), Delivery.NONE, job = "nightly-export"),
-        )
-    FermixPreviewTheme { ChatScreen(ui(listOf(report, command, ASKED) + EARLIER), NO_ACTIONS) }
+    FermixPreviewTheme { ChatScreen(ui(listOf(REPORT, command, ASKED) + EARLIER), NO_ACTIONS) }
 }
+
+/** A job's report, only a table: its tag above the card and its time below it lie on the canvas. */
+private val REPORT =
+    ChatItem.Message("r7", ShownMessage(Sender.Agent, TABLE, wallAt(60), Delivery.NONE, job = "nightly-export"))
 
 @FermixPreviews
 @Composable
@@ -291,17 +291,19 @@ fun OutboxPreview() {
             "out:m9",
             ShownMessage(Sender.User, "And check the disk too.", wallAt(40), Delivery.QUEUED, editable = true),
         )
-    val failed =
-        ChatItem.Message(
-            "out:m10",
-            ShownMessage(Sender.User, "Then empty the trash.", wallAt(41), Delivery.FAILED, request = msg("m10", "")),
-        )
     val notSent =
         ShownError(ErrorLine.NOT_SENT, ErrorAction.RETRY_SENDING, Sender.User, "rate_limited", msg("m10", ""))
     val refused = ChatItem.Error("refused:m10", notSent)
-    val items = listOf(refused, failed, queued, running, ASKED) + EARLIER
+    val items = listOf(refused, FAILED, queued, running, ASKED) + EARLIER
     FermixPreviewTheme { ChatScreen(ui(items, thinking = true), NO_ACTIONS) }
 }
+
+/** The owner's message the host refused: "Not sent. Tap to retry sending." under it, on the canvas. */
+private val FAILED =
+    ChatItem.Message(
+        "out:m10",
+        ShownMessage(Sender.User, "Then empty the trash.", wallAt(41), Delivery.FAILED, request = msg("m10", "")),
+    )
 
 @FermixPreviews
 @Composable
@@ -341,6 +343,27 @@ fun LinesPreview() {
             ASKED,
         ) + EARLIER
     FermixPreviewTheme { ChatScreen(ui(items), NO_ACTIONS) }
+}
+
+/** An answer with a link (the M51 update's 1.3: the ink, always underlined), under the owner's question. */
+private val LINKED =
+    said(
+        "r6",
+        Sender.Agent,
+        "The guide is [Task timeouts](https://hexdocs.pm/elixir/Task.html); the export uses its default.",
+        minutes = 41,
+    )
+
+@FermixPreviews
+@Composable
+fun SelectingPreview() {
+    // Multi-select over the answer, a refused message of the owner's and a job's report: each row washed in the
+    // selection across the column, the owner's bubble, the ink itself, kept as it is with the wash beside it; the
+    // answer's link in the ink; and what a row draws on its canvas, the refusal's line, the job's tag and the card's
+    // time, in the ink while it lies on the wash. The owner's question above stays unselected.
+    val items = listOf(REPORT, FAILED, LINKED, ASKED) + EARLIER
+    val held = PreviewHeld(selected = setOf(REPORT.key, FAILED.key, LINKED.key))
+    FermixPreviewTheme { ChatScreen(ui(items), NO_ACTIONS, held = held) }
 }
 
 @FermixPreviews

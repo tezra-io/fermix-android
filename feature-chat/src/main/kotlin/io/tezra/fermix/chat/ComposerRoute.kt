@@ -220,7 +220,7 @@ internal fun MicRationale(
             Text(
                 stringResource(R.string.chat_mic_rationale_body),
                 style = FermixType.body,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
             )
         },
         confirmButton = {

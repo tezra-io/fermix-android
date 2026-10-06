@@ -190,8 +190,8 @@ private fun CardHead(
             CardKind.OTHER -> card.kindWord.replaceFirstChar { it.titlecase(locale) }
         }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(painterResource(icon), null, tint = colors.inkSecondary, modifier = Modifier.size(16.dp))
-        Text(word, style = FermixType.labelSmall, color = colors.inkSecondary)
+        Icon(painterResource(icon), null, tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+        Text(word, style = FermixType.labelSmall, color = colors.textSecondary)
     }
 }
 
@@ -238,7 +238,7 @@ private fun Answers(
             onClick = onApprove,
             enabled = enabled,
             modifier = Modifier.weight(1f).then(answer),
-            colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.ink, contentColor = colors.onInk),
             contentPadding = ANSWER_PADDING,
         ) { AnswerWord(stringResource(R.string.chat_approve)) }
     }
@@ -262,8 +262,8 @@ private fun Countdown(
     ttlS: Int,
 ) {
     val colors = LocalFermixColors.current
-    val tint = if (left <= WARN_SECONDS) colors.warn else colors.inkSecondary
-    val fill = if (left <= WARN_SECONDS) colors.warn else colors.accentInk
+    val tint = if (left <= WARN_SECONDS) colors.warn else colors.textSecondary
+    val fill = if (left <= WARN_SECONDS) colors.warn else colors.ink
     val fraction = (left.toFloat() / ttlS.coerceAtLeast(1)).coerceIn(0f, 1f)
     Box(modifier = Modifier.padding(top = 10.dp)) {
         // Unseen and unread: only its height counts.
@@ -324,9 +324,9 @@ private fun ReceiptLine(
     val (words, tint) =
         when (receipt) {
             Receipt.APPROVED -> stringResource(R.string.chat_approval_approved) to colors.ok
-            Receipt.DENIED -> stringResource(R.string.chat_approval_denied) to colors.err
-            Receipt.EXPIRED -> stringResource(R.string.chat_approval_expired, ttlS) to colors.inkSecondary
-            Receipt.CLOSED -> stringResource(R.string.chat_approval_closed) to colors.inkSecondary
+            Receipt.DENIED -> stringResource(R.string.chat_approval_denied) to colors.errText
+            Receipt.EXPIRED -> stringResource(R.string.chat_approval_expired, ttlS) to colors.textSecondary
+            Receipt.CLOSED -> stringResource(R.string.chat_approval_closed) to colors.textSecondary
         }
     Box(modifier = Modifier.fillMaxWidth(FermixSpacing.AGENT_BUBBLE_MAX_WIDTH)) {
         Text(

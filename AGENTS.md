@@ -41,9 +41,10 @@ core-session/         the pairing ceremony and one paired session, io.tezra.ferm
                       library, no android.*, JVM-tested against a fake daemon): Pairing over attest's
                       DeviceKeyFacade, hello, the outbox, cursors and acks, reconnect reconciliation,
                       keepalive and close codes, the turn machines
-design/               design section 13.1 as code, io.tezra.fermix.design (Compose library): tokens,
+design/               design section 13.1 as code, with the M51 update's monochrome colour (section 1)
+                      over it, io.tezra.fermix.design (Compose library): tokens,
                       FermixTheme, the bundled OFL fonts with SOURCE.json, @FermixPreviews, and the
-                      screenshot references in design/src/test/screenshots
+                      specimens' previews in src/test
 data/                 the phone's durable state, io.tezra.fermix.data (Android library, JVM-tested
                       on the bundled SQLite): the instance records' DataStore, one Room database
                       per (instance, profile) with its schema in data/schemas, the media cache, the
@@ -55,13 +56,13 @@ push/                 a push before it is shown, io.tezra.fermix.push (Android l
 feature-onboarding/   design section 13.3 as screens, io.tezra.fermix.onboarding (Compose library):
                       Welcome to Notifications and every failure, OnboardingViewModel over
                       core-session's pairing, the Navigation 3 entries, the scan's CameraX preview
-                      and zxing-cpp reader, the paste sheet, and the screenshot references in
-                      feature-onboarding/src/test/screenshots; its instrumented tests in
-                      src/androidTest, and the fakes both test sets compile in src/sharedTest
+                      and zxing-cpp reader, the paste sheet, and its previews in src/test; its
+                      instrumented tests in src/androidTest, and the fakes both test sets compile in
+                      src/sharedTest
 feature-instance/     design section 13.7's Instance screen, io.tezra.fermix.instance (Compose library):
                       Link (a session's state and diagnostics as a row, a bar and the screen read
                       them, 1002 a protocol error and never revoked), the avatar and its dot,
-                      InstanceViewModel, and the screenshot references in its src/test/screenshots
+                      InstanceViewModel, and its previews in src/test
 feature-chats/        design sections 13.4 and 9.4 as screens, io.tezra.fermix.chats (Compose library):
                       the Chats list and its rows, the trust screens, the app lock's screens,
                       ChatsViewModel, the conversation shortcuts and channels (ConversationSync); its
@@ -70,15 +71,17 @@ feature-chats/        design sections 13.4 and 9.4 as screens, io.tezra.fermix.c
 feature-chat/         design sections 8 and 13.5 to 13.7 as a screen, io.tezra.fermix.chat (Compose
                       library): the Chat screen, its timeline built in pure functions (chatItems,
                       ChatLive), the markdown, code and table cards, the composer, the message actions,
-                      ChatViewModel, and the screenshot references in its src/test/screenshots; its
-                      instrumented tests in src/androidTest, the fake session and cache both test sets
-                      compile in src/sharedTest
+                      ChatViewModel, and its previews in src/test; its instrumented tests in
+                      src/androidTest, the fake session and cache both test sets compile in src/sharedTest
 gradle/               libs.versions.toml, verification-metadata.xml (sha256 of every dependency), the wrapper
 policy/               permissions.txt and exported.txt: the permissions the release APK requests and
                       the components it exports, exactly
 release-evidence/     schema.json, and per release vX.Y.Z.json: what a person saw a candidate do on real phones
-docs/                 RELEASING.md: a release, from the tag to Play, and what only the owner does
-scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job),
+docs/                 RELEASING.md: a release, from the tag to Play, and what only the owner does;
+                      app-shots/, which git ignores, each preview's compact light and dark image
+                      as app_shots.sh copies it from a record
+scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job), app_shots.sh
+                      (docs/app-shots from a record, on this machine or in the screens job),
                       settle_emulator.sh (the ui job's wait for a booted emulator's home screen), the release
                       pipeline's steps (release_preflight.sh to play_upload.py), lint_workflows.sh and
                       check_workflows.py, check_git_isolation.sh (the tests' git, on a hostile machine and
@@ -100,6 +103,8 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   repository does not track, so it is not on GitHub. `MILESTONE_51_ANDROID_COMPANION_APP.md` is the
   authority; the pipelines are in `MILESTONE_51_ANDROID_CI_CD.md`, and developer setup and signing
   keys are in `MILESTONE_51_ANDROID_APP_DEVELOPER_ONBOARDING.md`.
+  `MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION.md` updates it and wins where they disagree: its
+  section 1, monochrome, replaces section 13.1's colour (README's Design section says where it is).
 
 ## Working rules
 - Done means `./gradlew --no-configuration-cache build` is green with zero warnings: Kotlin
@@ -111,8 +116,11 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   The Android Gradle plugin's own warnings exit 0, so the log must also hold no line that starts
   with `WARNING:` or `w: `; CI fails on one. A reused configuration cache entry skips
   configuration, and with it any Gradle deprecation raised there, hence the flag; CI always
-  configures from scratch. `scripts/verify_protocol_contract.sh` must pass too. Never add a
-  baseline, a suppression or `ignoreFailures` to get there.
+  configures from scratch. `scripts/verify_protocol_contract.sh` must pass too, and so must
+  `./gradlew recordRoborazziDebug`, whatever the change: the build draws no preview, and in a plain
+  `test` a preview's test passes without composing it, so only a record shows that every preview
+  still draws (Screenshots, below). Never add a baseline, a suppression or `ignoreFailures` to get
+  there.
 - In `build-logic/src`, never use a member of a Gradle `Action` lambda's implicit receiver, such as
   the task in `tasks.register("x") { ... }`, `.configureEach { ... }` or
   `tasks.named("check") { ... }`. detekt resolves types without kotlin-dsl's SAM-with-receiver
@@ -203,15 +211,47 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   system prompt among it: its field takes the focus while the prompt still slides in, and a PIN it matches before
   the slide ends comes back as a cancel, so `ShareDeviceTest` types once the focused field has held still (Task
   14c).
-- Screenshots: every preview in a `fermix.android.library.compose` module is a screenshot test, and
-  `verifyRoborazziDebug` (in `check`, and CI's `screens` job) compares it with its reference image
-  in the module's `src/test/screenshots/`, and fails on a reference no preview drew. A reference
-  image changes only with the change that moved it, in the same commit: redraw with
-  `./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true`, which always runs the
-  tests and drops the reference of a preview that is gone, on Linux x86-64 only, as CI draws them;
-  look at every image that changed, and never re-record to turn a failing verify green without that
-  change. Never turn Roborazzi's copies from `build/intermediates/roborazzi` back on: they write build
-  state into the references. A screen's previews use `@FermixPreviews` and `FermixPreviewTheme { }`.
+- Screenshots: git tracks none (the owner, 2026-10-05: "git ignore those images"): `.gitignore` holds each module's
+  `src/test/screenshots/` and `docs/app-shots/`, so a clone has no reference, and neither `check` nor CI compares
+  an image. Every preview in a `fermix.android.library.compose` module is a screenshot test, which draws only
+  when Roborazzi records or compares: in a plain `test` it passes without composing its preview, one that throws
+  among them, so a green `test` or `build` says nothing of the previews. `./gradlew recordRoborazziDebug`, part of
+  every change's done, draws every preview at its twelve windows into its module's `src/test/screenshots/`,
+  running the tests every time, never from the build cache, and a preview that throws fails it by name. Each
+  record, compare and verify then runs `checkPreviewsDrawn`, which fails a module that drew no preview (its
+  previews are no longer found) and a compare with nothing recorded to compare with, which Roborazzi alone
+  passes, and names each image in `src/test/screenshots/` that the run did not draw (a preview gone, renamed,
+  made private or moved out of the module's package), so a green record leaves there what it drew and nothing
+  else. A run filtered with `--tests` fails that check on every preview it left out: record and compare whole
+  modules, and never filter a record that carries the cleanup flag below, which deletes every image the run did
+  not draw. CI's `screens` job records on every run, with `--continue`, then runs `scripts/app_shots.sh` and
+  uploads `docs/app-shots`, each preview's compact light and dark image, as its `app-shots` artifact; a red
+  record's go up as `app-shots-incomplete`, without the previews that threw. A change to what a screen draws is
+  shown and reviewed so: record before the change, with `-Proborazzi.cleanupOldScreenshots=true`, which drops the
+  image of a preview that is gone; make the change; then `./gradlew compareRoborazziDebug` leaves a
+  `*_compare.png` under the module's `build/outputs/roborazzi/` for each window that moved, the old image, the
+  difference and the new side by side, and fails naming the images of a preview the change lost.
+  `./gradlew verifyRoborazziDebug` fails naming each preview that moved, but names a lost preview's images only
+  when nothing else moved, as a verify that fails stops before the check: compare first. Look at every image
+  that moved, name the previews in the change's report, and point its reviewer at the `app-shots` artifact of
+  the change's CI run, the screens as they now are; the closing record draws the machine's references anew, with
+  the cleanup flag when a preview is gone. The record before and the compare after run on one machine:
+  Robolectric does not draw alike on Linux, macOS and Windows, and CI draws on Linux x86-64. Never commit a
+  screenshot, and never turn Roborazzi's copies from `build/intermediates/roborazzi` back on: they write build
+  state over the machine's own references. A screen's previews use `@FermixPreviews` and
+  `FermixPreviewTheme { }`.
+- Colour: no colour but the tokens of `FermixColors` (the M51 update's section 1, monochrome), with
+  Material's roles built from them; a screen names no colour of its own but a fixed surface's, as the
+  camera's frame and the code card have. A fill in the ink has `onInk` on it, and a wash on the ink is
+  `onInk` at the selection's alpha, never `selection`, which is the ink. Blue is `signal`, Fermix blue, and
+  marks only what is unread (a Chats row's count, the unread divider, the scroll-to-latest pill's count); it
+  is never text on the canvas, a button, a link, focus, progress, a selection or a caret (the owner,
+  2026-10-05). A link is the ink and underlined, and so is a text action that only the old accent told
+  from the words around it; a line a selected message's row draws on its canvas is the ink, as the
+  selection's wash takes the grey and the error text under their floor. `ContrastTest` measures the
+  update's table, holds each pair of tokens it lists to its WCAG floor, and pins at what it measures each
+  pair of tokens under its floor that README's departures name for the owner; a new pair of tokens the app
+  draws goes in it, held or, named in README, pinned.
 - No secret enters the tree: no keystore, `keystore.properties`, `google-services.json` or service
   account. The one `google-services.json` is `app/google-services.json`, the placeholder project's,
   which holds no real key; a real one goes in `app/src/debug/` or `app/src/release/`, which `.gitignore`

@@ -19,6 +19,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -37,6 +39,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
@@ -114,36 +117,47 @@ internal fun HapticOnce(use: HapticUse) {
     }
 }
 
-/** A screen's one action, the canon's `.btn.p`: the accent's fill, a full pill, at least 48 dp tall. */
+/**
+ * A screen's one action, the canon's `.btn.p`: the ink's pill with its label in onInk (the M51 update's 1.3), as
+ * Material's Button draws the scheme's primary, at least 48 dp tall. [colors] is for a screen dark in both modes,
+ * Scan's camera, whose pill is the dark mode's ink in light mode as well.
+ */
 @Composable
 internal fun PrimaryAction(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    colors: ButtonColors = ButtonDefaults.buttonColors(),
 ) {
     Button(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget),
         enabled = enabled,
+        colors = colors,
     ) {
         Text(text = text, textAlign = TextAlign.Center)
     }
 }
 
-/** A secondary action, the canon's `.btn.x`: the accent as ink, at least 48 dp tall. */
+/**
+ * A secondary action, the canon's `.btn.x`: the ink's words on no fill, at least 48 dp tall; underlined when it is a
+ * [link], one that opens a web page (pageOf), as the M51 update's 1.3 underlines every link.
+ */
 @Composable
 internal fun SecondaryAction(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    link: Boolean = false,
 ) {
     TextButton(
         onClick = onClick,
         modifier = modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget),
         colors = textButtonColors(LocalFermixColors.current),
     ) {
-        Text(text = text, textAlign = TextAlign.Center)
+        val decoration = if (link) TextDecoration.Underline else null
+        Text(text = text, textAlign = TextAlign.Center, textDecoration = decoration)
     }
 }
 
@@ -169,8 +183,9 @@ internal fun BackBar(
 }
 
 /**
- * A failure's or the notifications step's icon on its disc (the canon's `.fail .ic`): the agent bubble's
- * grey behind ink, or for the security event, [alert], the error colour behind white.
+ * A failure's or the notifications step's icon on its disc (the canon's `.fail .ic`): the agent bubble's grey
+ * behind the ink, or for the security event, [alert], the error text's colour, as the M51 update's reference player
+ * draws it: the update leaves no white for an icon on the error's fill in dark mode, where onInk is near-black.
  */
 @Composable
 internal fun IconDisc(
@@ -180,14 +195,14 @@ internal fun IconDisc(
 ) {
     val colors = LocalFermixColors.current
     Box(
-        modifier = modifier.size(DISC).clip(CircleShape).background(if (alert) colors.err else colors.agentBubble),
+        modifier = modifier.size(DISC).clip(CircleShape).background(colors.agentBubble),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
             modifier = Modifier.size(DISC_ICON),
-            tint = if (alert) colors.onAccent else colors.ink,
+            tint = if (alert) colors.errText else colors.ink,
         )
     }
 }

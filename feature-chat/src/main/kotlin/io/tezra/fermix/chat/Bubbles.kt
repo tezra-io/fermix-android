@@ -26,6 +26,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import io.tezra.fermix.design.FermixColors
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
@@ -37,15 +38,14 @@ import io.tezra.fermix.design.bubbleShape
 /** A queued bubble's opacity (the canon's `.b.q`). */
 private const val QUEUED_ALPHA = 0.55f
 
-/** A selected message's wash, the accent at 12 %. */
-private const val SELECTED_ALPHA = 0.12f
-
 /**
- * A message of the chat (design sections 13.1 and 13.5): the owner's in an accent bubble at the end of the
+ * A message of the chat (design sections 13.1 and 13.5): the owner's in a bubble of the ink at the end of the
  * column, at most 78 % wide; the agent's as its parts (segmentsOf), prose in bubbles at most 88 % wide and its
  * fences and tables as cards grouped under them; one with blobs as its images, documents and voice note
  * (MediaMessage). A long-press opens the message's menu; a tap opens a queued, pending or refused item's own, or
- * selects while the chat is selecting.
+ * selects while the chat is selecting. A selected message's row is washed in the selection across the column, so
+ * the owner's bubble, the ink itself, stays as it is and the wash shows beside it; what the row draws on its canvas
+ * outside its bubbles, a state line, a job's tag over a card, a card's time, then lies on the wash, in the ink.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -56,7 +56,7 @@ internal fun MessageItem(
 ) {
     val message = item.message
     val selected = item.key in context.selected
-    val wash = if (selected) LocalFermixColors.current.accent.copy(alpha = SELECTED_ALPHA) else Color.Transparent
+    val wash = if (selected) LocalFermixColors.current.selection else Color.Transparent
     val gestures =
         Modifier.combinedClickable(
             interactionSource = null,
@@ -67,9 +67,9 @@ internal fun MessageItem(
     Box(modifier = modifier.fillMaxWidth().background(wash)) {
         Column(modifier = Modifier.fillMaxWidth()) {
             when {
-                message.media.isNotEmpty() -> MediaMessage(item, context, gestures)
-                message.sender == Sender.User -> UserMessage(message, context, gestures)
-                else -> AgentMessage(item, context, gestures)
+                message.media.isNotEmpty() -> MediaMessage(item, context, gestures, selected)
+                message.sender == Sender.User -> UserMessage(message, context, gestures, selected)
+                else -> AgentMessage(item, context, gestures, selected)
             }
             LinkPreviews(message.previews, message.sender, context)
         }
@@ -86,22 +86,35 @@ internal fun MessageItem(
 }
 
 /**
+ * The colour of a line a message's row draws on its canvas, outside its bubbles: its [tone], or the ink while the
+ * row is selected and the line lies on the selection's wash ([washed]). There the error text and the time's faded
+ * ink fall under text's 4.5 : 1 in both modes, and light mode's secondary text with them (ContrastTest).
+ */
+internal fun rowLine(
+    colors: FermixColors,
+    tone: Color,
+    washed: Boolean,
+): Color = if (washed) colors.ink else tone
+
+/**
  * The owner's message; [modifier], its tap and long-press, goes on the bubble, not on the row it sits in. Its
  * stamp floats on the text's last line when it fits (StampedText). Under it, a queued or pending item says so,
  * and a refused one says "Not sent. Tap to retry sending." in the error colour, its bubble keeping the clock.
- * The host's reaction hangs over the bubble's bottom-left, popping in only when it lands while it is shown.
+ * The host's reaction hangs over the bubble's bottom-left, popping in only when it lands while it is shown. The
+ * line lies on the row's wash while it is [selected].
  */
 @Composable
 private fun UserMessage(
     message: ShownMessage,
     context: TimelineContext,
     modifier: Modifier,
+    selected: Boolean,
 ) {
     val colors = LocalFermixColors.current
     val firstReaction = remember { message.reaction }
     val ring = ringAlpha(context.highlight?.seq?.let { it == message.seq } == true)
     val shape = bubbleShape(Sender.User, message.position)
-    val bubble = @Composable { UserBubble(message, context, modifier.pulseRing(ring, colors.accentInk, shape)) }
+    val bubble = @Composable { UserBubble(message, context, modifier.pulseRing(ring, colors.ink, shape)) }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         Box(
             modifier = Modifier.fillMaxWidth(FermixSpacing.USER_BUBBLE_MAX_WIDTH),
@@ -117,15 +130,28 @@ private fun UserMessage(
             }
         }
         when (message.delivery) {
-            Delivery.QUEUED -> StateLine(stringResource(R.string.chat_queued_behind_reply), error = false)
-            Delivery.PENDING -> StateLine(stringResource(R.string.chat_queued), error = false)
-            Delivery.FAILED -> StateLine(stringResource(R.string.chat_not_sent), error = true)
-            else -> Unit
+            Delivery.QUEUED -> {
+                StateLine(
+                    stringResource(R.string.chat_queued_behind_reply),
+                    error = false,
+                    washed = selected,
+                )
+            }
+
+            Delivery.PENDING -> {
+                StateLine(stringResource(R.string.chat_queued), error = false, washed = selected)
+            }
+
+            Delivery.FAILED -> {
+                StateLine(stringResource(R.string.chat_not_sent), error = true, washed = selected)
+            }
+
+            else -> {}
         }
     }
 }
 
-/** The owner's bubble: the accent, the words and the stamp; [modifier] holds the gestures and the jump's ring. */
+/** The owner's bubble: the ink, its words and stamp in onInk; [modifier] holds the gestures and the jump's ring. */
 @Composable
 private fun UserBubble(
     message: ShownMessage,
@@ -138,23 +164,23 @@ private fun UserBubble(
             modifier
                 .alpha(if (message.delivery == Delivery.QUEUED) QUEUED_ALPHA else 1f)
                 .clip(bubbleShape(Sender.User, message.position))
-                .background(colors.accent)
+                .background(colors.ink)
                 .padding(
                     horizontal = FermixSpacing.bubblePaddingHorizontal,
                     vertical = FermixSpacing.bubblePaddingVertical,
                 ),
     ) {
-        // The words search marks, washed as the canon's `.b mark` but in the bubble's own ink: the canon's
-        // accentInk is the accent itself in the light theme, which would wash the bubble in its own colour.
-        val wash = SpanStyle(background = colors.onAccent.copy(alpha = MARK_ALPHA))
+        // The words search marks, washed as the canon's `.b mark` but in onInk at the selection's share: the selection
+        // is the ink, which would wash the bubble in its own colour and show nothing.
+        val wash = SpanStyle(background = colors.onInk.copy(alpha = colors.selection.alpha))
         val text = withMarks(AnnotatedString(message.text), context.marksIn(message), wash)
         val words = @Composable { onLayout: (TextLayoutResult) -> Unit ->
-            Text(text, style = FermixType.body, color = colors.onAccent, onTextLayout = onLayout)
+            Text(text, style = FermixType.body, color = colors.onInk, onTextLayout = onLayout)
         }
         if (message.delivery == Delivery.QUEUED) {
             words {}
         } else {
-            StampedText(words) { Stamp(message, context, colors.onAccent) }
+            StampedText(words) { Stamp(message, context, colors.onInk) }
         }
     }
 }
@@ -163,13 +189,14 @@ private fun UserBubble(
  * The agent's message as its parts: the first part wears a job's tag, the last prose bubble the time, as the
  * canon times the bubble a card is grouped under, or the last card when the message has no prose; while it
  * streams, the cursor follows the last part, and only that part streams. Each part's corners follow its place
- * in the message's group.
+ * in the message's group. A card's own lines lie on the row's wash while it is [selected].
  */
 @Composable
 private fun AgentMessage(
     item: ChatItem.Message,
     context: TimelineContext,
     modifier: Modifier,
+    selected: Boolean,
 ) {
     val message = item.message
     val parts = rememberSegments(message.text, message.streaming)
@@ -182,7 +209,7 @@ private fun AgentMessage(
         shown.forEachIndexed { index, part ->
             val position = partPosition(message.position, index, shown.size)
             val place = PartPlace(index == 0, index == shown.lastIndex, index == timed, position)
-            key(part.start) { Part(part, place, item, context) }
+            key(part.start) { Part(part, place, item, context, selected) }
         }
     }
 }
@@ -240,6 +267,7 @@ private fun Part(
     place: PartPlace,
     item: ChatItem.Message,
     context: TimelineContext,
+    selected: Boolean,
 ) {
     val shape = cardShape(place.position)
     when (part) {
@@ -248,13 +276,13 @@ private fun Part(
         }
 
         is Segment.Code -> {
-            CardPart(place, item.message, context) {
+            CardPart(place, item.message, context, selected) {
                 CodeCard(part.info, part.code, "${item.key}:${part.start}", context.text, shape)
             }
         }
 
         is Segment.Table -> {
-            CardPart(place, item.message, context) { TableCard(part.table, shape) }
+            CardPart(place, item.message, context, selected) { TableCard(part.table, shape) }
         }
     }
 }
@@ -262,23 +290,25 @@ private fun Part(
 /**
  * A fence's or a table's card, with what a prose bubble would hold had it led or ended the message: a job's tag
  * above it when it is the first part, the cursor below it while it is the last of a streaming answer, and the
- * time below it, in the ink at 60 %, when the message has no prose bubble to show it.
+ * time below it, in the ink at 60 %, when the message has no prose bubble to show it. Both lie on the canvas, so
+ * on the row's wash while it is [selected], where they are the ink whole (rowLine).
  */
 @Composable
 private fun CardPart(
     place: PartPlace,
     message: ShownMessage,
     context: TimelineContext,
+    selected: Boolean,
     card: @Composable () -> Unit,
 ) {
     val ring = ringAlpha(context.highlight?.seq?.let { it == message.seq } == true)
-    val ink = LocalFermixColors.current.accentInk
+    val ink = LocalFermixColors.current.ink
     Column(modifier = Modifier.fillMaxWidth().pulseRing(ring, ink, FermixShapes.card)) {
-        if (place.first) message.job?.let { JobTag(it) }
+        if (place.first) message.job?.let { JobTag(it, washed = selected) }
         card()
         if (place.last && message.streaming) BeamCursor(Modifier.padding(top = 2.dp))
         val stamp = place.timed && !message.streaming
-        if (stamp) Stamp(message, context, LocalFermixColors.current.ink, Modifier.align(Alignment.End))
+        if (stamp) Stamp(message, context, ink, Modifier.align(Alignment.End), faded = !selected)
     }
 }
 
@@ -295,7 +325,7 @@ private fun ProseBubble(
     Column(
         modifier =
             Modifier
-                .pulseRing(ring, colors.accentInk, bubbleShape(Sender.Agent, place.position))
+                .pulseRing(ring, colors.ink, bubbleShape(Sender.Agent, place.position))
                 .clip(bubbleShape(Sender.Agent, place.position))
                 .background(colors.agentBubble)
                 .padding(
@@ -303,7 +333,7 @@ private fun ProseBubble(
                     vertical = FermixSpacing.bubblePaddingVertical,
                 ),
     ) {
-        if (place.first) message.job?.let { JobTag(it) }
+        if (place.first) message.job?.let { JobTag(it, washed = false) }
         Prose(prose.markdown, streams, message.resets, context.text, context.marksIn(message))
         // The renderer places the cursor after a paragraph's words and an open fence's chip; below anything else.
         val below = streams && remember(prose.markdown) { cursorHome(prose.markdown) == CursorHome.OTHER }
@@ -328,13 +358,20 @@ private fun partPosition(
     }
 }
 
-/** A job's delivery wears its job (design section 8.4): "⏱ nightly-report · scheduled". */
+/**
+ * A job's delivery wears its job (design section 8.4): "⏱ nightly-report · scheduled", in the secondary text, or
+ * the ink over a card on a selected row's wash ([washed], rowLine).
+ */
 @Composable
-private fun JobTag(job: String) {
+private fun JobTag(
+    job: String,
+    washed: Boolean,
+) {
+    val colors = LocalFermixColors.current
     Text(
         text = stringResource(R.string.chat_job, job),
         style = FermixType.labelSmall,
-        color = LocalFermixColors.current.inkSecondary,
+        color = rowLine(colors, colors.textSecondary, washed),
         modifier = Modifier.padding(bottom = 2.dp),
     )
 }

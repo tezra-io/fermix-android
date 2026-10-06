@@ -81,9 +81,6 @@ fun localHitOf(
     return ShownHit(row.serverSeq, sender, message?.let(::wallOf), excerpt, marksOf(excerpt, words))
 }
 
-/** A mark's wash (the canon's `.hit mark,.b mark`): the accent ink at 22 %. */
-internal const val MARK_ALPHA = 0.22f
-
 /**
  * What search marks in the chat while it steps through it (design section 13.7; the canon's in-chat frame,
  * `<mark>timeout</mark>` in the bubble stepped to): the row of the hit stepped to, and the query's words.

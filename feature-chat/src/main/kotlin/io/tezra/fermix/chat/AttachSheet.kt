@@ -244,7 +244,7 @@ private fun CaptionField(
         value = field,
         onValueChange = onCaption,
         textStyle = FermixType.body.copy(color = colors.ink),
-        cursorBrush = SolidColor(colors.accentInk),
+        cursorBrush = SolidColor(colors.ink),
         maxLines = 3,
         modifier =
             Modifier
@@ -257,7 +257,7 @@ private fun CaptionField(
                 .semantics { contentDescription = placeholder },
         decorationBox = { inner ->
             Box {
-                if (field.text.isEmpty()) Text(placeholder, style = FermixType.body, color = colors.inkSecondary)
+                if (field.text.isEmpty()) Text(placeholder, style = FermixType.body, color = colors.textSecondary)
                 inner()
             }
         },
@@ -292,7 +292,7 @@ private fun SendRow(
         Button(
             onClick = { actions.onSend { HapticFeedback.perform(view, HapticUse.Send) } },
             enabled = attach.sendable > 0,
-            colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = colors.ink, contentColor = colors.onInk),
             shape = FermixShapes.button,
         ) {
             Text(stringResource(R.string.chat_send_count, attach.sendable), style = FermixType.label, maxLines = 1)
@@ -300,17 +300,17 @@ private fun SendRow(
     }
 }
 
-/** The box of "Send as files": a rule while off, the accent with its tick while on. */
+/** The box of "Send as files": a rule while off, the ink with its tick in onInk while on. */
 @Composable
 private fun FilesBox(on: Boolean) {
     val colors = LocalFermixColors.current
     val box = Modifier.size(20.dp).clip(BOX_SHAPE)
     if (!on) {
-        Box(modifier = box.border(2.dp, colors.inkSecondary, BOX_SHAPE))
+        Box(modifier = box.border(2.dp, colors.textSecondary, BOX_SHAPE))
         return
     }
-    Box(modifier = box.background(colors.accent), contentAlignment = Alignment.Center) {
-        Icon(painterResource(R.drawable.ic_chat_check), null, tint = colors.onAccent, modifier = Modifier.size(16.dp))
+    Box(modifier = box.background(colors.ink), contentAlignment = Alignment.Center) {
+        Icon(painterResource(R.drawable.ic_chat_check), null, tint = colors.onInk, modifier = Modifier.size(16.dp))
     }
 }
 

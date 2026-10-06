@@ -48,7 +48,7 @@ import java.time.LocalDate
 /** The badge's least height and width (the canon's `.badge`); its figures are label-small, in sp. */
 private val BADGE_HEIGHT = 20.dp
 
-/** The canvas ring that keeps the badge apart from an accent bubble under it. */
+/** The canvas ring that keeps the badge apart from a bubble under it. */
 private val BADGE_RING = 2.dp
 
 /**
@@ -142,7 +142,7 @@ private fun DatePill(
         Text(
             text = date?.let { dayWords(it, context) }.orEmpty(),
             style = FermixType.labelSmall,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier =
                 Modifier
                     .background(colors.tonalSolid, shape)
@@ -217,7 +217,7 @@ private fun Badge(
             modifier
                 .background(colors.canvas, CircleShape)
                 .padding(BADGE_RING)
-                .background(colors.accent, CircleShape)
+                .background(colors.signal, CircleShape)
                 .atLeastAsWideAsTall()
                 .heightIn(min = BADGE_HEIGHT)
                 .padding(horizontal = 6.dp),
@@ -226,7 +226,7 @@ private fun Badge(
         Text(
             text = "$count",
             style = FermixType.labelSmall,
-            color = colors.onAccent,
+            color = colors.onSignal,
             textAlign = TextAlign.Center,
             maxLines = 1,
         )

@@ -164,7 +164,7 @@ fun CountdownRing(
             val box = Size(radius * 2f, radius * 2f)
             drawCircle(color = colors.hairline, radius = radius, style = Stroke(width = RING_STROKE.toPx()))
             drawArc(
-                colors.accentInk,
+                colors.ink,
                 TOP,
                 FULL_TURN * left,
                 useCenter = false,

@@ -100,12 +100,12 @@ private fun Section(title: String) {
     Text(
         text = title,
         style = FermixType.labelSmall,
-        color = LocalFermixColors.current.inkSecondary,
+        color = LocalFermixColors.current.textSecondary,
         modifier = Modifier.padding(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 4.dp),
     )
 }
 
-/** One of Info's rows (the canon's `.kv`): its name, and its value in the second ink, mono for an id. */
+/** One of Info's rows (the canon's `.kv`): its name, and its value in the secondary text, mono for an id. */
 @Composable
 private fun Fact(
     name: String,
@@ -123,10 +123,10 @@ private fun Fact(
             val style =
                 if (mono) {
                     FermixType.mono.copy(
-                        color = colors.inkSecondary,
+                        color = colors.textSecondary,
                     )
                 } else {
-                    FermixType.bodyMedium.copy(color = colors.inkSecondary)
+                    FermixType.bodyMedium.copy(color = colors.textSecondary)
                 }
             Text(it, style = style, textAlign = TextAlign.End, modifier = Modifier.weight(1f, fill = false))
         }

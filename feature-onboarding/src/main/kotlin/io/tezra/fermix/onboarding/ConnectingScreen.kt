@@ -29,8 +29,8 @@ import io.tezra.fermix.design.MarkMotion
 import io.tezra.fermix.design.TwoDotMark
 
 // The visual canon's Connecting, centred: the line 40 dp under the orbiting mark (its 28 dp and the
-// column's 12 dp gap), then 20 dp lower three 8 dp step dots 8 dp apart: done in the secondary ink, the
-// current one in the accent, those to come in the hairline grey.
+// column's 12 dp gap), then 20 dp lower three 8 dp step dots 8 dp apart: done in the secondary text's grey, the
+// current one in the ink, those to come in the hairline grey (the M51 update's 7.4; their shape is Task 19's).
 private val LINE_TOP = 40.dp
 private val STEP = 8.dp
 private val STEPS_TOP = 20.dp
@@ -106,8 +106,8 @@ private fun StepDots(
         repeat(STEPS) { step ->
             val fill =
                 when {
-                    step < current -> colors.inkSecondary
-                    step == current -> colors.accentInk
+                    step < current -> colors.textSecondary
+                    step == current -> colors.ink
                     else -> colors.hairline
                 }
             Box(modifier = Modifier.size(STEP).background(fill, CircleShape))

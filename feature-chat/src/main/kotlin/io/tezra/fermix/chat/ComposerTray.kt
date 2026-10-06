@@ -114,7 +114,7 @@ private fun RemoveBadge(
         contentAlignment = Alignment.TopEnd,
     ) {
         Box(modifier = Modifier.size(18.dp).background(colors.ink, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(painterResource(R.drawable.ic_chat_x), null, tint = colors.canvas, modifier = Modifier.size(12.dp))
+            Icon(painterResource(R.drawable.ic_chat_x), null, tint = colors.onInk, modifier = Modifier.size(12.dp))
         }
     }
 }

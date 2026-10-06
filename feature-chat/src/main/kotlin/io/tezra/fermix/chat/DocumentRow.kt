@@ -94,8 +94,8 @@ internal fun DocumentRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(name, style = NAME_TYPE, color = colors.ink, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                 val line = stringResource(R.string.chat_size_origin, sizeText(media.sizeBytes, context.locale), origin)
-                Text(line, style = ORIGIN_TYPE, color = colors.inkSecondary, maxLines = 1)
-                media.sent?.let { UploadBar(it, colors.hairline, colors.accent, Modifier.padding(top = 4.dp)) }
+                Text(line, style = ORIGIN_TYPE, color = colors.textSecondary, maxLines = 1)
+                media.sent?.let { UploadBar(it, colors.hairline, colors.ink, Modifier.padding(top = 4.dp)) }
             }
             if (!user) SaveButton { actions.onSave(media) }
         }
@@ -130,7 +130,7 @@ internal fun ExtensionLabel(name: String) {
     val type =
         with(density) { EXTENSION_TYPE.copy(fontSize = EXTENSION_SIZE.toSp(), lineHeight = EXTENSION_LINE.toSp()) }
     val extension = extensionOf(name) ?: stringResource(R.string.chat_file_tile)
-    Text(extension, style = type, color = LocalFermixColors.current.inkSecondary, maxLines = 1)
+    Text(extension, style = type, color = LocalFermixColors.current.textSecondary, maxLines = 1)
 }
 
 /** The agent's document's Save, the canon's save glyph at 20 dp in a 40 dp circle, its target 48 dp. */

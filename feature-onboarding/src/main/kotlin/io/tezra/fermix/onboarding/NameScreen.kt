@@ -102,8 +102,8 @@ fun NameScreen(
             colors =
                 OutlinedTextFieldDefaults.colors(
                     unfocusedBorderColor = colors.hairline,
-                    focusedBorderColor = colors.accentInk,
-                    cursorColor = colors.accentInk,
+                    focusedBorderColor = colors.ink,
+                    cursorColor = colors.ink,
                 ),
         )
         Suggestions(suggestions = suggestions, chosen = text.trim(), onChoose = { text = it })
@@ -136,7 +136,7 @@ private fun Suggestions(
                         containerColor = colors.canvas,
                         labelColor = colors.ink,
                         selectedContainerColor = colors.ink,
-                        selectedLabelColor = colors.canvas,
+                        selectedLabelColor = colors.onInk,
                     ),
                 border = BorderStroke(FermixSpacing.hairline, if (on) colors.ink else colors.hairline),
             )
@@ -179,7 +179,7 @@ private fun InstanceRow(
             Text(
                 text = stringResource(R.string.onboarding_name_subtitle, paired.record.host),
                 style = FermixType.bodyMedium,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -194,7 +194,7 @@ private fun DevTag() {
     Text(
         text = stringResource(R.string.onboarding_name_dev_tag),
         style = FermixType.labelSmall.copy(fontFamily = FermixType.mono.fontFamily),
-        color = colors.inkSecondary,
+        color = colors.textSecondary,
         modifier =
             Modifier
                 .border(FermixSpacing.hairline, colors.hairline, RoundedCornerShape(TAG_CORNER))

@@ -166,6 +166,17 @@ class FailureCaseTest {
     }
 
     @Test
+    fun `the actions that open a web page, and only they, have a page, which a failure screen draws as a link`() {
+        val pages = FailureAction.entries.filter { pageOf(it) != null }
+        val expected = listOf(FailureAction.OPEN_RELEASE_PAGE, FailureAction.LEARN_MORE, FailureAction.TROUBLESHOOTING)
+        assertEquals(expected, pages)
+        for (action in pages) {
+            val page = context.getString(checkNotNull(pageOf(action)))
+            assertTrue("$action opens $page", page.startsWith("https://"))
+        }
+    }
+
+    @Test
     fun `every case has a screenshot of its own, named for it`() {
         val previews =
             Class

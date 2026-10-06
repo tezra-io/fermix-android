@@ -108,7 +108,7 @@ fun PairScreen(
             Text(
                 text = stringResource(R.string.onboarding_pair_terminal),
                 style = FermixType.bodyMedium,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 modifier = Modifier.padding(top = BODY_TOP),
             )
             CommandLine(onCopy = actions.onCopy, modifier = Modifier.padding(top = COMMAND_TOP))
@@ -216,7 +216,7 @@ internal fun ShownAs(
         Text(
             text = boldArgument(stringResource(R.string.onboarding_shown_as), deviceName, bold),
             style = FermixType.bodyMedium,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier = Modifier.weight(1f, fill = false),
         )
         if (onRename != null) Pencil(onRename)
@@ -230,7 +230,7 @@ private fun Pencil(onRename: () -> Unit) {
             painter = painterResource(R.drawable.ic_onboarding_pencil),
             contentDescription = stringResource(R.string.onboarding_rename),
             modifier = Modifier.size(PENCIL),
-            tint = LocalFermixColors.current.inkSecondary,
+            tint = LocalFermixColors.current.textSecondary,
         )
     }
 }

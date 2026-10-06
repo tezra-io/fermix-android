@@ -52,13 +52,16 @@ fun InstanceAvatar(
     }
 }
 
-/** The canon's `.mark.xl`: 28 dp dots in ink and the accent, still, as the empty list and the lock draw it. */
+/**
+ * The canon's `.mark.xl`: 28 dp dots, both in the ink (the M51 update's 7.3), still, as the empty list and the lock
+ * draw it.
+ */
 @Composable
 fun FermixMark(modifier: Modifier = Modifier) {
     val colors = LocalFermixColors.current
     val dot = 28.dp
     Canvas(modifier = modifier.size(width = dot * (2f + MARK_GAP), height = dot)) {
-        drawMark(dot.toPx(), colors.ink, colors.accent)
+        drawMark(dot.toPx(), colors.ink, colors.ink)
     }
 }
 

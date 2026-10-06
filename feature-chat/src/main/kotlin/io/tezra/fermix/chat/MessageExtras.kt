@@ -214,7 +214,7 @@ private fun LinkPreview(
             Text(
                 card.site,
                 style = FermixType.labelSmall,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -223,7 +223,7 @@ private fun LinkPreview(
                 Text(
                     it,
                     style = FermixType.bodyMedium,
-                    color = colors.inkSecondary,
+                    color = colors.textSecondary,
                     maxLines = DESCRIPTION_LINES,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
@@ -268,7 +268,7 @@ private fun Thumbnail(
 private val RING_SPREAD = 6.dp
 
 /**
- * The ring's opacity for a row the screen jumped to ([lit], design section 13.7): accentInk at 12 % while it
+ * The ring's opacity for a row the screen jumped to ([lit], design section 13.7): the ink at 12 % while it
  * pulses, fading in and out in the cross-fade's time, and none at once under reduce-motion.
  */
 @Composable
@@ -312,7 +312,8 @@ internal fun Modifier.pulseRing(
 
 /**
  * A bubble's time and, on the owner's, its mark (design section 13.5): the clock until `accepted`, then one
- * tick and never two; a refused one keeps the clock, as the canon draws it; at 60 %, in the bubble's ink.
+ * tick and never two; a refused one keeps the clock, as the canon draws it; at 60 %, in the bubble's ink, or
+ * whole where it is not [faded]: on a selected row's wash, where the faded ink would not read (rowLine).
  */
 @Composable
 internal fun Stamp(
@@ -320,32 +321,33 @@ internal fun Stamp(
     context: TimelineContext,
     ink: Color,
     modifier: Modifier = Modifier,
+    faded: Boolean = true,
 ) {
     val time = message.wallMs?.let { timeOf(it, context) }
+    val shade = if (faded) ink.copy(alpha = FermixSpacing.TIMESTAMP_ALPHA) else ink
     Row(
         modifier = modifier.padding(top = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        time?.let { Text(it, style = FermixType.labelSmall, color = ink.copy(alpha = FermixSpacing.TIMESTAMP_ALPHA)) }
-        DeliveryMark(message.delivery, ink)
+        time?.let { Text(it, style = FermixType.labelSmall, color = shade) }
+        DeliveryMark(message.delivery, shade)
     }
 }
 
 @Composable
 private fun DeliveryMark(
     delivery: Delivery,
-    ink: Color,
+    tint: Color,
 ) {
-    val faded = ink.copy(alpha = FermixSpacing.TIMESTAMP_ALPHA)
-    val (icon, label, tint) =
+    val (icon, label) =
         when (delivery) {
-            Delivery.SENDING, Delivery.PENDING -> Triple(R.drawable.ic_chat_clock, R.string.chat_mark_sending, faded)
+            Delivery.SENDING, Delivery.PENDING -> R.drawable.ic_chat_clock to R.string.chat_mark_sending
 
-            Delivery.DELIVERED -> Triple(R.drawable.ic_chat_check, R.string.chat_mark_delivered, faded)
+            Delivery.DELIVERED -> R.drawable.ic_chat_check to R.string.chat_mark_delivered
 
             // The canon keeps the clock; the failure is said under the bubble, on the canvas (StateLine).
-            Delivery.FAILED -> Triple(R.drawable.ic_chat_clock, R.string.chat_mark_failed, faded)
+            Delivery.FAILED -> R.drawable.ic_chat_clock to R.string.chat_mark_failed
 
             Delivery.NONE, Delivery.QUEUED -> return
         }

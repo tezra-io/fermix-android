@@ -89,7 +89,7 @@ internal fun cursorContent(): MarkdownInlineContent {
 }
 
 /**
- * The beam cursor (design section 13.5): 2 × 18 dp in the accent ink, blinking every 800 ms, still under
+ * The beam cursor (design section 13.5): 2 × 18 dp in the ink, blinking every 800 ms, still under
  * reduce-motion.
  */
 @Composable
@@ -111,12 +111,12 @@ internal fun BeamCursor(modifier: Modifier = Modifier) {
                 ),
             label = "cursor blink",
         )
-    val accent = LocalFermixColors.current.accentInk
+    val ink = LocalFermixColors.current.ink
     Spacer(
         modifier =
             modifier
                 .padding(start = 1.dp)
                 .size(CURSOR_WIDTH, CURSOR_HEIGHT)
-                .drawBehind { drawRect(accent, alpha = if (reduced) 1f else blink.value) },
+                .drawBehind { drawRect(ink, alpha = if (reduced) 1f else blink.value) },
     )
 }

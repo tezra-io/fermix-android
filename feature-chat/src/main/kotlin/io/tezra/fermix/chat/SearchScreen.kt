@@ -51,6 +51,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.ColumnWidth
@@ -116,7 +117,7 @@ internal fun SearchBar(
                     if (next.text != search.query) actions.onQuery(next.text)
                 },
                 textStyle = QUERY_STYLE.copy(color = colors.ink),
-                cursorBrush = SolidColor(colors.accentInk),
+                cursorBrush = SolidColor(colors.ink),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 modifier =
@@ -126,7 +127,7 @@ internal fun SearchBar(
                         .semantics { contentDescription = label },
                 decorationBox = { inner ->
                     Box {
-                        if (search.query.isEmpty()) Text(label, style = QUERY_STYLE, color = colors.inkSecondary)
+                        if (search.query.isEmpty()) Text(label, style = QUERY_STYLE, color = colors.textSecondary)
                         inner()
                     }
                 },
@@ -198,20 +199,23 @@ private fun PinnedLine() {
             Icon(
                 painterResource(R.drawable.ic_chat_info),
                 null,
-                tint = colors.inkSecondary,
+                tint = colors.textSecondary,
                 modifier = Modifier.size(16.dp),
             )
             Text(
                 stringResource(R.string.chat_search_cached_only),
                 style = FermixType.labelSmall,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
             )
         }
         Spacer(modifier = Modifier.fillMaxWidth().height(FermixSpacing.hairline).background(colors.hairline))
     }
 }
 
-/** "Couldn't search {host}" and "Try again": the daemon's search, or its older page, came to nothing. */
+/**
+ * "Couldn't search {host}" and "Try again", underlined, as the M51 update's reference player draws a text button:
+ * the daemon's search, or its older page, came to nothing.
+ */
 @Composable
 private fun FailedLine(
     host: String,
@@ -225,11 +229,16 @@ private fun FailedLine(
         Text(
             stringResource(R.string.chat_search_failed, host),
             style = FermixType.bodyMedium,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             modifier = Modifier.weight(1f),
         )
         TextButton(onClick = onRetry) {
-            Text(stringResource(R.string.chat_try_again), style = FermixType.label, color = colors.accentInk)
+            Text(
+                stringResource(R.string.chat_try_again),
+                style = FermixType.label,
+                color = colors.ink,
+                textDecoration = TextDecoration.Underline,
+            )
         }
     }
 }
@@ -250,7 +259,7 @@ private fun Chips(
             Text(
                 chipWords(chip),
                 style = FermixType.label,
-                color = if (on) colors.canvas else colors.ink,
+                color = if (on) colors.onInk else colors.ink,
                 modifier =
                     Modifier
                         .heightIn(min = 36.dp)
@@ -287,19 +296,19 @@ private fun HitRow(
                 Text(
                     stringResource(who),
                     style = FermixType.labelSmall,
-                    color = colors.inkSecondary,
+                    color = colors.textSecondary,
                     modifier = Modifier.weight(1f),
                 )
                 hit.wallMs?.let {
                     Text(
                         hitTime(it, context),
                         style = FermixType.labelSmall,
-                        color = colors.inkSecondary,
+                        color = colors.textSecondary,
                     )
                 }
             }
             Text(
-                marked(hit, SpanStyle(background = colors.accentInk.copy(alpha = MARK_ALPHA))),
+                marked(hit, SpanStyle(background = colors.selection)),
                 style = FermixType.bodyMedium,
                 color = colors.ink,
                 modifier = Modifier.padding(top = 2.dp),

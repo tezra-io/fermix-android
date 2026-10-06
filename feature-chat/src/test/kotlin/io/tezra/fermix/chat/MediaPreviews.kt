@@ -47,16 +47,16 @@ import java.time.LocalDate
 import java.util.Locale
 
 // The chat's attachments and voice notes at the twelve windows of @FermixPreviews, each from fixed state: the
-// attach sheet with three photos picked and a caption, with an item past the limit, and with a file and a paste in
-// its own tray beside numbered photos; the tray with two thumbnails under a caption, and with a document and a voice
-// note; the composer recording, locked hands-free, and its unsent draft; one, two, three (one still on its way in its
-// dominant colour, or one let go) and five images from the agent; the owner's image going up with its ring, and a
-// video and a voice note going up with their line; the duplicate line; an image the daemon let go; documents; voice
-// notes, one playing with its transcript and one transcribing; the upload interrupted, and failed; the microphone
-// off; the viewer. The embedded
-// Photo Picker is the system's own surface, which no test draws: the sheet's grid here is a stand-in of the same
-// shape, numbered as the picker numbers what is picked, and the tile that stands where it cannot draw. The
-// microphone's rationale is a dialog's window, which no preview draws; VoiceDeviceTest shows it on a device.
+// attach sheet with three photos picked and a caption, with "Send as files" on, with an item past the limit, and
+// with a file and a paste in its own tray beside numbered photos; the tray with two thumbnails under a caption, and
+// with a document and a voice note; the composer recording, locked hands-free, and its unsent draft; one, two,
+// three (one still on its way in its dominant colour, or one let go) and five images from the agent; the owner's
+// image going up with its ring, and a video and a voice note going up with their line; the duplicate line; an image
+// the daemon let go; documents; voice notes, one playing with its transcript and one transcribing; the upload
+// interrupted, and failed; three media messages selected; the microphone off; the viewer. The embedded Photo
+// Picker is the system's own surface, which no test draws: the sheet's grid here is a stand-in of the same shape,
+// numbered as the picker numbers what is picked, and the tile that stands where it cannot draw. The microphone's
+// rationale is a dialog's window, which no preview draws; VoiceDeviceTest shows it on a device.
 
 /** The indicator's clock in every preview. */
 private const val CLOCK = 100_000L
@@ -242,6 +242,14 @@ fun AttachSheetPreview() {
 
 @FermixPreviews
 @Composable
+fun AttachAsFilesPreview() {
+    // "Send as files" on: its box in the ink, the tick in onInk on it.
+    val attach = AttachUi(picked = picked(3), sheet = true, asFiles = true, sendable = 3)
+    FermixPreviewTheme { SheetOverChat(attach) }
+}
+
+@FermixPreviews
+@Composable
 fun AttachTooBigPreview() {
     val tooBig = TooBig("site-walkthrough.mov", 27_472_691, 20_971_520)
     val attach = AttachUi(picked = picked(2), sheet = true, tooBig = tooBig, sendable = 2)
@@ -304,6 +312,11 @@ private fun PickerStandIn(
     }
 }
 
+/**
+ * One of the stand-in's photos, with its badge. On a phone the system's picker draws a picked photo's number in the
+ * system's own accent, which the app's theme does not reach (README) and no preview can know: the ink here is a
+ * placeholder, not the colour a phone shows.
+ */
 @Composable
 private fun PickerTile(
     index: Int,
@@ -320,8 +333,8 @@ private fun PickerTile(
         if (number == null) {
             Box(modifier = badge.border(2.dp, Color.White, CircleShape))
         } else {
-            Box(modifier = badge.background(colors.accent, CircleShape), contentAlignment = Alignment.Center) {
-                Text("$number", style = type, color = colors.onAccent)
+            Box(modifier = badge.background(colors.ink, CircleShape), contentAlignment = Alignment.Center) {
+                Text("$number", style = type, color = colors.onInk)
             }
         }
     }
@@ -482,6 +495,45 @@ fun UploadFailedPreview() {
     // Past its restarts, or refused: "Not sent. Tap to retry sending."
     val items = listOf(outgoing(null, null, Delivery.FAILED), REPLY, ASKED) + EARLIER
     FermixPreviewTheme { ChatScreen(ui(items), ACTIONS) }
+}
+
+@FermixPreviews
+@Composable
+fun MediaSelectedPreview() {
+    // Multi-select over three media messages, each row washed in the selection: what each draws on its canvas, under
+    // its card, is the ink while it lies on the wash, the agent's report's time, the owner's refused image's clock
+    // and "Not sent" line, and the line of the owner's video whose upload was interrupted. The question above stays
+    // unselected.
+    val pdf = document("doc-1", "export-report-2026-09-27.pdf", "application/pdf", 1_258_291)
+    val report = said("r2", Sender.Agent, "", 31, listOf(pdf))
+    val refused =
+        ChatItem.Message(
+            "out:m4",
+            ShownMessage(
+                Sender.User,
+                "The rack's wiring, for the ticket.",
+                wallAt(33),
+                Delivery.FAILED,
+                media = listOf(image("rack")),
+            ),
+        )
+    val video =
+        document("doc-3", "site-walkthrough-north-wing-before-the-move-final.mp4", "video/mp4", 18_874_368)
+    val interrupted =
+        ChatItem.Message(
+            "out:m6",
+            ShownMessage(
+                Sender.User,
+                "",
+                null,
+                Delivery.PENDING,
+                media = listOf(video.copy(sent = 0.36f)),
+                uploadLine = UploadLine.INTERRUPTED,
+            ),
+        )
+    val items = listOf(interrupted, refused, report, ASKED) + EARLIER
+    val held = PreviewHeld(selected = setOf(interrupted.key, refused.key, report.key))
+    FermixPreviewTheme { ChatScreen(ui(items), ACTIONS, held = held) }
 }
 
 @FermixPreviews

@@ -31,12 +31,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -75,6 +77,9 @@ private val BAR_SIDES = 4.dp
 /** The canon's candidate line, mono 13/20. */
 private val CANDIDATE_STYLE = FermixType.mono.copy(fontSize = 13.sp, lineHeight = 20.sp)
 
+/** An action's label in a row (KvRow): the body, underlined. */
+internal val ACTION_LABEL = FermixType.body.copy(textDecoration = TextDecoration.Underline)
+
 /** The canon's log, mono 12/18. */
 private val LOG_STYLE = FermixType.mono.copy(fontSize = 12.sp, lineHeight = 18.sp)
 
@@ -101,27 +106,29 @@ fun BackBar(
     }
 }
 
-/** A section's header in the accent's ink. */
+/** A section's header in the ink. */
 @Composable
 internal fun SectionHeader(text: String) {
     Text(
         text = text,
         style = FermixType.label,
-        color = LocalFermixColors.current.accentInk,
+        color = LocalFermixColors.current.ink,
         modifier = Modifier.padding(start = SIDES, end = SIDES, top = HEADER_TOP, bottom = HEADER_BOTTOM),
     )
 }
 
 /**
- * A row: [label] in the ink (or [labelColor]) and its [value] on the right in the secondary ink, mono where
- * the value is an id; tappable when [onClick] is given.
+ * A row: [label] in [labelStyle], the body in the ink unless the style names a colour, and its [value] on the right
+ * in the secondary text's grey, mono where the value is an id; tappable when [onClick] is given. An action the canon
+ * drew in the accent ("Test connection", "Clear media cache") is in [ACTION_LABEL]: in the ink, as a fact's words
+ * are, it is told from the facts by its underline, as the M51 update's reference player draws a text button.
  */
 @Composable
 internal fun KvRow(
     label: String,
     value: String? = null,
     mono: Boolean = false,
-    labelColor: Color = LocalFermixColors.current.ink,
+    labelStyle: TextStyle = FermixType.body,
     onClick: (() -> Unit)? = null,
 ) {
     val colors = LocalFermixColors.current
@@ -138,12 +145,12 @@ internal fun KvRow(
     ) {
         // The label keeps its width and the value takes the rest, its end on the row's, as the canon's
         // space-between puts it; a row with no value lets the label wrap across the whole row.
-        Text(text = label, style = FermixType.body, color = labelColor)
+        Text(text = label, style = labelStyle, color = labelStyle.color.takeOrElse { colors.ink })
         if (value != null) {
             Text(
                 text = value,
                 style = valueStyle,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 textAlign = TextAlign.End,
                 modifier = Modifier.weight(1f),
             )
@@ -225,7 +232,7 @@ private fun CandidateLine(
             Text(
                 text = stringResource(R.string.instance_candidate, candidate.host, port),
                 style = CANDIDATE_STYLE,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
             )
             Tag(stringResource(scope), TAG_STYLE, ends = 0.dp)
         }
@@ -243,7 +250,7 @@ fun Tag(
     Text(
         text = text,
         style = style,
-        color = colors.inkSecondary,
+        color = colors.textSecondary,
         modifier =
             Modifier
                 .border(FermixSpacing.hairline, colors.hairline, RoundedCornerShape(TAG_CORNER))

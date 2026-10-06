@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.ColumnWidth
+import io.tezra.fermix.design.FermixColors
 import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
@@ -215,12 +216,13 @@ private fun ScanFoot(
             CameraAccess.ALLOWED -> {}
 
             CameraAccess.RATIONALE -> {
-                PrimaryAction(stringResource(R.string.onboarding_continue), actions.onAllowCamera, modifier = sides)
+                val label = stringResource(R.string.onboarding_continue)
+                PrimaryAction(label, actions.onAllowCamera, modifier = sides, colors = cameraActionColors())
             }
 
             CameraAccess.DENIED -> {
                 val label = stringResource(R.string.onboarding_open_settings)
-                PrimaryAction(label, actions.onOpenSettings, modifier = sides)
+                PrimaryAction(label, actions.onOpenSettings, modifier = sides, colors = cameraActionColors())
             }
         }
         PasteOnCamera(onPaste = actions.onPaste)
@@ -378,6 +380,15 @@ private fun Reticle(modifier: Modifier = Modifier) {
         }
     }
 }
+
+/**
+ * The camera's one action in both modes: the dark mode's ink pill, as the frame is dark in both. Light mode's ink,
+ * near-black, would lie on the frame's near-black at about 1.1 : 1, and read as less than "Paste a pairing link"
+ * under it.
+ */
+@Composable
+private fun cameraActionColors() =
+    ButtonDefaults.buttonColors(containerColor = FermixColors.Dark.ink, contentColor = FermixColors.Dark.onInk)
 
 @Composable
 private fun PasteOnCamera(onPaste: () -> Unit) {

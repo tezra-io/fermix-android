@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.ColumnWidth
@@ -46,8 +47,13 @@ private val PAGE_FOOT = 12.dp
 private val UNPAIR_TOP = 12.dp
 private val FOOTER_TOP = 16.dp
 
-/** The canon's `.ihd a`, 500 12/16, and `.pfoot`, 400 12/16. */
-private val RESET_STYLE = FermixType.label.copy(fontSize = 12.sp, lineHeight = 16.sp)
+/**
+ * The canon's `.ihd a`, 500 12/16, underlined: the accent marked it as an action, and in the ink it is told from
+ * "Fermix on {host}" above it by its underline, as the M51 update's reference player draws a text button; and
+ * `.pfoot`, 400 12/16.
+ */
+private val RESET_STYLE =
+    FermixType.label.copy(fontSize = 12.sp, lineHeight = 16.sp, textDecoration = TextDecoration.Underline)
 private val FOOTER_STYLE = FermixType.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp)
 
 /** What the Instance screen's controls do, each the ViewModel's. */
@@ -148,14 +154,14 @@ private fun Header(
         Text(
             text = stringResource(R.string.instance_on_host, record.host),
             style = FermixType.bodyMedium,
-            color = colors.inkSecondary,
+            color = colors.textSecondary,
             textAlign = TextAlign.Center,
         )
         if (record.nickname != null) {
             Text(
                 text = stringResource(R.string.instance_reset_name),
                 style = RESET_STYLE,
-                color = colors.accentInk,
+                color = colors.ink,
                 modifier = Modifier.clickable(role = Role.Button, onClick = onReset).minimumInteractiveComponentSize(),
             )
         }
@@ -188,7 +194,7 @@ private fun ConnectionSection(
     KvRow(
         label = stringResource(R.string.instance_test_connection),
         value = testWords(ui.test, host),
-        labelColor = LocalFermixColors.current.accentInk,
+        labelStyle = ACTION_LABEL,
         onClick = onTest,
     )
 }
@@ -237,7 +243,7 @@ private fun NotificationsSection(
     if (!ui.record.pushReady) {
         KvRow(
             label = stringResource(R.string.instance_notifications_not_set_up, ui.record.host),
-            labelColor = LocalFermixColors.current.inkSecondary,
+            labelStyle = FermixType.body.copy(color = LocalFermixColors.current.textSecondary),
         )
         return
     }
@@ -262,7 +268,7 @@ private fun StorageSection(
     )
     KvRow(
         label = stringResource(R.string.instance_clear_cache),
-        labelColor = LocalFermixColors.current.accentInk,
+        labelStyle = ACTION_LABEL,
         onClick = onClear,
     )
 }
@@ -272,7 +278,7 @@ private fun Footer() {
     Text(
         text = stringResource(R.string.instance_footer),
         style = FOOTER_STYLE,
-        color = LocalFermixColors.current.inkSecondary,
+        color = LocalFermixColors.current.textSecondary,
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(start = SIDES, end = SIDES, top = FOOTER_TOP),
     )

@@ -55,13 +55,15 @@ private val CAPTION_PADDING = Modifier.padding(start = 12.dp, top = 8.dp, end = 
  * agent's 88 %, the message's words as the card's caption inside it; each document as its 64 dp row; the owner's
  * voice note as a bubble of its own; words with no image to caption them in a bubble after the documents. Under
  * them the time and the mark, the upload's line while it goes up, and a queued or refused item's line. [modifier],
- * the message's tap and long-press, goes on the image card, the note and the words, not on the column they sit in.
+ * the message's tap and long-press, goes on the image card, the note and the words, not on the column they sit in;
+ * the lines under them lie on the row's wash while it is [selected].
  */
 @Composable
 internal fun MediaMessage(
     item: ChatItem.Message,
     context: TimelineContext,
     modifier: Modifier,
+    selected: Boolean,
 ) {
     val message = item.message
     val user = message.sender == Sender.User
@@ -84,7 +86,7 @@ internal fun MediaMessage(
         }
         val loose = images.isEmpty() && notes.isEmpty() && message.text.isNotBlank()
         if (loose) WordsBubble(message, context, modifier.fillMaxWidth(width))
-        MediaLines(message, context, stamped = notes.isEmpty())
+        MediaLines(message, context, stamped = notes.isEmpty(), washed = selected)
     }
 }
 
@@ -103,7 +105,7 @@ private fun ImagesCard(
     }
 }
 
-/** The card's caption (the canon's `.cap`): the owner's on the accent, the agent's on its bubble's tone. */
+/** The card's caption (the canon's `.cap`): the owner's in onInk on the ink, the agent's on its bubble's tone. */
 @Composable
 private fun Caption(
     message: ShownMessage,
@@ -116,11 +118,11 @@ private fun Caption(
             Modifier
                 .fillMaxWidth()
                 .background(
-                    if (user) colors.accent else colors.agentBubble,
+                    if (user) colors.ink else colors.agentBubble,
                 ).then(CAPTION_PADDING),
     ) {
         if (user) {
-            Text(message.text, style = FermixType.body, color = colors.onAccent)
+            Text(message.text, style = FermixType.body, color = colors.onInk)
         } else {
             Prose(message.text, false, message.resets, context.text, context.marksIn(message))
         }
@@ -140,14 +142,14 @@ private fun WordsBubble(
         modifier =
             modifier
                 .clip(FermixShapes.card)
-                .background(if (user) colors.accent else colors.agentBubble)
+                .background(if (user) colors.ink else colors.agentBubble)
                 .padding(
                     horizontal = FermixSpacing.bubblePaddingHorizontal,
                     vertical = FermixSpacing.bubblePaddingVertical,
                 ),
     ) {
         if (user) {
-            Text(message.text, style = FermixType.body, color = colors.onAccent)
+            Text(message.text, style = FermixType.body, color = colors.onInk)
         } else {
             Prose(message.text, false, message.resets, context.text, context.marksIn(message))
         }
@@ -176,14 +178,14 @@ private fun VoiceBubble(
     }
     val length = (known ?: measured)?.let(::durationText).orEmpty()
     val label = stringResource(R.string.chat_voice_note, length)
-    val onAccent = colors.onAccent
-    val wash = onAccent.copy(alpha = ON_ACCENT_WASH)
+    val onInk = colors.onInk
+    val wash = onInk.copy(alpha = ON_INK_WASH)
     Column(
         modifier =
             modifier
                 .width(IntrinsicSize.Max)
                 .clip(FermixShapes.card)
-                .background(colors.accent)
+                .background(colors.ink)
                 .padding(
                     horizontal = FermixSpacing.bubblePaddingHorizontal,
                     vertical = FermixSpacing.bubblePaddingVertical,
@@ -195,25 +197,25 @@ private fun VoiceBubble(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PlayButton(playing?.running == true, wash, onAccent) { shown.actions.onPlay(media) }
+            PlayButton(playing?.running == true, wash, onInk) { shown.actions.onPlay(media) }
             val bars = noteBars(shown.ui.bars[media.cacheName])
             val played = playing?.let(::playedShare) ?: 0f
-            Wave(bars, onAccent, Modifier.weight(1f, fill = false).width(NOTE_WAVE), played)
-            val lengthInk = onAccent.copy(alpha = LENGTH_ALPHA)
+            Wave(bars, onInk, Modifier.weight(1f, fill = false).width(NOTE_WAVE), played)
+            val lengthInk = onInk.copy(alpha = LENGTH_ALPHA)
             Text(length, style = SMALL_MONO, color = lengthInk, maxLines = 1, softWrap = false)
-            SpeedChip(playing?.speed ?: SPEEDS.first(), wash, onAccent, shown.actions.onSpeed)
+            SpeedChip(playing?.speed ?: SPEEDS.first(), wash, onInk, shown.actions.onSpeed)
         }
-        media.sent?.let { UploadBar(it, wash, onAccent, Modifier.padding(top = 6.dp)) }
-        Transcript(message, Modifier.fillMaxWidth().padding(top = 6.dp), onAccent)
-        Stamp(message, context, onAccent)
+        media.sent?.let { UploadBar(it, wash, onInk, Modifier.padding(top = 6.dp)) }
+        Transcript(message, Modifier.fillMaxWidth().padding(top = 6.dp), onInk)
+        Stamp(message, context, onInk)
     }
 }
 
 /** The waveform of a note in its bubble (the canon's `.vn .wv`, 132 wide). */
 private val NOTE_WAVE = 132.dp
 
-/** The note's controls' wash on the accent (the canon's rgba(255,255,255,.22)) and its length's .8. */
-private const val ON_ACCENT_WASH = 0.22f
+/** The note's controls' wash on the ink, onInk at 22 % (the canon's rgba(255,255,255,.22)), and its length's .8. */
+private const val ON_INK_WASH = 0.22f
 private const val LENGTH_ALPHA = 0.8f
 
 /** The transcript's type and opacity (the canon's `.tr`, 400 14/20 at .86). */
@@ -235,43 +237,48 @@ private fun Transcript(
 /**
  * The lines under a message with blobs (the canon's `.state`): the upload's line while it goes up, or else the
  * time and mark when no bubble of it holds them ([stamped]); and a queued, pending or refused item's own, but
- * "Queued" under an interrupted upload, whose line says it waits for a connection.
+ * "Queued" under an interrupted upload, whose line says it waits for a connection. They lie on the canvas, so on a
+ * selected row's wash ([washed]) they are the ink, whole (rowLine).
  */
 @Composable
 private fun MediaLines(
     message: ShownMessage,
     context: TimelineContext,
     stamped: Boolean,
+    washed: Boolean,
 ) {
     val colors = LocalFermixColors.current
     val user = message.sender == Sender.User
     // An upload's line takes the stamp's place, as the canon's one `.state` line does.
     val line = message.uploadLine
     when {
-        line != null -> UploadLineRow(line, context.host)
-        stamped -> Stamp(message, context, colors.ink)
+        line != null -> UploadLineRow(line, context.host, washed)
+        stamped -> Stamp(message, context, colors.ink, faded = !washed)
     }
     // An interrupted upload's line says why the item waits for a connection; "Queued" would say it twice.
     val waitSaid = message.uploadLine == UploadLine.INTERRUPTED && message.delivery == Delivery.PENDING
     if (!user || waitSaid) return
     when (message.delivery) {
-        Delivery.QUEUED -> StateLine(stringResource(R.string.chat_queued_behind_reply), error = false)
-        Delivery.PENDING -> StateLine(stringResource(R.string.chat_queued), error = false)
-        Delivery.FAILED -> StateLine(stringResource(R.string.chat_not_sent), error = true)
+        Delivery.QUEUED -> StateLine(stringResource(R.string.chat_queued_behind_reply), error = false, washed = washed)
+        Delivery.PENDING -> StateLine(stringResource(R.string.chat_queued), error = false, washed = washed)
+        Delivery.FAILED -> StateLine(stringResource(R.string.chat_not_sent), error = true, washed = washed)
         else -> Unit
     }
 }
 
 /**
- * An upload's line (design section 13.9): its words and glyph in the secondary ink, at the column's end. The canon's
- * clock leads the interrupted line; the duplicate's tick follows its words, as a mark does.
+ * An upload's line (design section 13.9): its words and glyph in the secondary text, at the column's end, or the
+ * ink on a selected row's wash ([washed], rowLine). The canon's clock leads the interrupted line; the duplicate's
+ * tick follows its words, as a mark does.
  */
 @Composable
 private fun UploadLineRow(
     line: UploadLine,
     host: String,
+    washed: Boolean,
 ) {
-    val tint = LocalFermixColors.current.inkSecondary
+    val colors = LocalFermixColors.current
+    val tint = rowLine(colors, colors.textSecondary, washed)
     when (line) {
         UploadLine.INTERRUPTED -> {
             val words = stringResource(R.string.chat_upload_interrupted)

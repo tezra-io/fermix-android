@@ -36,8 +36,9 @@ import java.time.LocalDate
 // The chat's cards and controls at the twelve windows of @FermixPreviews, each from fixed state: an approval
 // card at 42 s and at 8 s, in the warn colour; its four receipt lines; the owner's bubble with the host's
 // reaction; a message with two link previews, one with its thumbnail; the composer with the model chip at the
-// default, with an override, and disabled offline; the "Model" sheet; the model lines; search in its list, in
-// the chat with a hit pulsing, the agent's and the owner's, and offline under its pinned line.
+// default, with an override, and disabled offline; the "Model" sheet; the model lines; search in its list, with
+// an older page that did not come, offline under its pinned line, and in the chat with a hit pulsing, the
+// agent's and the owner's.
 
 /** The clock every card in these previews reads. */
 private const val CLOCK = 500_000L
@@ -349,6 +350,13 @@ fun SearchListPreview() {
 
 @FermixPreviews
 @Composable
+fun SearchFailedPreview() {
+    // The older page did not come: under the hits, the line saying so and its "Try again", underlined.
+    FermixPreviewTheme { ChatScreen(screen(listOf(ASKED, DAY)).copy(search = SEARCHED.copy(failed = true)), ACTIONS) }
+}
+
+@FermixPreviews
+@Composable
 fun SearchOfflinePreview() {
     val offline =
         screen(
@@ -386,7 +394,8 @@ fun SearchInChatPreview() {
     // Stepping: the newest of four hits, its bubble pulsing in the chat.
     val stepping = SEARCHED.copy(mode = SearchMode.IN_CHAT, step = 0)
     FermixPreviewTheme {
-        ChatScreen(screen(STEPPED).copy(search = stepping), ACTIONS, rememberLazyListState(), pulsing = Jump(9uL, 1))
+        val held = PreviewHeld(pulsing = Jump(9uL, 1))
+        ChatScreen(screen(STEPPED).copy(search = stepping), ACTIONS, rememberLazyListState(), held)
     }
 }
 
@@ -397,6 +406,7 @@ fun SearchInChatOwnPreview() {
     val own = hit(10, Sender.User, 44, "Is there a guide for Task timeouts?")
     val stepping = SEARCHED.copy(hits = listOf(own) + HITS, mode = SearchMode.IN_CHAT, step = 0)
     FermixPreviewTheme {
-        ChatScreen(screen(STEPPED).copy(search = stepping), ACTIONS, rememberLazyListState(), pulsing = Jump(10uL, 1))
+        val held = PreviewHeld(pulsing = Jump(10uL, 1))
+        ChatScreen(screen(STEPPED).copy(search = stepping), ACTIONS, rememberLazyListState(), held)
     }
 }

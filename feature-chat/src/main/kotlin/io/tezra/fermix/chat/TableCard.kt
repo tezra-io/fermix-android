@@ -60,7 +60,7 @@ fun isFigure(text: String): Boolean = FIGURE.matches(text.trim())
 
 /**
  * A table card (design section 13.5): a flat grid on the canvas inside a hairline, its header 11/16 in the
- * second ink over a hairline, figures in mono and to the right; past four columns its columns take their words'
+ * secondary text over a hairline, figures in mono and to the right; past four columns its columns take their words'
  * widths, filling the card when they need less and panning when they need more; a cell longer than three lines
  * opens whole on a tap.
  */
@@ -175,7 +175,7 @@ private fun Cell(
     val colors = LocalFermixColors.current
     var cut by remember(text) { mutableStateOf(false) }
     val figure = !header && isFigure(text)
-    val ink = if (header) colors.inkSecondary else colors.ink
+    val ink = if (header) colors.textSecondary else colors.ink
     Text(
         text = text,
         style = cellStyle(text, header).copy(color = ink),

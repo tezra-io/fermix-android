@@ -36,6 +36,13 @@ google-services.json
 # What Python writes running the release scripts' tests (scripts/tests)
 __pycache__/
 
+# No screenshot is tracked, from 2026-10-05 on (the owner: "git ignore those images"): a module's
+# src/test/screenshots holds what `./gradlew recordRoborazziDebug` last drew on this machine, its own
+# references for a compare, and docs/app-shots what scripts/app_shots.sh made from them. CI's screens job
+# draws its own and uploads docs/app-shots as an artifact; the images pushed before stay in history.
+*/src/test/screenshots/
+docs/app-shots/
+
 # OS and editors
 .DS_Store
 *.swp

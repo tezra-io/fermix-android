@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixType
@@ -85,7 +86,7 @@ internal fun RecordingRow(recording: VoiceUi.Recording) {
             Text(
                 stringResource(R.string.chat_slide_to_cancel),
                 style = FermixType.bodyMedium,
-                color = colors.inkSecondary,
+                color = colors.textSecondary,
                 textAlign = TextAlign.End,
                 modifier = Modifier.weight(1f),
             )
@@ -110,7 +111,7 @@ internal fun DraftRow(
     ) {
         PlayButton(running, colors.hairline, colors.ink, onPlay)
         Wave(draft.bars, colors.ink, Modifier.width(160.dp), played)
-        Text(durationText(draft.durationMs), style = SMALL_MONO, color = colors.inkSecondary)
+        Text(durationText(draft.durationMs), style = SMALL_MONO, color = colors.textSecondary)
     }
 }
 
@@ -133,16 +134,18 @@ internal fun LockPill(modifier: Modifier = Modifier) {
         Icon(
             painterResource(R.drawable.ic_chat_lock),
             label,
-            tint = colors.inkSecondary,
+            tint = colors.textSecondary,
             modifier = Modifier.size(20.dp),
         )
-        Icon(painterResource(R.drawable.ic_chat_up), null, tint = colors.inkSecondary, modifier = Modifier.size(16.dp))
+        Icon(painterResource(R.drawable.ic_chat_up), null, tint = colors.textSecondary, modifier = Modifier.size(16.dp))
     }
 }
 
 /**
  * The line over the composer (the canon's `.hint`): "Recording stopped — send or discard" under a draft, or
- * "Microphone is off for Fermix" with "Open settings" once the owner refused it.
+ * "Microphone is off for Fermix" with "Open settings", underlined, once the owner refused it: the same size as the
+ * words beside it, in the ink, it is an action by its underline, as the M51 update's reference player draws a text
+ * button.
  */
 @Composable
 internal fun VoiceHint(
@@ -160,12 +163,13 @@ internal fun VoiceHint(
     ) {
         val words = stringResource(if (draft) R.string.chat_recording_stopped else R.string.chat_mic_off)
         // The words wrap in large type; "Open settings" keeps its width.
-        Text(words, style = FermixType.labelSmall, color = colors.inkSecondary, modifier = Modifier.weight(1f, false))
+        Text(words, style = FermixType.labelSmall, color = colors.textSecondary, modifier = Modifier.weight(1f, false))
         if (!draft) {
             Text(
                 stringResource(R.string.chat_open_settings),
                 style = FermixType.labelSmall,
-                color = colors.accentInk,
+                color = colors.ink,
+                textDecoration = TextDecoration.Underline,
                 modifier =
                     Modifier.minimumInteractiveComponentSize().clickable(
                         role = Role.Button,
@@ -176,7 +180,7 @@ internal fun VoiceHint(
     }
 }
 
-/** A 40 dp control of row 2 (the canon's `.cmp .ib`), filled with the accent for send ([go]). */
+/** A 40 dp control of row 2 (the canon's `.cmp .ib`), filled with the ink for send ([go]), its icon in onInk. */
 @Composable
 internal fun RowControl(
     icon: Int,
@@ -190,12 +194,12 @@ internal fun RowControl(
             Modifier
                 .minimumInteractiveComponentSize()
                 .size(40.dp)
-                .background(if (go) colors.accent else Color.Transparent, CircleShape)
+                .background(if (go) colors.ink else Color.Transparent, CircleShape)
                 .clickable(role = Role.Button, onClick = onClick)
                 .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(icon), null, tint = if (go) colors.onAccent else colors.ink)
+        Icon(painterResource(icon), null, tint = if (go) colors.onInk else colors.ink)
     }
 }
 
@@ -204,7 +208,7 @@ internal fun RowControl(
  * [LOCK_SLIDE] it locks, each with `GESTURE_THRESHOLD_ACTIVATE`; let go otherwise, it sends what it still records,
  * with `CONFIRM` once the session took it. A hold the phone takes from the finger (a system gesture, another
  * window) stops the take into a draft; one a rotation or a fold takes, as the activity is made again, locks it.
- * Filled with the accent while it records, as the canon's held mic.
+ * Filled with the ink while it records, its icon in onInk, as the canon's held mic.
  */
 @Composable
 internal fun MicButton(
@@ -222,7 +226,7 @@ internal fun MicButton(
             Modifier
                 .minimumInteractiveComponentSize()
                 .size(40.dp)
-                .background(if (recording) colors.accent else Color.Transparent, CircleShape)
+                .background(if (recording) colors.ink else Color.Transparent, CircleShape)
                 .semantics {
                     role = Role.Button
                     contentDescription = label
@@ -231,7 +235,7 @@ internal fun MicButton(
                 },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(R.drawable.ic_chat_mic), null, tint = if (recording) colors.onAccent else colors.ink)
+        Icon(painterResource(R.drawable.ic_chat_mic), null, tint = if (recording) colors.onInk else colors.ink)
     }
 }
 

@@ -20,19 +20,29 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-// The design module's screenshot tests: the tokens as three sheets, each drawn at the twelve windows of
+// The design module's screenshot tests: the tokens as four sheets, each drawn at the twelve windows of
 // @FermixPreviews and each short enough to fit whole in the shortest of them, the expanded window at font
 // scale 2.0 (673 dp tall), so that every token is drawn in all twelve images. Each places its content as
 // a screen does, through FermixColumn with no modifier. Their words are the tokens' and components' names
@@ -94,6 +104,57 @@ fun SpecimenShape() {
     }
 }
 
+/**
+ * Material's controls the app uses, as the theme hands them, where the ink is both a fill and the words beside it
+ * (the M51 update's 1.3 and 1.4): a switch on beside one off, a chip chosen beside one not, a focused field, its
+ * border and label in the ink and its words selected, and a progress bar. The field's caret is the ink too, but a
+ * field with words selected draws none, so no reference shows it. The focus is asked for once the field is first
+ * composed, and the reference is taken after it lands.
+ */
+@FermixPreviews
+@Composable
+fun SpecimenControls() {
+    FermixPreviewTheme {
+        FermixColumn(ColumnWidth.Wide) {
+            Column(modifier = Modifier.padding(SHEET_PADDING), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Toggles()
+                FocusedField()
+                LinearProgressIndicator(progress = { PROGRESS }, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+private const val PROGRESS = 0.6f
+
+@Composable
+private fun Toggles() {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Switch(checked = true, onCheckedChange = null)
+        Switch(checked = false, onCheckedChange = null)
+        FilterChip(selected = true, onClick = {}, label = { Text(text = "FilterChip") })
+        FilterChip(selected = false, onClick = {}, label = { Text(text = "FilterChip") })
+    }
+}
+
+/** A field that takes the focus as it is first drawn, with its first word selected. */
+@Composable
+private fun FocusedField() {
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(focus) { focus.requestFocus() }
+    OutlinedTextField(
+        value = TextFieldValue(text = "selected words", selection = TextRange(0, "selected".length)),
+        onValueChange = {},
+        label = { Text(text = "OutlinedTextField") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+    )
+}
+
 private val SHEET_PADDING = 16.dp
 private val TIMELINE_TOP_PADDING = 8.dp
 
@@ -135,7 +196,7 @@ private fun DockSample(colors: FermixColors) {
                 .controlPlane(Edge.Around, colors)
                 .padding(horizontal = 18.dp, vertical = 16.dp),
     ) {
-        Text(text = "controlPlane(Edge.Around)", style = FermixType.body, color = colors.inkSecondary)
+        Text(text = "controlPlane(Edge.Around)", style = FermixType.body, color = colors.textSecondary)
     }
 }
 
@@ -180,13 +241,13 @@ private fun Bubble(
                     .align(if (user) Alignment.CenterEnd else Alignment.CenterStart)
                     .widthIn(max = maxWidth * share)
                     .clip(bubbleShape(sender, position))
-                    .background(if (user) colors.accent else colors.agentBubble)
+                    .background(if (user) colors.ink else colors.agentBubble)
                     .padding(
                         horizontal = FermixSpacing.bubblePaddingHorizontal,
                         vertical = FermixSpacing.bubblePaddingVertical,
                     ),
         ) {
-            Text(text = text, style = FermixType.body, color = if (user) colors.onAccent else colors.ink)
+            Text(text = text, style = FermixType.body, color = if (user) colors.onInk else colors.ink)
         }
     }
 }
@@ -218,7 +279,7 @@ private fun Tints(colors: FermixColors) {
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Avatar(tint, FermixSpacing.avatar, colors)
-                Text(text = tint.name, style = FermixType.labelSmall, color = colors.inkSecondary)
+                Text(text = tint.name, style = FermixType.labelSmall, color = colors.textSecondary)
             }
         }
     }
@@ -246,17 +307,19 @@ private fun Swatches(colors: FermixColors) {
     val swatches =
         listOf(
             "canvas" to colors.canvas,
+            "ink" to colors.ink,
+            "onInk" to colors.onInk,
+            "textSecondary" to colors.textSecondary,
+            "inkTertiary" to colors.inkTertiary,
             "agentBubble" to colors.agentBubble,
             "hairline" to colors.hairline,
-            "accent" to colors.accent,
-            "accentInk" to colors.accentInk,
-            "onAccent" to colors.onAccent,
+            "selection" to colors.selection,
             "ok" to colors.ok,
             "warn" to colors.warn,
             "err" to colors.err,
-            "ink" to colors.ink,
-            "inkSecondary" to colors.inkSecondary,
-            "inkTertiary" to colors.inkTertiary,
+            "errText" to colors.errText,
+            "signal" to colors.signal,
+            "onSignal" to colors.onSignal,
             "tonal" to colors.tonal,
             "tonalSolid" to colors.tonalSolid,
             "scrim" to colors.scrim,
@@ -284,7 +347,7 @@ private fun Swatch(
                 .background(color)
                 .border(FermixSpacing.hairline, colors.hairline, CircleShape),
         )
-        Text(text = name, style = FermixType.labelSmall, color = colors.inkSecondary)
+        Text(text = name, style = FermixType.labelSmall, color = colors.textSecondary)
     }
 }
 

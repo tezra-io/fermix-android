@@ -21,19 +21,20 @@ app/                    the application module (io.tezra.fermix)
 build-logic/            the convention plugins every module applies, and their tests
 config/detekt/          the detekt configuration; there is no baseline
 contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned by contracts/CHECKSUMS.txt and contracts/SOURCE.json
-docs/                   RELEASING.md: how a release goes from a tag to a draft, to real phones, to GitHub and Play
+docs/                   RELEASING.md: how a release goes from a tag to a draft, to real phones, to GitHub and Play;
+                        app-shots/, which git ignores: every preview's compact window, light and dark, as scripts/app_shots.sh copies it from a record
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
 attest/                 the device key: the hardware gate, the Keystore key and its attestation chain's shape (io.tezra.fermix.attest)
 core-session/           the pairing ceremony, and one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
-design/                 the design language as code, its fonts, previews and screenshot references (io.tezra.fermix.design)
+design/                 the design language as code, its fonts and its previews (io.tezra.fermix.design)
 data/                   the instance records, each profile's database and media cache, the launch check (io.tezra.fermix.data)
 push/                   a push's envelope, keys, trial decryption and plaintext, and its diagnostics lines (io.tezra.fermix.push)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 policy/                 permissions.txt and exported.txt, the permissions the release APK requests and the components it exports, exactly
 release-evidence/       schema.json, and per release vX.Y.Z.json: the device gate and the eight scenarios on real phones
-scripts/                verify_protocol_contract.sh, check_release_policy.sh, and the release pipeline's steps with their tests
+scripts/                verify_protocol_contract.sh, check_release_policy.sh, app_shots.sh, and the release pipeline's steps with their tests
 version.properties      versionCode; versionName is the nearest vX.Y.Z tag, read by the build
 ```
 
@@ -367,10 +368,12 @@ behind an upload while a second offer comes, and the limits on attachments.
 
 `design` (`io.tezra.fermix.design`) is design section 13.1's language as code, a Compose library
 every screen builds on. `FermixTheme` provides it and hands it to Material 3 too, so that Material's
-components draw in it: `FermixColors`, light and dark with the visual canon's values, and the six
-`Tint`s, with every one of Material's colour roles built from them and never Dynamic Color, and
-`textButtonColors(colors)`, the accent as ink for the text buttons Material would draw in the
-accent's fill; `FermixType`, section 13.1's type scale in Google Sans Flex, with Google Sans Code
+components draw in it: `FermixColors`, light and dark, monochrome as the M51 update's section 1 gives
+them (the ink and the `onInk` on it, the secondary text, the `selection`, the status colours with dark
+mode's own error text, `errText`, and `signal`, Fermix blue, for what is unread alone), and the six
+`Tint`s, with every one of Material's colour roles built from them, `primary` the ink, and never Dynamic
+Color; text selection washed in `selection`; and `textButtonColors(colors)`, the ink's words on no fill,
+for the text buttons Material would draw in its primary; `FermixType`, section 13.1's type scale in Google Sans Flex, with Google Sans Code
 and tabular figures for code and the SAS, and tabular figures in label-small's timestamps;
 `FermixShapes` and `bubbleShape(sender, position)`; `FermixSpacing`;
 `FermixColumn`, section 13.11's centred column of 640 dp or 480 dp on a window 600 dp wide or more
@@ -386,39 +389,159 @@ one commit, unmodified, under the SIL Open Font License 1.1: `src/main/res/font/
 `SOURCE.json` the commit and each file's upstream path and sha256, which a test checks. They add
 about 2.6 MB to the APK, 2.4 MB of it Google Sans Flex, a variable font with all its axes.
 
+`ContrastTest` measures the update's table of 1.2 by WCAG 2's contrast ratio, each pair to one decimal;
+holds the pairs of the tokens it names that the app draws to their WCAG floor, 4.5 : 1 for text and 3 : 1
+for a mark: the ink and the secondary text on every surface and on the hairline, dark mode's error text,
+the signal and `onSignal`, a message's faded time on its bubble or the canvas, the status colours as
+marks, and the ink on a wash; and pins at what it measures each pair of tokens the app draws under that
+floor, as the list below names them. The colours a fixed surface names in its own module, the code card's
+syntax and Scan's camera, are not measured there. Where the code departs from the update's section 1, or
+reads it where it is silent, for the owner to settle:
+
+- Fermix blue is not retired altogether. The owner, on 2026-10-05: "You can add contrast with certain
+  things with the Fermix blue but for others I would like to keep it fairly simple and aesthetically
+  pleasing." It stays as one token, `signal`, `#2B5CFF` in both modes with `onSignal` `#FFFFFF` on it,
+  and it marks what is unread and nothing else: the unread count on a Chats row, the timeline's unread
+  divider and the count on the scroll-to-latest pill. It is never text on the canvas, a button, a link,
+  focus, a progress arc, a selection or a caret. It measures 5.2 : 1 on the light canvas and 3.8 : 1 on
+  the dark one, and `onSignal` on it 5.2 : 1.
+- The unread divider is `signal` whole, where M51 drew the accent at 70 %: Fermix blue at 70 % measures
+  2.4 : 1 on the dark canvas, under a mark's 3 : 1.
+- 1.2's table gives `textSecondary` on the dark canvas as 7.1 : 1, the figure of its row below; `#A3A6AE`
+  on `#0B0B0D` measures 8.1 : 1, and `ContrastTest` asserts that. The colour is the update's.
+- The update's reference player and its 1.2 disagree twice, and the app follows 1.2: the player's
+  secondary text is M51's `#5B5E68` and `#A3A6AF`, 1.2's `#5B5E66` and `#A3A6AE`; and the player paints
+  the security event's edge in dark mode's error text, `#FF6B5E`, where the app paints it in `err`,
+  `#D93025`, in both modes, as 1.2 keeps `err` "the same, but `err` text uses `#FF6B5E`".
+- Dark mode's error text, `#FF6B5E`, is a token of its own, `errText`, which light mode gives `#D93025`,
+  its `err`; `err` itself stays for a mark: a failure screen's edge, an error card's rule, the connection
+  dot, the recording dot. Light mode's `#D93025` measures 4.3 : 1 on its agent bubble, where a Denied
+  receipt and a held Chats row's "Unpaired by …" line are drawn, and 4.1 : 1 on its tonal surface, where
+  the paste sheet's "That's not a Fermix pairing code." and its field's error label, the rename sheet's
+  and the rename dialog's refusals and the palette's `/stop` are drawn: under text's 4.5 : 1. 1.2 gives
+  light mode that colour, so it stands; `#C5221F` would measure 5.3 : 1, 5.0 : 1 and 5.8 : 1 on the agent
+  bubble, the tonal surface and the canvas. Dark mode's error text reads on every surface.
+- `ok` and `warn`, which 1.2 keeps, are under their floor as light mode draws them on an approval's grey:
+  "Approved — access granted" in `ok` measures 3.2 : 1, the countdown's "Expires in …" line in `warn`
+  3.1 : 1, and its 3 dp bar, a mark, in `warn` on the hairline track 2.8 : 1. In dark mode they read (4.9,
+  5.1 and 4.4 : 1).
+- `inkTertiary`, which 1.2 does not list and so stands, is drawn as text only on the Model sheet (an
+  unlisted provider, an unavailable group), on its tonal surface: 2.8 : 1 in light mode and 3.5 : 1 in
+  dark, under 4.5 : 1. The thinking line's shimmer passes through it on its way to the ink.
+- A queued message of the owner's is drawn whole at M51's 55 % (section 13.6), so its words on its ink
+  measure 4.3 to 4.4 : 1 in light mode (5.0 : 1 in dark), just under 4.5 : 1; at 60 % they would measure
+  5.2 : 1. The opacity is M51's and stands.
+- Sand, one of the six tints, which 1.2 leaves as they are, measures 2.7 : 1 for the mark drawn on it and
+  for the avatar on light mode's canvas, under a mark's 3 : 1; the other five pass.
+- 1.3's focus, a 2 dp ink ring at a 2 dp offset, is not drawn, and no task owns it yet: this change is
+  colour only and the app draws no focus indicator of its own to recolour, and Tasks 18 and 19 own the
+  update's sections 2 to 7. Until one draws it, a focused button or row shows only Material's state layer,
+  about 1.2 : 1 against its fill or the canvas, and a focused message nothing, which fails section 8's
+  "every button, link and focus ring meets the contrast in 1.2". A text field shows its focus in its
+  border and label, both ink.
+- Where 1.3 names no row, the accent as a fill became the ink with `onInk` on it, and as text or an icon
+  the ink: text buttons and dialog actions, Connecting's current step, the SAS ring, the upload bars, the
+  approval's Approve and countdown, the model chip's dot and the sheet's check, a Chats row's "thinking…"
+  and "Re-pair" lines, the composer's send, stop, mic and record controls, the attach sheet's Send and
+  "Send as files", the pulse ring, the beam cursor and every caret, the avatar's second dot, the
+  Instance screen's section headers and its actions, and the error cards' actions.
+- A text action that the accent alone told from the words around it is underlined, as the reference
+  player draws a text button, since in the ink nothing else marks it: an error card's "Run again", "Reset
+  to default" and "Retry sending", under a title in the same ink; search's "Try again" and the
+  microphone's "Open settings", beside a grey line; and the Instance screen's "Test connection", "Clear
+  media cache" and "Reset to gateway name", among facts in the same ink and size. A text action that
+  opens a web page is a link, so it is underlined too: Welcome's "Don't have Fermix yet?" and a failure
+  screen's "Troubleshooting" (`pageOf`); "Learn more" and "Open release page" open one as a screen's
+  primary pill. A secondary that opens no web page stays plain, as the player's `.text-btn.plain`,
+  whether it stays in the app, under a screen's primary pill or among a dialog's actions, or opens
+  another app, as Can't reach's "Open Tailscale" does. The underline is the update's own cue for ink
+  that acts; the owner may choose another for the actions that are not links.
+- A selected message's row is washed in `selection`, and the owner's bubble in it stays ink. A search hit
+  or a `mark` in the owner's bubble is washed in `onInk` at the selection's alpha, as `selection`, the ink
+  at 20 %, shows nothing on the ink. What a selected row draws on its canvas, outside its bubbles, is the
+  ink while it is selected: a queued, pending or refused item's line, a job's tag over a card, a card's
+  time and an upload's line. On the wash the error text measures 3.0 : 1 in light mode and 4.4 : 1 in
+  dark, the time's faded ink 4.4 : 1 in both modes, and light mode's secondary text 4.1 : 1, each under
+  text's 4.5 : 1. `SelectingPreview` draws a refused message and a job's card selected, and
+  `MediaSelectedPreview` an agent's document with its time, the owner's refused image with its clock and
+  its line, and the owner's video whose upload was interrupted.
+- A Chats row held with its menu open is washed in the agent bubble's grey, not in `selection`, which 1.2
+  gives "pressed rows": on `selection` its secondary line would measure 4.1 : 1 and a revoked row's line
+  3.0 : 1. A row being pressed shows Material's ripple.
+- Fixed dark surfaces now meet the ink in light mode: Pair's `fermix pair` command card and the code card,
+  `codeCard` (`#16171B`, which the update leaves standing), lie beside the "Scan the code" pill and the
+  owner's bubble, `#0B0B0D`, at 1.1 : 1; they are told apart by shape alone.
+- Connecting's steps are dots for now (7.4's 20 dp pill for the current one is Task 19's): the current one
+  in the ink against the done ones in `textSecondary` measures 3.0 : 1 in light mode and 1.8 : 1 in dark,
+  and those to come, `hairline`, 1.2 and 1.3 : 1 on the canvas. Until the pill lands, colour alone tells
+  the current step, and barely in dark mode.
+- A failure screen's alert disc is the agent bubble's grey with its icon in `errText`, as the reference
+  player draws it, under a title in `errText`.
+- Scan is dark in both modes, so its "Continue" and "Open settings" are dark mode's ink pill in light mode
+  too: light mode's near-black would lie on the camera's near-black at 1.1 : 1, under the white "Paste a
+  pairing link".
+- The code card keeps the canon's syntax tints, a light blue among them: they lie on the card's own dark
+  surface, never on the canvas, and are not the accent.
+- The embedded Photo Picker draws its own accent, the system's: it takes an accent only of a luminance
+  between 0.05 and 0.9, which light mode's near-black ink is not.
+
 Every preview in a `fermix.android.library.compose` module is also a screenshot test. Roborazzi
-draws it on Robolectric, in the JVM, and `verifyRoborazziDebug`, which `check` runs, compares each
-image with its reference in the module's `src/test/screenshots/`. Robolectric's Android runtime is a
-pinned dependency with its checksum, so the tests never download one. A screen's previews are
+draws it on Robolectric, in the JVM. Robolectric's Android runtime is a pinned dependency with its
+checksum, so the tests never download one. A screen's previews are
 annotated `@FermixPreviews`, which draws them twelve times: a compact (412×915 dp), a medium
 (673×841 dp) and an expanded (841×673 dp) window, light and dark, at font scale 1.0 and 2.0, each in
 `FermixPreviewTheme { }`. The first are the design module's own, in its tests: `SpecimenColour`
 (the colours with their names, the six tints as avatars, and Material's Button, TextButton and filled
-Card as the theme hands them the design), `SpecimenType` (the type scale with its sizes) and
+Card as the theme hands them the design), `SpecimenControls` (a switch on beside one off, a chosen
+filter chip beside one not, a focused field with its label and selected words, and a progress
+bar, each as Material draws it in the theme), `SpecimenType` (the type scale with its sizes) and
 `SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces), each
 short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
-twelve images. After a change that moves pixels, redraw the references with
-`./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true`, which runs the tests every
-time, never up to date or from the build cache, and deletes the reference of a preview that is gone;
-look at each image that changed, and commit them with that change: a changed reference image is a
-review item, since it is what the change looks like. A verify also fails on a reference that no
-preview drew (`verifyNoOrphanScreenshots`, which `verifyRoborazziDebug` runs), since a preview that
-was renamed, removed or is no longer found would otherwise leave references that look like coverage
-and are compared with nothing. Roborazzi's own copies from `build/intermediates/roborazzi` into the
-references are off, so a build never writes build state into the source tree. The references are
-drawn on Linux x86-64, as CI's ubuntu-24.04 runner draws them. Robolectric does not render alike on
-macOS or Windows, so there a verify, and `./gradlew build` with it, is not authoritative; record
-references on Linux only. The code card's tint is computed as the card composes, never on a thread of
-its own, so it is in the first frame and its references cannot race a slower runner (`CodeCardTest`).
-CI's `screens` job fails on an image that differs from its reference beyond
-Roborazzi's default tolerance: a pixel whose RGBA moves by less than 0.007 (on 0 to 1) counts as
-unchanged, so a colour nudged by a step or two passes there and fails its value test in
-`FermixColorsTest` instead. A failure is reported under the name of its preview, which its twelve
-windows share, so the job uploads the locator: each `*_compare.png`, named for its preview, window,
-mode and font scale, with the reference, the difference and the new image side by side, and the HTML
-report with the references it links to. Android's own screenshot plugin is not used: it needs
-`android.experimental.enableScreenshotTest=true`, which the Android Gradle plugin 9.4 answers with a
-`WARNING:` line on every build, and only a suppression would silence it.
+twelve images.
+
+No screenshot is in the repository (the owner, 2026-10-05: "git ignore those images"; the departures
+under "Build and check"): `.gitignore` holds each module's `src/test/screenshots/` and `docs/app-shots/`,
+so a clone has nothing to compare with, and neither `./gradlew build` nor CI compares an image. A preview's
+test draws only when Roborazzi records or compares: a plain `test` passes it without composing the preview,
+one that throws among them, so a green `test` or `build` says nothing of the previews.
+`./gradlew recordRoborazziDebug`, part of every change's done, draws every preview into its module's
+`src/test/screenshots/`, running the tests every time, never up to date or from the build cache, and fails
+under the preview's name on one that throws. Each record, compare and verify then runs
+`checkPreviewsDrawn`, which reads Roborazzi's summary of the run: it fails a module that drew no preview,
+as one whose previews are no longer found, and a compare with no image recorded to compare with, which
+Roborazzi passes as every window "added", naming the record to run; and it names each image in
+`src/test/screenshots/` the run did not draw, left by a preview that is gone, renamed, made private or moved
+out of the module's package, until a record with `-Proborazzi.cleanupOldScreenshots=true` deletes it. So a
+green record leaves there what it drew and nothing else. Only the PNGs there count, as Roborazzi's cleanup
+deletes images alone, so a file manager's `.directory` or `Thumbs.db` beside them fails nothing. A run
+filtered with `--tests` fails the check on every preview it left out: record and compare whole modules, and
+never filter a record that cleans up, as the cleanup then deletes every image the run did not draw. CI's
+`screens` job records on every run, with `--continue`, so one run names every preview that throws in every
+module, then runs `scripts/app_shots.sh`, which copies each preview's compact window at font scale 1.0,
+light and dark, byte for byte, to `docs/app-shots/<module>/<Preview>-light.png` and `-dark.png` and writes
+`docs/app-shots/README.md`, which shows them side by side, a section a module; with nothing recorded the
+script stops and names the command to run. The job uploads that directory, about 24 MB, as its `app-shots`
+artifact, kept 30 days: the app's pictures as that run drew them. A red record's go up too, without the
+previews that threw, as `app-shots-incomplete`, so that whoever downloads them knows the set is not whole.
+
+What a machine recorded are its own references for a compare. To see what a change moves, record before
+it with `./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true`, which also deletes the
+image of a preview that is gone; after the change, `./gradlew compareRoborazziDebug` writes a
+`*_compare.png` under the module's `build/outputs/roborazzi/` for each window that moved, named for its
+preview, window, mode and font scale, with the old image, the difference and the new side by side, and
+`./gradlew verifyRoborazziDebug` fails on each preview that moved beyond Roborazzi's default tolerance: a
+pixel whose RGBA moves by less than 0.007 (on 0 to 1) counts as unchanged, so a colour nudged by a step or
+two passes there and fails its value test in `FermixColorsTest` instead. The compare also fails on a
+preview the change lost, naming its images (`checkPreviewsDrawn`), where Roborazzi alone would pass over the
+preview it no longer finds; a verify names them only when nothing else moved, as a verify that fails on a
+moved preview stops before the check, so compare first. Record and compare on one machine:
+Robolectric does not draw alike on Linux, macOS and Windows, and CI draws on Linux x86-64 (ubuntu-24.04).
+Roborazzi's own copies from `build/intermediates/roborazzi` into the references are off, so a build never
+writes build state over them. The code card's tint is computed as the card composes, never on a thread of
+its own, so it is in the first frame and no image of it can race a slower machine (`CodeCardTest`).
+Android's own screenshot plugin is not used: it needs `android.experimental.enableScreenshotTest=true`,
+which the Android Gradle plugin 9.4 answers with a `WARNING:` line on every build, and only a
+suppression would silence it.
 
 `data` (`io.tezra.fermix.data`) is the phone's durable state, an Android library with no socket,
 notification or screen in it, tested on the JVM. An `Instance` is design section 9.1's record, field
@@ -657,7 +780,7 @@ bar, a rotation that draws Verify again from the kept ViewModel with its countdo
 keeps the paste sheet's half-typed link,
 and Welcome's and Paired's mark drawn where it arrived when the screen is drawn again. Its instrumented
 tests run the same screens on an emulator (below). Every screen and every failure is a preview at the twelve
-windows, each failure a preview of its own named for its case, with references under
+windows, each failure a preview of its own named for its case, drawn by a record into
 `feature-onboarding/src/test/screenshots`, the SAS in them the vendored IKpsk2 vector's.
 
 Where the code departs from section 13.3, or reads it where it is silent or says two things, for the
@@ -706,7 +829,7 @@ owner to settle:
 - At the expanded window (841×673 dp) at font scale 2.0, two pages outgrow the window: Pair's "Paste a
   pairing link" and Attestation refused's "Troubleshooting" sit below the fold, cut by the window's
   edge, reached by scrolling, with nothing on screen to say the page scrolls (the expanded 2.0
-  references of `PairPreview` and `FailureAttestationRefusedPreview`). The primary action is in view on
+  images of `PairPreview` and `FailureAttestationRefusedPreview`). The primary action is in view on
   both. Dropping the top margins on a short window, or a fade above the actions, would bring them in;
   the canon draws no window that short.
 
@@ -739,7 +862,7 @@ and the network facts into `instanceUiOf`, pure, and does what the controls ask;
 drops the last visit's test and measures the cache again. Its JVM tests cover the link over every
 session state and diagnostic, a session put aside reading "Connecting…" unless it ran out of races, the
 dot, the fingerprint, "Paired since" in a given zone, the candidates' dots and the screen's state; the screen
-is a preview at the twelve windows, at its head and at its foot, with references under
+is a preview at the twelve windows, at its head and at its foot, drawn by a record into
 `feature-instance/src/test/screenshots`.
 
 `feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
@@ -772,7 +895,7 @@ time in the locale it is handed, a last message's plain words, the sync, and on 
 `1002` row reading "Protocol error" and nothing of being unpaired, a revoked row naming who unpaired it,
 the long-press menu, its place over the held row and the tap, the empty state, and "Send to which Fermix?"
 (`ShareSheet`), its rows as the list draws their titles. Every
-screen is a preview at the twelve windows, with references under `feature-chats/src/test/screenshots`.
+screen is a preview at the twelve windows, drawn by a record into `feature-chats/src/test/screenshots`.
 Its instrumented tests (below) long-press a row on a device and keep a rename dialog's half-typed name
 through a rotation and a fold, on the list and on the Instance screen.
 
@@ -922,7 +1045,7 @@ Robolectric raw HTML in a sealed answer and in its row, Run again only from the 
 `ChatRoute` over a real ViewModel (the newest row its state holds, and none below resumed or without the
 window's focus), a fence that closes and a table that forms mid-stream leaving no "code…" chip or raw header
 line, an answer made only of a card with its time and a job's tag, and the indicator line's pixels, peaking
-in the ink over its middle when still and in the sweep's first frame. Every state is a preview at the twelve windows, with references under
+in the ink over its middle when still and in the sweep's first frame. Every state is a preview at the twelve windows, drawn by a record into
 `feature-chat/src/test/screenshots`. Its instrumented tests (below) keep the draft, the row scrolled to and
 the indicator's phrase through a rotation and a fold, and check the long-press menu's order, the
 announcements (the card's, and an arrived answer's plain words once), the hardware keys and Copy's
@@ -954,7 +1077,7 @@ cache (`ChatThumbnails`), never from its URL, its bytes read while the cache is 
 past it; a tap opens the page in a Custom Tab in the instance's tint (androidx.browser), which needs no
 `<queries>` and no permission, so `policy/permissions.txt` is unchanged. A preview that lands above or below
 the row the owner reads moves nothing. The model chip in the composer's second row is seeded by
-`caps.model_state`, then by each `model_changed`: at 70 % on the config's default, tonal with the accent's
+`caps.model_state`, then by each `model_changed`: at 70 % on the config's default, tonal with the ink's
 dot on the chat's own model, and disabled with no connection, "Connect to change the model" above the
 composer. The chip, `/model` on the palette and `/model` typed alone open the "Model" sheet, and none of
 them does while the chip is disabled. The sheet pulls the models and lists the default, each provider's
@@ -1566,8 +1689,11 @@ the build installs SDK platform 37 and build tools 36.0.0 by itself. Point the b
 ```bash
 ./gradlew build                                   # debug and release, lint, detekt, ktlint, dependency checksums, tests
 ./gradlew test :build-logic:test                  # the JVM tests, the build logic's included
-./gradlew verifyRoborazziDebug                    # the screenshot tests against their reference images, and no stale one
-./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true   # redraw the references (Linux), dropping stale ones
+./gradlew recordRoborazziDebug                    # draw every preview into its module's src/test/screenshots (not tracked); part of done
+./gradlew recordRoborazziDebug -Proborazzi.cleanupOldScreenshots=true   # ... and drop the images of previews that are gone
+./gradlew compareRoborazziDebug                   # after a change: each window that moved against the last record, side by side; fails with none recorded
+./gradlew verifyRoborazziDebug                    # ... and fail on each preview that moved
+scripts/app_shots.sh                              # after a green record: each preview's compact light and dark images into docs/app-shots
 ./gradlew :feature-onboarding:connectedDebugAndroidTest   # the instrumented tests, on the device adb sees (below)
 ./gradlew :feature-chats:connectedDebugAndroidTest        # ... and the Chats list's
 ./gradlew :feature-chat:connectedDebugAndroidTest         # ... and the chat's
@@ -1621,7 +1747,9 @@ prints neither. `./gradlew ktlintFormat` fixes what ktlint can fix by itself.
 The configuration cache is on, for speed. A run that reuses its entry skips configuration, and with
 it any Gradle deprecation raised there, so a deprecation fails only the run that first meets it.
 Before calling a change done, run `./gradlew --no-configuration-cache build`; CI always configures
-from scratch.
+from scratch. Then `./gradlew recordRoborazziDebug`, whatever the change: the build draws no preview, and
+a preview's test in a plain `test` passes without composing it, so only a record shows that every
+preview still draws (the design module, above).
 
 Every dependency and plugin is checked against `gradle/verification-metadata.xml` (sha256). When
 a version changes, regenerate that file from an empty Gradle home, review the diff, and build again:
@@ -1641,9 +1769,25 @@ the sha256 of the jar from Google's Maven repository. The file trusts without a 
 Where CI departs from CI/CD design section 3, for the owner to settle:
 
 - Section 3 budgets `build` at 8 minutes, for compiling, lint, detekt, ktlint and the checksums. CI's build
-  job runs all of `./gradlew build`, the done above and the gate's first line, so it runs the JVM tests and
-  the screenshots too, as `unit` and `screens` do. It took 10.8 and then 14.6 minutes, and was cancelled at
-  16 as stages A2 and A3 grew. Its timeout is 30 minutes.
+  job runs all of `./gradlew build`, the done above and the gate's first line, so it runs the JVM tests too,
+  as `unit` does. It took 10.8 and then 14.6 minutes, and was cancelled at 16 as stages A2 and A3 grew, while
+  it compared the screenshots as well (until the entry below). Its timeout is 30 minutes.
+- Section 3's `screens` compares every screen's images and fails on one that changed. The owner decided on
+  2026-10-05: "git ignore those images", the reference screenshots and `docs/app-shots` alike, knowing that CI
+  and a fresh clone then have nothing to compare against, so the comparison leaves the build and CI and runs
+  only on a machine that recorded its own references; the images pushed before stay in history. So no
+  screenshot is tracked, and `screens` draws every preview (`recordRoborazziDebug`), fails on one that throws
+  and on a module that drew none (`checkPreviewsDrawn`), compares nothing, and uploads `docs/app-shots` as its
+  `app-shots` artifact, kept 30 days, or `app-shots-incomplete` when the record is red (the design module,
+  above). Nothing on CI can tell that one preview among a module's others is no longer found: only a compare
+  against a machine's own record names it.
+  This also departs from the rule that a reference changes only with the change that moved it: a change to
+  what a screen draws is shown by a record before it, Roborazzi's compare after it and the pictures of its CI
+  run (AGENTS.md). As a verify the job took 337 to 471 s over its last eight runs on dev, up to Task 16b's,
+  with no Gradle cache to restore; a record writes every image, 2.5 % longer than a verify on a fresh clone
+  with an empty Gradle home on 4 cores (625 s against 610), so with `app_shots.sh` and the upload the longest
+  run becomes about 500 s, section 3's 8 minutes, and the job's timeout stays 16 minutes, twice the budget and
+  about 1.9 times that run.
 
 ## Instrumented tests
 
@@ -2044,6 +2188,12 @@ repository does not track, so these files are not on GitHub:
   the dev loop and gotchas.
 - `MILESTONE_51_ANDROID_CI_CD.md`: this repository's pipelines and the release rules.
 - `MILESTONE_51_ANDROID_COMPANION_APP_UI.html`: the visual canon.
+- `MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION.md`, with its reference player
+  `MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION.html` and the mark's files beside it: the update
+  of 2026-10-04 to M51, for monochrome colour, the Fermix mark and onboarding's motion. Where the two
+  disagree the update wins, over section 13.1's colour above all; the app departs from it in Fermix
+  blue's one use, the owner's, of 2026-10-05 (the design module, above). It is in the owner's
+  design-docs repository, under `fermix/`, and not yet in an engine checkout's `docs/design/`.
 - `MILESTONE_51_ANDROID_APP_PUBLISHING_CHECKLIST.md`: getting to Play.
 
 ## Licence

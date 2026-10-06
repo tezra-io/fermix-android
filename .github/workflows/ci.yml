@@ -1,6 +1,6 @@
 # The Android app's pull-request pipeline (MILESTONE_51_ANDROID_CI_CD.md section 3), on every pull
 # request and every push to main or dev: the vendored contract against its pins and the engine, the
-# build with every quality gate and the dependency checksums, the JVM tests, the screenshot tests,
+# build with every quality gate and the dependency checksums, the JVM tests, every preview drawn,
 # the instrumented tests on the emulator, the release APK's policy, and the release pipeline's scripts
 # and workflows, folded into one job named gate that branch protection requires (C3). It needs no
 # secret, so a fork's pull request runs all of it.
@@ -142,19 +142,27 @@ jobs:
       - name: JVM tests
         run: ./gradlew --warning-mode fail test :build-logic:test
 
-  # Section 3's screens: every @FermixPreviews preview, drawn by Roborazzi on Robolectric at the
-  # twelve windows and compared with its reference image under the module's src/test/screenshots,
-  # which are drawn on Linux x86-64, as this runner draws them. Named at the root,
-  # verifyRoborazziDebug runs in every module that has screenshots. A changed image fails the job,
-  # within Roborazzi's default comparator: a pixel whose RGBA moves by less than 0.007 (on 0 to 1)
-  # counts as unchanged, and the token values themselves are pinned by the design module's tests.
-  # A reference that no preview drew fails it too. A failure names its preview, which its twelve
-  # windows share, so the upload is the locator: each *_compare.png is named for its preview,
-  # window, mode and font scale, and shows the reference, the difference and the new image side by
-  # side. The references go up too, for the HTML report that links to them.
+  # Section 3's screens, as the owner changed it on 2026-10-05 ("git ignore those images", README.md's
+  # departures): no screenshot is tracked, so a checkout has nothing to compare with, and the job compares
+  # nothing. It draws every @FermixPreviews preview, by Roborazzi on Robolectric at the twelve windows
+  # (recordRoborazziDebug, named at the root, so in every module that has previews; a record runs the tests
+  # every time, never from the build cache), so a preview that throws fails the job under its name, and its
+  # tests' reports go up; --continue draws the other modules' previews after one fails, so one run names every
+  # preview that throws. Each module's record ends with checkPreviewsDrawn, which fails a module that drew
+  # none: its previews are no longer found. Then scripts/app_shots.sh copies each preview's compact light and
+  # dark image into docs/app-shots with a README.md that shows them side by side, and that directory goes up
+  # as the app-shots artifact, the app's pictures as this run drew them, kept 30 days: long enough to outlive
+  # a pull request's review and a release candidate's, and any older commit's pictures can be drawn again. A
+  # red record's go up too, without the previews that threw, as app-shots-incomplete, so that whoever downloads
+  # them knows the set is not whole; none go up when app_shots.sh stops (nothing drawn, or a preview without
+  # its two compact images).
   screens:
     runs-on: ubuntu-24.04
-    # 5.3, 5.2, then 6.4 minutes over the last three runs, before A3's cards added 144 references (+20 %).
+    # As a verify of the tracked references the job took 337 to 471 s over the last eight runs on dev, up to
+    # Task 16b's (the verify itself 455 s of the 471), with no Gradle cache to restore. A record writes every
+    # image: on two fresh clones, each on 4 cores of one machine with an empty Gradle home, a record took 625 s
+    # and a verify 610 s, 2.5 % more. With app_shots.sh (2 s) and the upload, the longest run becomes about
+    # 500 s, section 3's 8 minutes, and the timeout, twice that budget, about 1.9 times it.
     timeout-minutes: 16
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -171,19 +179,33 @@ jobs:
           validate-wrappers: true
           cache-provider: basic
 
-      - name: Screenshots against their references
-        run: ./gradlew --warning-mode fail --console=plain verifyRoborazziDebug
+      - name: Draw every preview
+        id: draw
+        run: ./gradlew --continue --warning-mode fail --console=plain recordRoborazziDebug
 
-      - name: Upload the changed images
+      - name: The app's screens in docs/app-shots
+        id: shots
+        if: success() || failure()
+        run: scripts/app_shots.sh
+
+      - name: Upload the app's screens
+        if: (success() || failure()) && steps.shots.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.draw.outcome == 'success' && 'app-shots' || 'app-shots-incomplete' }}
+          path: docs/app-shots/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the reports of the previews that failed
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: screens-diff
+          name: screens-failures
+          if-no-files-found: ignore
           path: |
-            */build/outputs/roborazzi/
-            */build/reports/roborazzi/
-            */build/test-results/roborazzi/
-            */src/test/screenshots/
+            */build/reports/tests/testDebugUnitTest/
+            */build/test-results/testDebugUnitTest/
 
   # Section 3's ui: the instrumented tests of every module that has them, :feature-onboarding's,
   # :feature-chats', :feature-chat's, :push's and the app's, on an emulator at API 35 and 36, as a phone and
