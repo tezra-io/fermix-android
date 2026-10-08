@@ -27,7 +27,7 @@ private const val SETTLED_MILLIS = 2_000L
 /**
  * The SAS under Android's "Remove animations" (design sections 13.1 and 13.8): the code stands still from
  * its first frame, where with motion on its digits land one after another. Robolectric's native graphics
- * draw the frames, as for the two-dot mark.
+ * draw the frames, as for the Fermix mark.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

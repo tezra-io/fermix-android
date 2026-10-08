@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Fermix" parent="android:Theme.Material.NoActionBar" />
+    <style name="Theme.Fermix" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_canvas</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+    </style>
 </resources>

@@ -39,8 +39,8 @@ import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
-import io.tezra.fermix.instance.FermixMark
 import io.tezra.fermix.instance.RenameDialog
+import io.tezra.fermix.instance.StillTwoDotMark
 import io.tezra.fermix.instance.UnpairDialog
 
 // The visual canon's `.ab`: 64 dp, 4 dp at the sides, the title 22/28 medium 16 dp in; its menus (`.menu`)
@@ -203,7 +203,7 @@ private fun EmptyState(onAdd: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            FermixMark(modifier = Modifier.padding(bottom = MARK_BELOW))
+            StillTwoDotMark(modifier = Modifier.padding(bottom = MARK_BELOW))
             Button(
                 onClick = onAdd,
                 modifier = Modifier.fillMaxWidth().padding(top = ACTION_TOP).heightIn(min = FermixSpacing.minTarget),

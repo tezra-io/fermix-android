@@ -53,8 +53,6 @@ data class FermixColors(
     val scrim: Color,
     /** The code card, dark in both modes (section 13.5). */
     val codeCard: Color,
-    /** The two-dot mark drawn on an instance's tint, in both modes (the canon's `.mark.on`). */
-    val onTint: Color,
 ) {
     companion object {
         val Light =
@@ -77,7 +75,6 @@ data class FermixColors(
                 tonalSolid = Color(0xFFECEDF1),
                 scrim = Color(0xFF0B0B0D).copy(alpha = 0.40f),
                 codeCard = Color(CODE_CARD),
-                onTint = Color(0xFFFFFFFF),
             )
 
         val Dark =
@@ -100,7 +97,6 @@ data class FermixColors(
                 tonalSolid = Color(0xFF202126),
                 scrim = Color(0xFF000000).copy(alpha = 0.56f),
                 codeCard = Color(CODE_CARD),
-                onTint = Color(0xFFFFFFFF),
             )
     }
 }

@@ -15,8 +15,8 @@ app/                  the application module, io.tezra.fermix: AppServices, the 
                       session per instance, put aside 5 s out of sight), the RowAnnouncer, the
                       notifications' one owner (Notifications), FCM's service, PushInbox and
                       PushRegistrations, the app lock's gate, the navigator and its deep links, the
-                      share entry (ShareTarget) and a share's route (Shares.kt), the launcher icon, and
-                      the activity;
+                      share entry (ShareTarget) and a share's route (Shares.kt), the launcher icon and
+                      the system splash (the Fermix mark), and the activity;
                       its share tests on a device in src/androidTest; google-services.json is the
                       placeholder project's
 build-logic/          convention plugins: fermix.android.application (the app, with its JVM,
@@ -43,8 +43,10 @@ core-session/         the pairing ceremony and one paired session, io.tezra.ferm
                       keepalive and close codes, the turn machines
 design/               design section 13.1 as code, with the M51 update's monochrome colour (section 1)
                       over it, io.tezra.fermix.design (Compose library): tokens,
-                      FermixTheme, the bundled OFL fonts with SOURCE.json, @FermixPreviews, and the
-                      specimens' previews in src/test
+                      FermixTheme, the bundled OFL fonts with SOURCE.json, the Fermix mark (FermixMark,
+                      its geometry, motion tables and moments), @FermixPreviews, and the
+                      specimens' previews in src/test; design/mark/ vendors the mark's SVG and
+                      geometry JSON from fermix-design-docs, with SOURCE.json
 data/                 the phone's durable state, io.tezra.fermix.data (Android library, JVM-tested
                       on the bundled SQLite): the instance records' DataStore, one Room database
                       per (instance, profile) with its schema in data/schemas, the media cache, the
@@ -239,7 +241,21 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   Robolectric does not draw alike on Linux, macOS and Windows, and CI draws on Linux x86-64. Never commit a
   screenshot, and never turn Roborazzi's copies from `build/intermediates/roborazzi` back on: they write build
   state over the machine's own references. A screen's previews use `@FermixPreviews` and
-  `FermixPreviewTheme { }`.
+  `FermixPreviewTheme { }`. A preview draws a fixed pose, never a clock: a screen that moves is a stateless
+  `…At` composable over the pose and the time, which its stateful shell reads off a clock and a preview passes
+  fixed, since the preview's tester sets no inspection mode and would draw whatever a clock had reached.
+- The Fermix mark's geometry is vendored, never edited: `design/mark/` holds the design's
+  `fermix-mark.svg` and `fermix-mark-geometry.json` byte for byte with `SOURCE.json` (the fermix-design-docs
+  commit, each file's upstream path and sha256), and `MarkGeometry.kt` is written from the JSON, which
+  `MarkGeometryTest` pins value for value and each file to its digest; nothing reads the files at run time. The
+  directory is a test resource of design's and the app's unit tests, so a changed byte is an input that runs them
+  again: a file a test reads from outside its sources, never declared, let a cached green pass a broken pin. A
+  new drawing from the design is re-vendored whole, `SOURCE.json` and `MarkGeometry.kt` in the same change, and
+  the launcher icon's and the splash's paths follow it, as `LauncherIconTest` holds them to the SVG (README, the
+  design module, says how each is written). The mark's motion is one table per moment in `MarkMotion.kt`, asserted
+  key by key against the update and its reference player, each field of a pose held to its own table at every key
+  and every segment's middle (a property wired to another table that starts and ends where it does once passed
+  every other test), and each moment runs on one clock (`rememberMarkMoment`).
 - Colour: no colour but the tokens of `FermixColors` (the M51 update's section 1, monochrome), with
   Material's roles built from them; a screen names no colour of its own but a fixed surface's, as the
   camera's frame and the code card have. A fill in the ink has `onInk` on it, and a wash on the ink is

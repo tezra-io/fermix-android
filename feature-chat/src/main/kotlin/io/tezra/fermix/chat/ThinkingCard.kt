@@ -49,8 +49,6 @@ import io.tezra.fermix.design.FermixMotion
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
-import io.tezra.fermix.design.MarkMotion
-import io.tezra.fermix.design.MarkSize
 import io.tezra.fermix.design.TwoDotMark
 import io.tezra.fermix.session.IndicatorPools
 import kotlinx.coroutines.delay
@@ -118,7 +116,7 @@ private fun IndicatorHeader(line: String) {
                     contentDescription = announcement
                     liveRegion = LiveRegionMode.Polite
                 },
-        ) { TwoDotMark(MarkMotion.ORBIT, size = MarkSize.XS) }
+        ) { TwoDotMark() }
         val colors = LocalFermixColors.current
         val peak = rememberShimmerPeak()
         Crossfade(targetState = line, animationSpec = fade, label = "indicator line") { shown ->

@@ -156,8 +156,7 @@ class ContrastTest {
         // A queued owner's bubble, drawn whole at M51's 55 %: its words on its fill, over light mode's canvas.
         val queued = { color: Color -> color.copy(alpha = QUEUED_ALPHA).compositeOver(light.canvas) }
         assertMeasured(4.3, queued(light.onInk), queued(light.ink))
-        // Sand, the one tint under a mark's 3 : 1: the mark on it, and the avatar on light mode's canvas.
-        assertMeasured(2.7, light.onTint, Tint.Sand.color)
+        // Sand, the one tint under a mark's 3 : 1: its avatar, a plain disc, on light mode's canvas.
         assertMeasured(2.7, Tint.Sand.color, light.canvas)
         // Connecting's step dots: the current one, the ink, against the done ones, the secondary text; those to come,
         // the hairline, on the canvas.

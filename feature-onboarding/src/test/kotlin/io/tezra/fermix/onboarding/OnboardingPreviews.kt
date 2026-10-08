@@ -1,13 +1,19 @@
 package io.tezra.fermix.onboarding
 
 import androidx.compose.runtime.Composable
+import io.tezra.fermix.design.Drop
 import io.tezra.fermix.design.FermixPreviewTheme
 import io.tezra.fermix.design.FermixPreviews
+import io.tezra.fermix.design.Hop
+import io.tezra.fermix.design.MarkPose
+import io.tezra.fermix.design.hopAt
 
 // Onboarding's screenshot tests: every screen of design section 13.3 and every failure, each at the twelve
 // windows of @FermixPreviews, with the visual canon's own example values: the host suj-mbp, the phone
 // Pixel 9 Pro, 1:42 left, and for the code the vendored IKpsk2 vector's SAS (CodeAndCountdownTest holds
-// it to noise_vectors.json). They draw each screen as the app does, from its state, with no ViewModel.
+// it to noise_vectors.json). They draw each screen as the app does, from its state, with no ViewModel. A screen
+// with the Fermix mark is drawn at one instant, its moment over and the mark at rest, never on a clock: the
+// preview's tester sets no inspection mode and draws whatever a clock has reached when it takes the image.
 
 /** The SAS of noise_vectors.json's IKpsk2 vector, the pairing pattern. */
 internal const val PREVIEW_SAS = "669979"
@@ -17,10 +23,15 @@ private const val PREVIEW_SECONDS_LEFT = 102
 
 private val NOTHING = {}
 
+/** The mark at rest, as a screen's moment leaves it. */
+private val AT_REST = { MarkPose.Rest }
+
 @FermixPreviews
 @Composable
 fun WelcomePreview() {
-    FermixPreviewTheme { WelcomeScreen(onGetStarted = NOTHING, onNoFermix = NOTHING) }
+    FermixPreviewTheme {
+        WelcomeAt(pose = AT_REST, ms = { Drop.CLOCK_MILLIS.toFloat() }, actions = WelcomeActions(NOTHING, NOTHING))
+    }
 }
 
 @FermixPreviews
@@ -95,26 +106,26 @@ fun PasteLinkRefusedPreview() {
 @FermixPreviews
 @Composable
 fun ConnectingPreview() {
-    FermixPreviewTheme { ConnectingScreen(phase = ConnectingPhase.CHECKING, host = HOST) }
+    FermixPreviewTheme { ConnectingAt(pose = AT_REST, phase = ConnectingPhase.CHECKING, host = HOST) }
 }
 
 /** Connecting's first line, which names the host. */
 @FermixPreviews
 @Composable
 fun ConnectingReachingPreview() {
-    FermixPreviewTheme { ConnectingScreen(phase = ConnectingPhase.REACHING, host = HOST) }
+    FermixPreviewTheme { ConnectingAt(pose = AT_REST, phase = ConnectingPhase.REACHING, host = HOST) }
 }
 
 @FermixPreviews
 @Composable
 fun ConnectingTailscalePreview() {
-    FermixPreviewTheme { ConnectingScreen(phase = ConnectingPhase.TRYING_TAILSCALE, host = HOST) }
+    FermixPreviewTheme { ConnectingAt(pose = AT_REST, phase = ConnectingPhase.TRYING_TAILSCALE, host = HOST) }
 }
 
 @FermixPreviews
 @Composable
 fun ConnectingSecuringPreview() {
-    FermixPreviewTheme { ConnectingScreen(phase = ConnectingPhase.SECURING, host = HOST) }
+    FermixPreviewTheme { ConnectingAt(pose = AT_REST, phase = ConnectingPhase.SECURING, host = HOST) }
 }
 
 /** The sheet Pair's pencil opens, holding the phone's name. */
@@ -128,14 +139,22 @@ fun RenameSheetPreview() {
 @Composable
 fun VerifyPreview() {
     FermixPreviewTheme {
-        VerifyScreen(state = VerifyUi(PREVIEW_SAS, PREVIEW_SECONDS_LEFT, PHONE), onCancel = NOTHING)
+        VerifyAt(pose = AT_REST, state = VerifyUi(PREVIEW_SAS, PREVIEW_SECONDS_LEFT, PHONE), onCancel = NOTHING)
     }
 }
 
 @FermixPreviews
 @Composable
 fun PairedPreview() {
-    FermixPreviewTheme { PairedScreen(host = HOST, onContinue = NOTHING) }
+    // The hop over: the happy eyes, the title risen in.
+    FermixPreviewTheme {
+        PairedAt(
+            pose = { hopAt(Hop.CLOCK_MILLIS.toFloat()) },
+            ms = { Hop.CLOCK_MILLIS.toFloat() },
+            host = HOST,
+            NOTHING,
+        )
+    }
 }
 
 /** A second Fermix on suj-mbp, in Ocean as the canon draws it. */

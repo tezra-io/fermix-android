@@ -22,15 +22,19 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.tezra.fermix.design.FermixMark
 import io.tezra.fermix.design.FermixMotion
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
-import io.tezra.fermix.design.MarkMotion
-import io.tezra.fermix.design.TwoDotMark
+import io.tezra.fermix.design.MarkPose
+import io.tezra.fermix.design.idling
+import io.tezra.fermix.design.rememberMarkMoment
+import kotlin.random.Random
 
-// The visual canon's Connecting, centred: the line 40 dp under the orbiting mark (its 28 dp and the
-// column's 12 dp gap), then 20 dp lower three 8 dp step dots 8 dp apart: done in the secondary text's grey, the
-// current one in the ink, those to come in the hairline grey (the M51 update's 7.4; their shape is Task 19's).
+// The visual canon's Connecting, centred: the line 40 dp under the mark, 88 dp across (the M51 update's 7.3), then
+// 20 dp lower three 8 dp step dots 8 dp apart: done in the secondary text's grey, the current one in the ink, those to
+// come in the hairline grey (the M51 update's 7.4; their shape is Task 19's).
+private val MARK = 88.dp
 private val LINE_TOP = 40.dp
 private val STEP = 8.dp
 private val STEPS_TOP = 20.dp
@@ -39,19 +43,34 @@ private val STEPS_TOP = 20.dp
 private const val STEPS = 3
 
 /**
- * Step 4 (design section 13.3): the mark orbiting over one line that advances, "Reaching suj-mbp…",
- * "Checking it's really your machine…", "Securing the line…", or "Trying Tailscale…" once reaching has
- * taken 4 s, with the three step dots under it. The line is a polite live region, so TalkBack reads each.
- * Back, the gesture, ends the attempt; the screen has no button.
+ * Step 4 (design section 13.3): the Fermix mark, resting and idling (the M51 update's 7.3; its eyes searching and
+ * checking are 7.4's), over one line that advances, "Reaching suj-mbp…", "Checking it's really your machine…",
+ * "Securing the line…", or "Trying Tailscale…" once reaching has taken 4 s, with the three step dots under it. The
+ * line is a polite live region, so TalkBack reads each. Back, the gesture, ends the attempt; the screen has no button.
+ * The mark's blinks are drawn from [random].
  */
 @Composable
 fun ConnectingScreen(
     phase: ConnectingPhase,
     host: String,
+    random: Random,
+    modifier: Modifier = Modifier,
+) {
+    // No moment of its own: the idle alone.
+    val idle = rememberMarkMoment(length = 0, played = true, random = random)
+    ConnectingAt(pose = { MarkPose.Rest.idling(idle.idle) }, phase = phase, host = host, modifier = modifier)
+}
+
+/** Connecting with the mark in [pose], as the screen or a preview gives it. */
+@Composable
+internal fun ConnectingAt(
+    pose: () -> MarkPose,
+    phase: ConnectingPhase,
+    host: String,
     modifier: Modifier = Modifier,
 ) {
     OnboardingPage(modifier = modifier, centred = true, actions = {}) {
-        TwoDotMark(motion = MarkMotion.ORBIT)
+        FermixMark(pose, MARK)
         AnimatedContent(
             targetState = phase,
             transitionSpec = {

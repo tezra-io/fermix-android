@@ -8,6 +8,12 @@ plugins {
 // implementation, whose source sets fail a cast to the API it declares.
 extensions.configure<LibraryExtension> {
     namespace = "io.tezra.fermix.design"
+    // MarkGeometryTest reads the vendored mark itself, and as a test resource it is an input of the test
+    // task, so a changed byte or a re-vendor reruns the test, which an up-to-date or cached result would pass.
+    sourceSets
+        .getByName("test")
+        .resources.directories
+        .add("mark")
 }
 
 dependencies {

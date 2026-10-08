@@ -222,3 +222,15 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   in dark mode is a lighter red that reads on the dark background. A link to a web page is underlined, such as
   "Don't have Fermix yet?" and "Troubleshooting", and so is an action in the app that only the blue told apart
   from the words around it, such as "Test connection", "Run again" or "Try again".
+- **The Fermix mark.** The two-dot mark gives way to the Fermix mark, the design's own drawing, vendored with its
+  provenance. On Welcome it drops in: a dot falls, lands with a light tick, swells into the mark, the visor opens
+  and the eyes pop in, and the words rise in under it; then it breathes and blinks. On Paired its eyes turn happy
+  and it hops once as the phone confirms the pairing. Connecting and Verify show it resting. Each moment plays
+  once, not again after a rotation, a fold or a return; with Remove animations on, the mark stands still from the
+  first frame, and the tick never plays for a landing it did not draw. On a phone on its side Welcome's mark stands
+  near the top, so "Get started" stays in view. TalkBack reaches Welcome's words and buttons from the start, before
+  they rise in. The launcher
+  icon, its themed layer and the system's splash are the mark too; the notification icon stays the two-dot mark,
+  as does the chat's thinking card, its two dots orbiting in the ink. An instance's avatar is now its colour
+  alone, everywhere it is drawn: the Chats list, the share sheet, a chat's bar, the Instance screen, the name
+  step of onboarding and the conversation shortcuts.

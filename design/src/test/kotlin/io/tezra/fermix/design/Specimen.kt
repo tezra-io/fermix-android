@@ -1,6 +1,5 @@
 package io.tezra.fermix.design
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -47,10 +45,6 @@ import androidx.compose.ui.unit.dp
 // scale 2.0 (673 dp tall), so that every token is drawn in all twelve images. Each places its content as
 // a screen does, through FermixColumn with no modifier. Their words are the tokens' and components' names
 // or the visual canon's own illustration, not product copy, so they stay out of strings.xml.
-
-private const val SECOND_DOT_ALPHA = 0.62f
-private const val DOTS_PER_AVATAR = 6f
-private const val DOT_GAP = 0.28f
 
 /** The colours with their names, the six tints as avatars, and Material's components in the theme. */
 @FermixPreviews
@@ -175,7 +169,7 @@ private fun AppBarSample(colors: FermixColors) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Avatar(Tint.Slate, FermixSpacing.avatarSmall, colors)
+            Avatar(Tint.Slate, FermixSpacing.avatarSmall)
             Text(text = "controlPlane(Edge.Bottom)", style = FermixType.title, color = colors.ink)
         }
         Box(modifier = Modifier.fillMaxWidth().height(FermixSpacing.tintLine).background(Tint.Slate.color))
@@ -278,28 +272,20 @@ private fun Tints(colors: FermixColors) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Avatar(tint, FermixSpacing.avatar, colors)
+                Avatar(tint, FermixSpacing.avatar)
                 Text(text = tint.name, style = FermixType.labelSmall, color = colors.textSecondary)
             }
         }
     }
 }
 
-/** An instance's avatar as the canon draws it: the two-dot mark on the tint, the second dot at 62 %. */
+/** An instance's avatar as the M51 update's reference player draws the Chats row's: a plain disc in the tint. */
 @Composable
 private fun Avatar(
     tint: Tint,
     size: Dp,
-    colors: FermixColors,
 ) {
-    Canvas(modifier = Modifier.size(size).clip(CircleShape).background(tint.color)) {
-        val dot = this.size.width / DOTS_PER_AVATAR
-        val step = dot * (1f + DOT_GAP)
-        val first = Offset(center.x - step / 2f, center.y)
-        drawCircle(color = colors.onTint, radius = dot / 2f, center = first)
-        val second = first + Offset(step, 0f)
-        drawCircle(color = colors.onTint.copy(alpha = SECOND_DOT_ALPHA), radius = dot / 2f, center = second)
-    }
+    Box(modifier = Modifier.size(size).background(tint.color, CircleShape))
 }
 
 @Composable
@@ -324,7 +310,6 @@ private fun Swatches(colors: FermixColors) {
             "tonalSolid" to colors.tonalSolid,
             "scrim" to colors.scrim,
             "codeCard" to colors.codeCard,
-            "onTint" to colors.onTint,
         )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for ((name, color) in swatches) {

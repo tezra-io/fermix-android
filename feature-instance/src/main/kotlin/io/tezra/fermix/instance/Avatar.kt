@@ -13,28 +13,26 @@ import io.tezra.fermix.design.FermixColors
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.Tint
 
-// The visual canon's `.mark`: two dots a dot wide, 0.28 of a dot apart; on a tint (`.on`) both white, the
-// second at 62 %. Its `.dot`: 14 dp (12 on the small avatar) on a 2 dp ring of the canvas, 1 dp past the
-// avatar's bottom right.
+// The visual canon's `.mark`: two dots a dot wide, 0.28 of a dot apart. Its `.dot`: 14 dp (12 on the small
+// avatar) on a 2 dp ring of the canvas, 1 dp past the avatar's bottom right.
 private const val MARK_GAP = 0.28f
-private const val SECOND_DOT_ALPHA = 0.62f
 private val DOT_RING = 2.dp
 private val DOT_OUTSET = 1.dp
 
 /** The avatar's sizes in the canon: the app bar's (`.av.s`), a row's (`.av`) and the Instance header's (`.av.l`). */
 enum class AvatarSize(
     val disc: Dp,
-    val markDot: Dp,
     val connectionDot: Dp,
 ) {
-    SMALL(disc = 32.dp, markDot = 6.dp, connectionDot = 12.dp),
-    ROW(disc = 48.dp, markDot = 8.dp, connectionDot = 14.dp),
-    LARGE(disc = 72.dp, markDot = 12.dp, connectionDot = 14.dp),
+    SMALL(disc = 32.dp, connectionDot = 12.dp),
+    ROW(disc = 48.dp, connectionDot = 14.dp),
+    LARGE(disc = 72.dp, connectionDot = 14.dp),
 }
 
 /**
- * A Fermix's avatar (design section 9.2): the mark in white on its [tint], one of data's TINT_NAMES, and the
- * connection [dot], none where the canon draws none.
+ * A Fermix's avatar (design section 9.2): its [tint], one of data's TINT_NAMES, as a disc with nothing on it, as the
+ * M51 update's reference player draws its Chats row (the two-dot mark it carried is retired, 7.3), and the connection
+ * [dot], none where the canon draws none.
  */
 @Composable
 fun InstanceAvatar(
@@ -47,21 +45,20 @@ fun InstanceAvatar(
     val fill = tintColor(tint)
     Canvas(modifier = modifier.size(size.disc)) {
         drawCircle(color = fill)
-        drawMark(size.markDot.toPx(), colors.onTint, colors.onTint.copy(alpha = SECOND_DOT_ALPHA))
         if (dot != null) drawConnectionDot(size.connectionDot.toPx(), dotColor(dot, colors), colors.canvas)
     }
 }
 
 /**
- * The canon's `.mark.xl`: 28 dp dots, both in the ink (the M51 update's 7.3), still, as the empty list and the lock
- * draw it.
+ * The canon's `.mark.xl`: 28 dp dots, both in the ink, still, as the empty list and the lock draw it (design sections
+ * 13.4 and 9.4, which the M51 update leaves standing; its Fermix mark is onboarding's).
  */
 @Composable
-fun FermixMark(modifier: Modifier = Modifier) {
+fun StillTwoDotMark(modifier: Modifier = Modifier) {
     val colors = LocalFermixColors.current
     val dot = 28.dp
     Canvas(modifier = modifier.size(width = dot * (2f + MARK_GAP), height = dot)) {
-        drawMark(dot.toPx(), colors.ink, colors.ink)
+        drawMark(dot.toPx(), colors.ink)
     }
 }
 
@@ -80,16 +77,15 @@ fun dotColor(
         Dot.ERR -> colors.err
     }
 
-/** The two dots, each [dot] across, centred. */
+/** The two dots in [ink], each [dot] across, centred. */
 private fun DrawScope.drawMark(
     dot: Float,
-    first: Color,
-    second: Color,
+    ink: Color,
 ) {
     val radius = dot / 2f
     val apart = dot * (1f + MARK_GAP) / 2f
-    drawCircle(color = first, radius = radius, center = center - Offset(apart, 0f))
-    drawCircle(color = second, radius = radius, center = center + Offset(apart, 0f))
+    drawCircle(color = ink, radius = radius, center = center - Offset(apart, 0f))
+    drawCircle(color = ink, radius = radius, center = center + Offset(apart, 0f))
 }
 
 /** The connection dot, [across] wide with its ring, at the bottom right, a little past the disc. */

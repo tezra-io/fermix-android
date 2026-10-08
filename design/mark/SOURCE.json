@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "description": "Provenance of the Fermix mark the design module draws and the app's launcher icon and splash are made from (the M51 update's section 2, MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION.md). Each file is a byte-identical copy of the file at source_path in the owner's design-docs repository at the pinned commit. Nothing reads them at run time and the APK carries neither: MarkGeometry.kt holds the geometry as Kotlin, and design's MarkGeometryTest holds it to fermix-mark-geometry.json, checks every digest below and that this directory holds no other file; the app's LauncherIconTest holds the launcher icon, its monochrome layer and the splash's icon to fermix-mark.svg.",
+  "upstream": {
+    "repository": "tezra-io/fermix-design-docs",
+    "commit": "ec9d0a3a74eb82aaad378eb714f3ef34aa39027a",
+    "branch": "main",
+    "read_at": "296341d85d8cfe5405a6c2042398af3cf47ebadd",
+    "retrieved_at": "2026-10-05"
+  },
+  "provenance_note": "commit is the last that changed either file (2026-10-04, \"docs: M51 update, the mark's eyes are tall rounded rectangles\"); they were copied from the clean checkout at read_at, where both are unchanged since commit. The mark was traced from FermixMarkMaster.png in fermix-macos, the master of the Mac app's monochrome mark.",
+  "files": [
+    {
+      "path": "mark/fermix-mark.svg",
+      "source_path": "fermix/MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION/fermix-mark.svg",
+      "sha256": "3916feb7ba95760ddf81ca1706ed3747248fe5f58c234846d004466736801023"
+    },
+    {
+      "path": "mark/fermix-mark-geometry.json",
+      "source_path": "fermix/MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION/fermix-mark-geometry.json",
+      "sha256": "4a1941636f9d1e0a8efc70041b0327cd91a417d0279dee5efdf67f5e43224d7f"
+    }
+  ]
+}

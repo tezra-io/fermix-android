@@ -379,11 +379,53 @@ and tabular figures for code and the SAS, and tabular figures in label-small's t
 `FermixColumn`, section 13.11's centred column of 640 dp or 480 dp on a window 600 dp wide or more
 and the whole window below that, with the window's width class from androidx.window, which needs
 no Activity, so a preview gets the class its device has; `FermixMotion`, the named durations, the
-standard spring scheme everywhere and the expressive one inside `ExpressiveMotion { }` for the SAS
-reveal, Paired and the first chat, and `LocalReducedMotion`, true while the animator duration scale
-is 0; `Modifier.controlPlane(edge, colors)`, the tonal surface with its hairline; and
+standard spring scheme everywhere and the expressive one inside `ExpressiveMotion { }`, which the SAS
+reveal takes (section 13.1 allows it there, on Paired and for the first chat), and `LocalReducedMotion`,
+true while the animator duration scale is 0; `Modifier.controlPlane(edge, colors)`, the tonal surface with its hairline; and
 `HapticFeedback.perform(view, use)`, which plays each `HapticUse` with its meaning (`Haptic`: Act,
-Refuse, Arrive, Threshold) through its platform constant. The fonts are google/fonts' own files at
+Refuse, Arrive, Threshold) through its platform constant.
+The Fermix mark (the M51 update's sections 2 to 6) is `FermixMark(pose, size)`: a pose in, pixels out, the
+outline in the ink with the visor cut out, the eyes rounded rectangles whose corners never pass half their height,
+the happy arcs, every scale about the feet and the hop's lift on top, never clipped to its box. It reads its pose,
+a function, as it draws, so a moment's clock moves it frame by frame without composing it again, in the same phase
+as the words that rise on that clock; a preview passes a fixed pose. It draws the falling dot as an ellipse, builds
+the morph's path afresh each frame only while the dot swells, and draws the exact outline from then on. Its geometry
+is `MarkGeometry`, written from the design's own `fermix-mark-geometry.json`, which `design/mark/` vendors with
+`fermix-mark.svg` beside `SOURCE.json` (the fermix-design-docs commit, each file's upstream path and sha256):
+`MarkGeometryTest` holds every value to the file and each file to its digest, and nothing reads the file at run
+time. The directory is a test resource of design's tests and of the app's, whose `LauncherIconTest` reads the SVG,
+so a changed byte runs both again rather than passing from the build cache. Its motion is data and pure functions:
+`MarkEasing`, `sample` (before a table's first key its first value, between two keys the earlier one's easing, from
+the last key its value; by index, so a frame's samples make nothing), one table per moment, `Drop` and `Hop`, which
+`MarkMotionTest` asserts key by key against the update and against the reference player's literals, `dropAt` and
+`hopAt` giving a `MarkPose`, each field from its own table (`MarkMotionTest` holds every field to its table at every
+key and every segment's middle, and the fields the moment does not drive at rest), the morph from
+the falling dot's ellipse to the outline over the outline's 96 points (`morphPoints`, `catmullRom`), the words' rise
+(`riseIn`), and the idle (`breathAt`, `Blinks` drawn from a `Random` the caller passes, and `MarkIdle.after`, which
+moves the idle on by a frame's time, 100 ms at most). A moment runs on one clock, `rememberMarkMoment`: a linear
+clock to the moment's end, then the idle until the screen leaves, at most 158 breaths of it drawn (about ten
+minutes), after which the mark rests. Time out of sight counts for nothing: the first frame back moves the idle on
+100 ms at most, and it breathes on from where it was. Under Remove animations the moment is made at its last frame,
+so the first frame drawn is that one, and nothing breathes. `TwoDotMark` is the thinking card's alone: two dots
+orbiting in the ink. `SpecimenMark` draws the mark's fixed poses: the drop's beats, an idle blink's middle, the
+happy eyes and the hop's top.
+
+A new drawing of the mark is vendored whole, in one change. Copy `fermix-mark.svg` and `fermix-mark-geometry.json`
+from the design-docs commit into `design/mark/` byte for byte, and write the commit and each file's sha256 into
+`SOURCE.json`. Write `MarkGeometry.kt` from the JSON, every number as the JSON writes it: `outline` and `visor` as
+`OUTLINE` and `VISOR`, joined from string pieces at their commands; `eyes` as `leftEye` and `rightEye`, their
+`cornerRadius` as `EYE_CORNER`; `visorCenter`, `feet` and `morphCenter`; `outlinePoints96.points` as
+`outlinePoints`, in order; and the four numbers of the `happyArc` sentence as the `HAPPY_` constants. Then write the
+app's `ic_launcher_foreground` and `splash_mark` from the SVG: one group at scale 0.57, moved 25.5 on both axes;
+its first path the SVG's even-odd path with every number rounded half up to one decimal and written relative (an
+absolute `M`, then `c`, `m` and `z`, a number's leading zero dropped and a separator only where the path grammar
+needs one, which keeps it under lint's `VectorPath` limit of 3,000 characters); then each eye's `rect` as a rounded
+rectangle's path at its exact numbers, `Mx+r,y Hx+w−r Ar,r 0,0 1,x+w,y+r Vy+h−r Ar,r 0,0 1,x+w−r,y+h Hx+r
+Ar,r 0,0 1,x,y+h−r Vy+r Ar,r 0,0 1,x+r,y Z` without the spaces; the foreground filled in `#0B0B0D`, the splash in
+`@color/mark_ink`. `MarkGeometryTest` and `LauncherIconTest` fail until every value and point matches (the body's
+points within 0.05 units) and the icon's farthest point lies inside the safe zone.
+
+The fonts are google/fonts' own files at
 one commit, unmodified, under the SIL Open Font License 1.1: `src/main/res/font/` holds them,
 `src/main/assets/fonts/` their `OFL.txt` and `TRADEMARKS.md`, which ship in the APK with them, and
 `SOURCE.json` the commit and each file's upstream path and sha256, which a test checks. They add
@@ -431,8 +473,9 @@ reads it where it is silent, for the owner to settle:
 - A queued message of the owner's is drawn whole at M51's 55 % (section 13.6), so its words on its ink
   measure 4.3 to 4.4 : 1 in light mode (5.0 : 1 in dark), just under 4.5 : 1; at 60 % they would measure
   5.2 : 1. The opacity is M51's and stands.
-- Sand, one of the six tints, which 1.2 leaves as they are, measures 2.7 : 1 for the mark drawn on it and
-  for the avatar on light mode's canvas, under a mark's 3 : 1; the other five pass.
+- Sand, one of the six tints, which 1.2 leaves as they are, measures 2.7 : 1 for the avatar on light mode's
+  canvas, under a mark's 3 : 1; the other five pass. Nothing is drawn on a tint any more: the avatar is a plain
+  disc, as the reference player's Chats row draws it.
 - 1.3's focus, a 2 dp ink ring at a 2 dp offset, is not drawn, and no task owns it yet: this change is
   colour only and the app draws no focus indicator of its own to recolour, and Tasks 18 and 19 own the
   update's sections 2 to 7. Until one draws it, a focused button or row shows only Material's state layer,
@@ -443,7 +486,7 @@ reads it where it is silent, for the owner to settle:
   the ink: text buttons and dialog actions, Connecting's current step, the SAS ring, the upload bars, the
   approval's Approve and countdown, the model chip's dot and the sheet's check, a Chats row's "thinking…"
   and "Re-pair" lines, the composer's send, stop, mic and record controls, the attach sheet's Send and
-  "Send as files", the pulse ring, the beam cursor and every caret, the avatar's second dot, the
+  "Send as files", the pulse ring, the beam cursor and every caret, the
   Instance screen's section headers and its actions, and the error cards' actions.
 - A text action that the accent alone told from the words around it is underlined, as the reference
   player draws a text button, since in the ink nothing else marks it: an error card's "Run again", "Reset
@@ -738,6 +781,27 @@ one failure screen, "Can't reach" read through section 5.2's reachability, "Try 
 link "Can't reach" holds, a wrong machine never retried. Leaving the ceremony's screens cancels an
 attempt not yet approved. The pure rules are `stackOf`, `topOf`, `screenFor`, `keyAfter`, `stepAfter`,
 `connectingPhase`, `appBackStack`, `securesWindow` and `darkUnderBars`.
+The Fermix mark is on four of them (the M51 update's 7.3). Welcome drops it in at 112 dp, 120 dp under the
+status bar as the reference player has it (on a window under 480 dp tall, 24 dp under it, the room the drop's
+first dot takes, so "Get started" stays in view), on one clock: the dot lands at 380 ms with `HapticUse.MarkLands`
+(`CLOCK_TICK`, the update's optional tick), the title, the tagline and the actions rise in 10 dp at 1,100, 1,210
+and 1,320 ms, and the idle follows; it plays once an onboarding run (`rememberSaveable`), so a rotation, a fold, a
+return from Pair and the process's restoration show the resting mark and the words at once. The tick plays only on
+a frame that draws the landing, from 380 ms until its squash settles at 470 (`Drop.drawsLanding`): never on the
+clock standing at its end, as under Remove animations, once it is turned off again, or after a restoration, nor on
+the first frame back after time out of sight, which finds the dot long landed. Words not yet risen keep an alpha of a thousandth, which draws nothing, as Compose leaves a layer at
+alpha 0 out of what TalkBack reads: TalkBack reaches Welcome's words and actions from the first frame. Paired, at
+88 dp, the mark and the title raised 30 dp above the centre by the 60 dp the player puts under them, takes the
+approval as its first frame: happy eyes and one hop, `PairApproved` (`CONFIRM`) at 90 ms as the
+mark leaves the ground, never as the screen is composed, the title rising 8 dp at 250 ms, the happy eyes kept,
+breathing; once, too, and the approval is confirmed once (`rememberSaveable`), at once when the hop is not drawn:
+under Remove animations, and when Paired is restored before the mark left the ground. Connecting (88 dp) and Verify
+(56 dp, centred over the title, 32 dp under the status bar as the player has it, and the title 20 dp under it)
+show it resting and idling. Each screen is a thin stateful shell over a stateless `WelcomeAt`, `PairedAt`,
+`ConnectingAt` or `VerifyAt`, which takes the pose and the clock as functions read while drawing, so a moment
+moves the mark and the words in one phase without composing the screen again, and a preview passes one fixed
+pose. The idle's blinks come from the `Random` each screen takes, which the entries pass as Kotlin's default and a
+test as a seeded one.
 `QrPreview` binds CameraX's preview and a 1280×720 analysis (16:9, the latest frame only, at the
 camera's own rate) to the screen's lifecycle, on the back camera or the front one, and reads each frame
 with zxing-cpp's Android binding in process, through `qrReader()`: QR codes of Model 2 alone, the model
@@ -778,7 +842,15 @@ state, a scanned link's `CONFIRM`, the refusals' `REJECT`, the paste sheet's rea
 settings" opening the app's own page in the system's settings, Welcome's actions above a navigation
 bar, a rotation that draws Verify again from the kept ViewModel with its countdown running on, and
 keeps the paste sheet's half-typed link,
-and Welcome's and Paired's mark drawn where it arrived when the screen is drawn again. Its instrumented
+and Welcome's drop and Paired's hop on a test clock (`MarkMomentsTest`): no word before 1,100 ms, the title
+from 1,100, the tagline from 1,210 and the actions from 1,320, and all of them landed at 1,740, TalkBack reaching
+each from the first frame, neither moment played again after a restoration or a return, Remove animations opening
+on the last frame as the screen first draws, with nothing moving and no frame asked for, and, turned on mid-drop,
+showing the last frame on the next one, the mark with the words; `CLOCK_TICK` once at 380 ms, and none after a
+restoration before it or when Remove animations, on from the start or turned on before 380 ms, is turned off
+again; `CONFIRM` once at 90 ms and once after a restoration before it; on a phone on its side (914 × 411 dp, its
+24 dp bars), the drop's first dot whole and "Get started" above the navigation bar; and no frame asked for once
+the screen leaves. Its instrumented
 tests run the same screens on an emulator (below). Every screen and every failure is a preview at the twelve
 windows, each failure a preview of its own named for its case, drawn by a record into
 `feature-onboarding/src/test/screenshots`, the SAS in them the vendored IKpsk2 vector's.
@@ -833,6 +905,48 @@ owner to settle:
   both. Dropping the top margins on a short window, or a fade above the actions, would bring them in;
   the canon draws no window that short.
 
+Where the mark's moments depart from the M51 update's sections 2 to 6 or from its reference player, or read
+them where they are silent, for the owner to settle:
+
+- The idle starts when a moment's clock ends, at 1,800 ms on Welcome and 700 ms on Paired, as section 4's
+  "after the drop" says; the player breathes and blinks from the mark's first frame, through the drop and the
+  hop. The breath is counted from a quarter breath before the idle starts, so it begins at rest instead of
+  jumping to its middle, and the first blink comes 2.6 to 6.0 s into the idle, where the player blinks on the
+  first frame.
+- The idle stops after 158 whole breaths of it drawn, about ten minutes, and the mark then rests: the update
+  breathes until the screen leaves, and every loop here has a bound. Only time drawn counts: a frame moves the
+  idle on 100 ms at most, so a screen left in the background or under a sleeping display breathes on from where
+  it was when it is seen again.
+- There is no glance: section 4 makes it optional, and the player has none.
+- Paired's hop starts on the screen's first frame, which is when the screen takes the approval, so `CONFIRM`
+  plays at 90 ms and the title rises 8 dp from 250 ms, as section 5 times them; the player starts the hop
+  120 ms after the screen enters, plays the haptic at 210 ms and raises the title 10 dp at 250 ms.
+- The drop's and the hop's tables match the update's and the player's key for key; the back-out easing, as
+  the update's formula gives it, overshoots by 12 % (1.1208), where its text says about 10 %.
+- The update's 3.4 says the visor stays shut for the whole morph, but its own 3.2 table opens the visor from
+  820 ms (0.008 at 820.1 ms, 0.51 at 830) while the morph runs on to 0.999, the exact outline's threshold, at
+  about 862.5 ms (0.9989 at 860): for about 43 ms the visor is cut out of the morph's 96 points, inside them by
+  9 units at least. The app follows the table, as the player does.
+- `CLOCK_TICK` at 380 ms (the update's optional 3.5) is kept, as `HapticUse.MarkLands`, Arrive: the owner may
+  cut it. It plays only on a frame that draws the landing, 380 to 470 ms on the drop's clock: not under Remove
+  animations, nor when it is turned off again, not after a rotation, a fold or the process's restoration before
+  380 ms, which shows the resting mark, and not when Welcome comes back from out of sight past 470 ms. Paired's `CONFIRM` plays once whatever
+  happens, at once when the hop is not drawn, as the approval still lands.
+- Verify's mark is centred over the left-aligned title, 32 dp under the status bar with the title 20 dp under
+  it, where the player centres the whole page; the rest of Verify is as it was. The mark's eyes on Connecting and
+  Verify (the update's 7.4) and the shared element between them (7.3) are Task 19's. On a phone on its side
+  Verify's "Shown as" and "Cancel" sit below the fold, as they did before the mark, now 36 dp lower.
+- Welcome's mark stands 120 dp under the status bar on a portrait phone, as the player draws it, and 24 dp under
+  it on a window under 480 dp tall, a phone on its side, which the update does not draw: there the player's 120 dp
+  put "Get started" under the navigation bar. 24 dp is the room the drop's first dot takes above the mark's box
+  (21 of its units at 112 dp). The last few dp of "Don't have Fermix yet?" stay under the fold there.
+- Connecting keeps the visual canon's group centred in the room above the actions, where the player raises its
+  mark, line and step dots by 60 dp (120 dp under them); Connecting's dots stand 12 dp under a line box 64 dp tall
+  there, 20 dp under the line here, and their shape is Task 19's. With no box, the mark here moves 16 dp (24 at
+  font scale 2.0) as the line goes from one line to two and back; the player's fixed box keeps it still, which
+  7.3's anchor wants, and holding the line so is 7.4's line change, Task 19's. Paired stands as the player does,
+  its mark and title 30 dp above the centre.
+
 `feature-instance` (`io.tezra.fermix.instance`) is design section 13.7's Instance screen and what the
 Chats list shares with it, a Compose library on core-session and data. `Link` is how a Fermix's link
 reads, from its session's state and diagnostics (`linkOf`): up over a scope with its latency, not yet
@@ -842,8 +956,10 @@ ends on it, so the newest of the diagnostics that say how a connection ended dec
 error while it was the last, cleared by a connection or a later ending, and never shown as revoked.
 `Link.dot` is section 13.5's dot, never optimistic: ok only for a completed handshake, warn while
 connecting and for a changed identity, err for a revoked phone, the tertiary ink otherwise.
-`InstanceAvatar` draws the mark on a row's tint with that dot at the canon's three sizes, and
-`FermixMark` the large two-dot mark the empty list and the lock show. `InstanceScreen(ui, actions)` is the
+`InstanceAvatar` draws a row's tint as a plain disc, as the M51 update's reference player draws its Chats row,
+with that dot at the canon's three sizes, and `StillTwoDotMark` the large two-dot mark the empty list and the
+lock still show: the update names no mark for them, and `TwoDotMark`, the orbiting one, is the thinking card's
+alone; which mark they show is the owner's to settle. `InstanceScreen(ui, actions)` is the
 canon's page: the header (the name to tap and rename, "Fermix on {host}", "Reset to gateway name" under a
 nickname); Connection (the state, the live path, each candidate with its scope, the protocol, and "Test
 connection" with its result in place, one race over the record's candidates whose socket closes at once;
@@ -887,7 +1003,8 @@ records, the sessions, the turns and each instance's main profile, and moves, re
 removes. `ConversationSync` keeps one long-lived conversation shortcut, in the share category
 (`SHARE_CATEGORY`) so the share sheet offers it as a Direct Share target, and one notification channel per
 (instance, profile), id `{instance}:{profile}`, named as its row reads (`conversationName`: the title,
-the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row, through
+the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row, its icon the avatar, the
+tint alone to the icon's edges (`conversationAvatar`), through
 `ConversationSurface`: `PlatformConversations` on the phone, a fake in the JVM tests. Each row's
 conversation is made with it, published again when it is renamed or its agent is, and removed with it, and
 the first sync after a start removes what a removal cut short. The JVM tests cover the row rules, a row's
@@ -1605,10 +1722,18 @@ one typed would be, that command once Send is tapped. Nothing is sent until the 
 flight, a rotation and a process death after the copy keep the tray.
 
 The launcher icon is adaptive (`mipmap-anydpi/ic_launcher.xml`, and `ic_launcher_round.xml` as the manifest's
-`roundIcon`): the canvas white background, the two-dot mark as the foreground, and the mark in one colour as the
-monochrome layer that Android 13's themed icons draw. minSdk 35 reads only the adaptive icon, so no legacy
-bitmap is shipped. The notifications' small icon, `ic_notification`, is that monochrome mark at 24 dp, and the
-app draws in the design's own colours, never the wallpaper's (`LauncherIconTest` reads all three).
+`roundIcon`): the canvas white background, the Fermix mark from `design/mark/fermix-mark.svg` in light mode's
+ink as the foreground, and that same drawing as the monochrome layer that Android 13's themed icons draw, which
+read its alpha alone and draw it in the wallpaper's colour. The mark is 57 dp across, its centre the icon's, its farthest point 31.6 dp from it, inside the 66 dp circle
+every launcher's mask leaves whole. Its body's numbers are the SVG's to one decimal and relative, as lint's
+`VectorPath` refuses a path over 3,000 characters; the eyes are the SVG's exactly (the design module's paragraph
+says how a new drawing is written in). minSdk 35 reads only the
+adaptive icon, so no legacy bitmap is shipped. The system's splash (the update's 3.6) is the theme's: the
+canvas of the mode behind the same mark in the mode's ink (`splash_mark`), with no splash library and nothing
+holding it, so it goes as the first frame, Welcome's, draws. The notifications' small icon, `ic_notification`,
+is still the two-dot mark in one colour at 24 dp, and the app draws in the design's own colours, never the
+wallpaper's (`LauncherIconTest` reads them all: each icon's paths against the SVG, the safe zone, the splash
+per mode, no hold, the small icon).
 
 The app's tests run on
 Robolectric through the application convention, over the app's own services and the bundled SQLite, each
@@ -1645,7 +1770,7 @@ Fermix asking, the lock first, the sheet never drawn over it, and the share lost
 nothing with none paired; a Direct Share that starts the activity opening its chat over the one kept from before
 (`ShareColdStartTest`); the entry, an activity with no window, affinity or place in Recents, its filters, its
 share target and the activity's `singleTop`, as the manifest and the shortcuts declare them (`ShareEntryTest`); the
-launcher's adaptive icon and its layers (`LauncherIconTest`); the App lock switch turning on once a screen lock is set; the bars over the
+launcher's adaptive icon, its layers and the splash (`LauncherIconTest`); the App lock switch turning on once a screen lock is set; the bars over the
 scan in light mode and back after it; a second tap on a failure screen as it leaves dropped; the pairing-wait
 service started as the app leaves Verify and not otherwise, and ending itself; and the upload hold, a session
 with an upload in flight spared past the grace until its upload ends or the hold passes, and the upload

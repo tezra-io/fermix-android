@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The system splash in dark mode: the near-black canvas, and the mark in the soft off-white ink, as FermixColors.Dark. -->
+    <color name="splash_canvas">#0B0B0D</color>
+    <color name="mark_ink">#DEDFE3</color>
+</resources>

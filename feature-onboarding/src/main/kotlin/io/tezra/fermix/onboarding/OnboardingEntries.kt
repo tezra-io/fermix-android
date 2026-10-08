@@ -23,13 +23,15 @@ import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 import kotlin.time.TimeMark
 
 /**
  * Onboarding's screens as entries of the app's back stack (design section 12.1, Navigation 3): each
  * [OnboardingKey] draws its screen from [viewModel]'s state, and hands the screen's actions to it, or
  * outside the app (a page, the app's settings, the Tailscale app, the VPN settings, the system's prompts).
- * The scan's [camera] and the paste sheet's [clip] are the phone's, or the instrumented tests' stand-ins.
+ * The scan's [camera] and the paste sheet's [clip] are the phone's, or the instrumented tests' stand-ins; the Fermix
+ * mark's blinks come when Kotlin's default random source draws.
  * An action reaches [viewModel] only from the screen on top ([topOf]): one popped off the stack is still
  * drawn, and hit, as it leaves, and a second quick tap lands there. The app keeps [viewModel] for its
  * activity, so a rotation or a fold keeps the pairing.
@@ -45,12 +47,16 @@ fun onboardingEntries(
     builder.entry<OnboardingKey.Scan> { ScanEntry(viewModel, camera, clip) }
     builder.entry<OnboardingKey.Connecting> {
         val ui by viewModel.ui.collectAsState()
-        ConnectingScreen(phase = ui.connecting, host = ui.host)
+        ConnectingScreen(phase = ui.connecting, host = ui.host, random = Random.Default)
     }
     builder.entry<OnboardingKey.Verify> { VerifyEntry(viewModel) }
     builder.entry<OnboardingKey.Paired> { key ->
         val ui by viewModel.ui.collectAsState()
-        PairedScreen(host = ui.host, onContinue = viewModel.whileShowing(key, viewModel::continueFromPaired))
+        PairedScreen(
+            host = ui.host,
+            onContinue = viewModel.whileShowing(key, viewModel::continueFromPaired),
+            random = Random.Default,
+        )
     }
     builder.entry<OnboardingKey.Name> { key ->
         val ui by viewModel.ui.collectAsState()
@@ -69,6 +75,7 @@ private fun WelcomeEntry(viewModel: OnboardingViewModel) {
     WelcomeScreen(
         onGetStarted = viewModel.whileShowing(OnboardingKey.Welcome, viewModel::getStarted),
         onNoFermix = { openPage(context, R.string.onboarding_url_install) },
+        random = Random.Default,
     )
 }
 
@@ -128,7 +135,7 @@ private fun VerifyEntry(viewModel: OnboardingViewModel) {
     val verify = checkNotNull(ui.verify) { "Verify shows a ceremony's code" }
     val left by rememberSecondsLeft(verify.expiresAt)
     val cancel = viewModel.whileShowing(OnboardingKey.Verify, viewModel::back)
-    VerifyScreen(state = VerifyUi(verify.sas, left, verify.deviceName), onCancel = cancel)
+    VerifyScreen(state = VerifyUi(verify.sas, left, verify.deviceName), onCancel = cancel, random = Random.Default)
 }
 
 @Composable

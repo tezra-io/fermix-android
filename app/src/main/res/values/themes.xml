@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The window behind the first Compose frame; Compose draws everything after it. -->
-    <style name="Theme.Fermix" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      The window behind the first Compose frame; Compose draws everything after it. On a cold start the system's
+      splash shows the mark on the canvas (the M51 update's 3.6) and goes when the first frame draws: nothing holds it.
+    -->
+    <style name="Theme.Fermix" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_canvas</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
+    </style>
 </resources>

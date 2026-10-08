@@ -31,7 +31,7 @@ import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
-import io.tezra.fermix.instance.FermixMark
+import io.tezra.fermix.instance.StillTwoDotMark
 
 // The visual canon's lock (`.lk`): centred, 24 dp of padding, 16 dp between the mark, the headline and
 // "Unlock", each 12 dp further down; its App lock setting: a 64 dp bar with the title 4 dp past the back
@@ -64,7 +64,7 @@ fun LockScreen(onUnlock: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(LOCK_GAP, Alignment.CenterVertically),
     ) {
-        FermixMark()
+        StillTwoDotMark()
         Text(
             text = stringResource(R.string.chats_locked),
             style = FermixType.headline,

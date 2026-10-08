@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The system splash in light mode (the M51 update's 3.6): the canvas, and the mark in the ink, as FermixColors.Light. -->
+    <color name="splash_canvas">#FFFFFF</color>
+    <color name="mark_ink">#0B0B0D</color>
+</resources>

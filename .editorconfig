@@ -37,3 +37,12 @@ indent_size = unset
 indent_style = unset
 insert_final_newline = unset
 trim_trailing_whitespace = unset
+
+# The Fermix mark's vector and geometry are byte-for-byte the design's (design/mark/SOURCE.json).
+[design/mark/fermix-mark*]
+charset = unset
+end_of_line = unset
+indent_size = unset
+indent_style = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset

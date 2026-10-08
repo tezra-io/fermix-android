@@ -7,6 +7,17 @@ android {
     defaultConfig {
         applicationId = "io.tezra.fermix"
     }
+    // LauncherIconTest holds the icon and the splash to design's vendored mark, and as a test resource the
+    // mark is an input of the test task, so a changed byte or a re-vendor reruns it, which an up-to-date or
+    // cached result would pass.
+    val mark =
+        layout.settingsDirectory
+            .dir("design/mark")
+            .asFile.path
+    sourceSets
+        .getByName("test")
+        .resources.directories
+        .add(mark)
 }
 
 dependencies {

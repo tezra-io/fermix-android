@@ -13,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import kotlin.random.Random
 
 /** Long past the code's last digit landing: six digits 40 ms apart, each on a spring. */
 private const val SETTLED_MILLIS = 2_000L
@@ -44,7 +45,9 @@ class ReduceMotionTest {
     private fun frames(scale: String): Pair<Bitmap, Bitmap> {
         shell("settings put global $SCALE $scale")
         rule.mainClock.autoAdvance = false
-        rule.setContent { FermixTheme { VerifyScreen(VerifyUi(TEST_SAS, 102, PHONE), onCancel = {}) } }
+        rule.setContent {
+            FermixTheme { VerifyScreen(VerifyUi(TEST_SAS, 102, PHONE), onCancel = {}, random = Random(1)) }
+        }
         rule.mainClock.advanceTimeByFrame()
         val code = rule.onNodeWithContentDescription(SPOKEN_TEST_SAS)
         val first = code.captureToImage().asAndroidBitmap()

@@ -67,6 +67,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
 
@@ -355,7 +356,7 @@ class OnboardingScreensTest {
 
     @Test
     fun `on a window drawn edge to edge, Welcome's actions stand above the navigation bar`() {
-        show { WelcomeScreen({}, {}) }
+        show { WelcomeScreen({}, {}, Random(1)) }
         val bar = with(rule.density) { NAVIGATION_BAR.roundToPx() }
         val insets =
             WindowInsetsCompat
@@ -374,7 +375,7 @@ class OnboardingScreensTest {
 
     @Test
     fun `Verify reads its code digit by digit, and offers Cancel alone`() {
-        show { VerifyScreen(VerifyUi(PREVIEW_SAS, 102, PHONE), onCancel = {}) }
+        show { VerifyScreen(VerifyUi(PREVIEW_SAS, 102, PHONE), onCancel = {}, random = Random(1)) }
         assertActions(listOf("Cancel"))
         rule.onNodeWithContentDescription(SPOKEN_SAS).assertIsDisplayed()
         rule.onNodeWithText("1:42").assertIsDisplayed()
@@ -391,9 +392,9 @@ class OnboardingScreensTest {
 
     @Test
     fun `Welcome, Paired and Notifications label their actions`() {
-        show { WelcomeScreen({}, {}) }
+        show { WelcomeScreen({}, {}, Random(1)) }
         assertActions(listOf("Get started", "Don't have Fermix yet?"))
-        show { PairedScreen(HOST, onContinue = {}) }
+        show { PairedScreen(HOST, onContinue = {}, random = Random(1)) }
         assertActions(listOf("Continue"))
         show { NotificationsScreen({}, {}) }
         assertActions(listOf("Allow notifications", "Not now"))

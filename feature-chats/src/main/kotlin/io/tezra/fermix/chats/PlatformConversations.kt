@@ -10,21 +10,13 @@ import android.content.pm.ShortcutManager
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Paint
 import android.graphics.drawable.Icon
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.createBitmap
 import io.tezra.fermix.instance.tintColor
 
-// An adaptive icon's 108 dp, of which the inner 72 dp always shows: the canon's avatar, a full tint with the
-// mark in white, its two dots a sixth of the visible part across, 0.28 of a dot apart, the second at 62 %.
+// An adaptive icon's 108 dp: the avatar as the M51 update's reference player draws the Chats row's, the tint alone.
 private const val ICON_DP = 108
-private const val VISIBLE_DP = 72f
-private const val MARK_DOT_SHARE = 1f / 6f
-private const val MARK_GAP = 0.28f
-private const val SECOND_DOT_ALPHA = 0.62f
-private const val WHITE = 0xFFFFFFFF.toInt()
-private const val OPAQUE = 255
 
 /**
  * The phone's conversations (design sections 9.1 and 13.10, item 11): a long-lived conversation shortcut per
@@ -39,6 +31,7 @@ class PlatformConversations(
 ) : ConversationSurface {
     private val shortcuts = context.getSystemService(ShortcutManager::class.java)
     private val notifications = context.getSystemService(NotificationManager::class.java)
+    private val density = context.resources.displayMetrics.density
 
     override fun published(): Set<String> {
         val dynamic = shortcuts.getShortcuts(ShortcutManager.FLAG_MATCH_DYNAMIC or ShortcutManager.FLAG_MATCH_CACHED)
@@ -63,7 +56,7 @@ class PlatformConversations(
                 .setShortLabel(name)
                 .setLongLived(true)
                 .setPerson(person)
-                .setIcon(Icon.createWithAdaptiveBitmap(avatar(conversation.tint)))
+                .setIcon(Icon.createWithAdaptiveBitmap(conversationAvatar(conversation.tint, density)))
                 .setIntent(intentFor(conversation))
                 .setCategories(setOf(SHARE_CATEGORY))
                 .build()
@@ -74,22 +67,17 @@ class PlatformConversations(
         shortcuts.removeLongLivedShortcuts(ids.toList())
         ids.forEach(notifications::deleteNotificationChannel)
     }
+}
 
-    /** The avatar as an adaptive icon's bitmap: the tint to the edges, the mark in the visible middle. */
-    private fun avatar(tint: String): Bitmap {
-        val density = context.resources.displayMetrics.density
-        val side = (ICON_DP * density).toInt()
-        val bitmap = createBitmap(side, side)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(tintColor(tint).toArgb())
-        val dot = VISIBLE_DP * density * MARK_DOT_SHARE
-        val apart = dot * (1f + MARK_GAP) / 2f
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WHITE }
-        canvas.drawCircle(side / 2f - apart, side / 2f, dot / 2f, paint)
-        paint.alpha = (SECOND_DOT_ALPHA * OPAQUE).toInt()
-        canvas.drawCircle(side / 2f + apart, side / 2f, dot / 2f, paint)
-        return bitmap
-    }
+/** The avatar as an adaptive icon's bitmap at [density]: the tint to the edges, nothing on it. */
+internal fun conversationAvatar(
+    tint: String,
+    density: Float,
+): Bitmap {
+    val side = (ICON_DP * density).toInt()
+    val bitmap = createBitmap(side, side)
+    Canvas(bitmap).drawColor(tintColor(tint).toArgb())
+    return bitmap
 }
 
 /**

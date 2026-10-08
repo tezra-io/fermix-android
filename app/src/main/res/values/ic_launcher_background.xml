@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The light canvas (design section 13.1), which the two-dot mark sits on. -->
+    <!-- The light canvas (design section 13.1), which the Fermix mark sits on in the light ink. -->
     <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

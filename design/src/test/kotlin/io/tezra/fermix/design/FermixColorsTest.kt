@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 
 // The M51 update's section 1 (MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION.md), which wins over design
 // section 13.1: its tokens (1.2) and Material's roles (1.4). Where it fixes no value (the tertiary ink, the tonal
-// surface, the scrim, the code card, the mark on a tint, the tints), design section 13.1 and the visual canon's
+// surface, the scrim, the code card, the tints), design section 13.1 and the visual canon's
 // section 1 "Colour — derived for this page" stand. Fermix blue is the one token the owner kept, on 2026-10-05,
 // to mark what is unread: the signal.
 class FermixColorsTest {
@@ -85,7 +85,6 @@ class FermixColorsTest {
                     colors.tonalSolid,
                     colors.scrim,
                     colors.codeCard,
-                    colors.onTint,
                     colors.onSignal,
                 )
             for (grey in greys) assertTrue(spread(grey) <= GREY_SPREAD, "$grey spreads ${spread(grey)} steps")
@@ -252,12 +251,6 @@ class FermixColorsTest {
             assertEquals(colors.ink.copy(alpha = 0.38f), textButtonColors(colors).disabledContentColor)
         }
     }
-
-    @Test
-    fun `the mark on a tint is white in both modes`() {
-        assertEquals(Color(0xFFFFFFFF), FermixColors.Light.onTint)
-        assertEquals(Color(0xFFFFFFFF), FermixColors.Dark.onTint)
-    }
 }
 
 /** How far apart a grey's channels may lie, in steps of 255. */
@@ -291,7 +284,6 @@ private fun materialTokensOf(colors: FermixColors): Set<Color> =
         colors.ok,
         colors.warn,
         colors.codeCard,
-        colors.onTint,
     )
 
 /** The roles of [scheme] that hold the value [baseline], Material's own scheme, gives them. */
