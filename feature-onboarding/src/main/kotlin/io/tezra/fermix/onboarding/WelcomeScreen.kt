@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.Drop
 import io.tezra.fermix.design.FermixMark
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticFeedback
@@ -30,6 +31,7 @@ import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.MarkPose
 import io.tezra.fermix.design.dropAt
+import io.tezra.fermix.design.focusRing
 import io.tezra.fermix.design.idling
 import io.tezra.fermix.design.rememberMarkMoment
 import io.tezra.fermix.design.textButtonColors
@@ -122,7 +124,8 @@ internal fun WelcomeAt(
                     Modifier
                         .risingIn(ms, buttons, Drop.wordsRise)
                         .fillMaxWidth()
-                        .heightIn(min = FermixSpacing.minTarget),
+                        .heightIn(min = FermixSpacing.minTarget)
+                        .focusRing(FermixShapes.button),
                 colors = textButtonColors(colors),
             ) {
                 Text(

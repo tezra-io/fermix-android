@@ -43,11 +43,14 @@ import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.ColumnWidth
-import io.tezra.fermix.design.FermixColors
 import io.tezra.fermix.design.FermixColumn
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticUse
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
 
 // The visual canon's Scan, dark in both modes: the camera's stand-in, `radial-gradient(120% 80% at 50% 40%,
 // #3A3D46 0%, #17181C 62%, #0B0B0D 100%)`; a 64 dp bar with back and torch in white; the reticle 96 dp
@@ -225,12 +228,12 @@ private fun ScanFoot(
 
             CameraAccess.RATIONALE -> {
                 val label = stringResource(R.string.onboarding_continue)
-                PrimaryAction(label, actions.onAllowCamera, modifier = sides, colors = cameraActionColors())
+                PrimaryAction(label, actions.onAllowCamera, modifier = sides, dark = true)
             }
 
             CameraAccess.DENIED -> {
                 val label = stringResource(R.string.onboarding_open_settings)
-                PrimaryAction(label, actions.onOpenSettings, modifier = sides, colors = cameraActionColors())
+                PrimaryAction(label, actions.onOpenSettings, modifier = sides, dark = true)
             }
         }
         PasteOnCamera(onPaste = actions.onPaste)
@@ -314,7 +317,7 @@ private fun ScanBar(
         modifier = Modifier.fillMaxWidth().height(BAR_HEIGHT).padding(horizontal = BAR_SIDES),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = actions.onBack) {
+        IconButton(onClick = actions.onBack, modifier = Modifier.iconFocusRing(RingOn.Dark)) {
             Icon(
                 painter = painterResource(R.drawable.ic_onboarding_back),
                 contentDescription = stringResource(R.string.onboarding_back),
@@ -335,6 +338,7 @@ private fun Torch(
     IconToggleButton(
         checked = on,
         onCheckedChange = onChange,
+        modifier = Modifier.iconFocusRing(RingOn.Dark),
         colors =
             IconButtonDefaults.iconToggleButtonColors(
                 contentColor = ON_CAMERA,
@@ -349,15 +353,6 @@ private fun Torch(
     }
 }
 
-/**
- * The camera's one action in both modes: the dark mode's ink pill, as the frame is dark in both. Light mode's ink,
- * near-black, would lie on the frame's near-black at about 1.1 : 1, and read as less than "Paste a pairing link"
- * under it.
- */
-@Composable
-private fun cameraActionColors() =
-    ButtonDefaults.buttonColors(containerColor = FermixColors.Dark.ink, contentColor = FermixColors.Dark.onInk)
-
 @Composable
 private fun PasteOnCamera(onPaste: () -> Unit) {
     Button(
@@ -367,7 +362,8 @@ private fun PasteOnCamera(onPaste: () -> Unit) {
                 .fillMaxWidth()
                 .padding(start = FOOT_SIDES, end = FOOT_SIDES, bottom = FOOT_BOTTOM)
                 .heightIn(min = FermixSpacing.minTarget)
-                .semantics { traversalIndex = PASTE_FIRST },
+                .semantics { traversalIndex = PASTE_FIRST }
+                .focusRing(FermixShapes.button, RingOn.Dark),
         colors = ButtonDefaults.buttonColors(containerColor = ON_CAMERA_FILL, contentColor = ON_CAMERA),
     ) {
         Text(text = stringResource(R.string.onboarding_paste_link), textAlign = TextAlign.Center)

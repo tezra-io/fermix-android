@@ -28,9 +28,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.instance.StillTwoDotMark
 
 // The visual canon's lock (`.lk`): centred, 24 dp of padding, 16 dp between the mark, the headline and
@@ -74,7 +78,11 @@ fun LockScreen(onUnlock: () -> Unit) {
         )
         Button(
             onClick = onUnlock,
-            modifier = Modifier.padding(top = LOCK_STEP).heightIn(min = FermixSpacing.minTarget),
+            modifier =
+                Modifier
+                    .padding(top = LOCK_STEP)
+                    .heightIn(min = FermixSpacing.minTarget)
+                    .focusRing(FermixShapes.button),
         ) {
             Text(text = stringResource(R.string.chats_unlock))
         }
@@ -99,7 +107,7 @@ fun AppLockScreen(
             modifier = Modifier.fillMaxWidth().height(BAR_HEIGHT).padding(horizontal = BAR_SIDES),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.iconFocusRing()) {
                 Icon(painterResource(R.drawable.ic_chats_back), stringResource(R.string.chats_back), tint = colors.ink)
             }
             Text(
@@ -135,6 +143,7 @@ private fun LockSwitch(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .rowFocusRing()
                 .toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = onChange)
                 .heightIn(min = FermixSpacing.minTarget)
                 .padding(horizontal = ROW_SIDES, vertical = ROW_ENDS),

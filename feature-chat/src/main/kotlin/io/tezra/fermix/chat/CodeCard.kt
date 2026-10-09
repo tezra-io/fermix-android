@@ -51,6 +51,9 @@ import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.GroupPosition
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.iconFocusRing
+import io.tezra.fermix.design.rowFocusRing
 
 /** The code card's ink and its header's (the canon's `.code` and `.code .hd`), the same in both themes. */
 private val CODE_INK = Color(0xFFE6E7EB)
@@ -159,7 +162,7 @@ private fun CardButton(
     label: String,
     onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size(48.dp).iconFocusRing(RingOn.Dark)) {
         Icon(painterResource(icon), label, tint = HEADER_INK, modifier = Modifier.size(20.dp))
     }
 }
@@ -247,14 +250,18 @@ private fun FoldToggle(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .rowFocusRing(RingOn.Dark, FOLD_CORNERS)
                 .clickable(role = Role.Button, onClick = onToggle)
                 .padding(horizontal = 12.dp, vertical = 16.dp),
     )
 }
 
+/** The fold toggle's corners, the card's at its bottom, which it ends, so the card's clip leaves its ring whole. */
+private val FOLD_CORNERS = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+
 /** The card's corners in a group under its bubble (design section 13.1): 6 dp on the agent's side at the top. */
 internal val GROUPED_CARD = RoundedCornerShape(topStart = 6.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
 
 /** A card's corners in its group (the canon's `.card.g`): 6 dp at the top on the agent's side, joined to one above. */
-internal fun cardShape(position: GroupPosition): Shape =
+internal fun cardShape(position: GroupPosition): RoundedCornerShape =
     if (position == GroupPosition.Middle || position == GroupPosition.Last) GROUPED_CARD else RoundedCornerShape(16.dp)

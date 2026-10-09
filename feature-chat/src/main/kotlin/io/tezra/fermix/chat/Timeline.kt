@@ -29,6 +29,7 @@ import io.tezra.fermix.design.GroupPosition
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
 import io.tezra.fermix.design.Sender
+import io.tezra.fermix.design.raisedWhileFocused
 
 /** The timeline's gutters, left and right of every bubble (design section 13.1). */
 internal val TIMELINE_GUTTER = 12.dp
@@ -81,7 +82,9 @@ internal fun Timeline(
             ->
             val motion = if (reduced) Modifier else Modifier.animateItem()
             val gap = Modifier.padding(top = gapAbove(items, index))
-            Rising(item.key in fresh, motion) {
+            // A focused message's ring lies 2 to 4 dp past its bubble, over the item 2 dp away in its group, which a
+            // reversed list draws after it: the item is raised over its neighbours while the ring shows.
+            Rising(item.key in fresh, motion.raisedWhileFocused()) {
                 if (item.key.startsWith(CARD_KEY_PREFIX)) {
                     Morph(item) { shown -> TimelineItem(shown, context, gap) }
                 } else {

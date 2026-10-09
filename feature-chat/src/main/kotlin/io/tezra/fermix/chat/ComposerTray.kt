@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 
 /** The tray's items (design section 13.6): 56 dp, 12 dp corners. */
 private val TRAY_ITEM = 56.dp
@@ -109,6 +110,7 @@ private fun RemoveBadge(
         modifier =
             modifier
                 .size(TOUCH_TARGET)
+                .focusRing(CircleShape)
                 .clickable(role = Role.Button, onClickLabel = label, onClick = onRemove)
                 .semantics { contentDescription = label },
         contentAlignment = Alignment.TopEnd,

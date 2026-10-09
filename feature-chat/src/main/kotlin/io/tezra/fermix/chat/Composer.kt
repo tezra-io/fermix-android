@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
@@ -70,10 +71,14 @@ import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
 import io.tezra.fermix.design.controlPlane
+import io.tezra.fermix.design.focusRing
 import kotlinx.coroutines.flow.drop
 
 /** The field's most lines before it scrolls (design section 13.6). */
 private const val FIELD_LINES = 6
+
+/** The field's corners for its focus ring: the dock's 28 dp less the 8 dp the field lies inside it, concentric. */
+private val FIELD_RING = RoundedCornerShape(20.dp)
 
 /** The send ↔ stop cross-rotation's turn: the leaving control turns this far out, the coming one this far in. */
 private const val CROSS_ROTATION = 90f
@@ -281,6 +286,7 @@ private fun Field(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 32.dp)
+                .focusRing(FIELD_RING)
                 .padding(horizontal = 10.dp, vertical = 4.dp)
                 .contentReceiver { content -> keyboardContent(content, onKeyboard) }
                 .onPreviewKeyEvent { keys(it, actions) { HapticFeedback.perform(view, HapticUse.Send) } }
@@ -381,6 +387,7 @@ private fun EndControls(
             modifier =
                 Modifier
                     .minimumInteractiveComponentSize()
+                    .focusRing(CircleShape)
                     .size(40.dp)
                     .graphicsLayer { rotationZ = turn }
                     .background(colors.ink, CircleShape)

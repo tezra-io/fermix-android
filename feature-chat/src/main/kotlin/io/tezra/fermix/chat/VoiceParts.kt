@@ -28,6 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixType
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
 
 /** The waveform's height (the canon's `svg.wave`, 28). */
 private val WAVE_HEIGHT = 28.dp
@@ -72,12 +74,13 @@ internal fun Wave(
 internal fun playedShare(playing: Playing): Float =
     if (playing.durationMs <= 0) 0f else (playing.positionMs.toFloat() / playing.durationMs).coerceIn(0f, 1f)
 
-/** A voice note's play ↔ pause in its 36 dp circle on [background]. */
+/** A voice note's play ↔ pause in its 36 dp circle on [background], its focus ring for what it lies [on]. */
 @Composable
 internal fun PlayButton(
     running: Boolean,
     background: Color,
     tint: Color,
+    on: RingOn,
     onClick: () -> Unit,
 ) {
     val label = stringResource(if (running) R.string.chat_pause else R.string.chat_play)
@@ -85,6 +88,7 @@ internal fun PlayButton(
         modifier =
             Modifier
                 .minimumInteractiveComponentSize()
+                .focusRing(CircleShape, on)
                 .size(36.dp)
                 .background(background, CircleShape)
                 .clickable(role = Role.Button, onClick = onClick)
@@ -98,13 +102,14 @@ internal fun PlayButton(
 
 /**
  * The speed chip (the canon's `.spd`): "1×", "1.5×" or "2×" on [background], mono, its corners 10 dp, on one line
- * however narrow its row.
+ * however narrow its row; its focus ring for what it lies [on].
  */
 @Composable
 internal fun SpeedChip(
     speed: Float,
     background: Color,
     ink: Color,
+    on: RingOn,
     onClick: () -> Unit,
 ) {
     val words = stringResource(R.string.chat_speed, speedWords(speed))
@@ -117,11 +122,15 @@ internal fun SpeedChip(
         modifier =
             Modifier
                 .minimumInteractiveComponentSize()
-                .background(background, RoundedCornerShape(10.dp))
+                .focusRing(SPEED_CHIP, on)
+                .background(background, SPEED_CHIP)
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
+
+/** The speed chip's corners. */
+private val SPEED_CHIP = RoundedCornerShape(10.dp)
 
 /** A speed as its chip writes it: "1", "1.5", "2". */
 internal fun speedWords(speed: Float): String = if (speed % 1f == 0f) "${speed.toInt()}" else "$speed"

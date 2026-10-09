@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.instance.AvatarSize
 import io.tezra.fermix.instance.InstanceAvatar
 import io.tezra.fermix.instance.dot
@@ -67,7 +68,7 @@ fun ShareSheetContent(
         rows.forEach { row ->
             RowLayout(
                 avatar = { InstanceAvatar(tint = row.record.tint, dot = row.link.dot, size = AvatarSize.ROW) },
-                modifier = Modifier.clickable { onPick(row) },
+                modifier = Modifier.rowFocusRing().clickable { onPick(row) },
                 meta = {},
             ) { Title(row) }
         }

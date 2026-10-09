@@ -29,6 +29,7 @@ import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.rowFocusRing
 
 /** A menu's narrowest (the canon's `.menu`). */
 private val MENU_WIDTH = 196.dp
@@ -72,6 +73,7 @@ internal fun LiftedMessage(
             Modifier
                 .fillMaxSize()
                 .background(colors.scrim)
+                .rowFocusRing()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -108,6 +110,7 @@ private fun MenuRow(
             Modifier
                 .widthIn(min = MENU_WIDTH)
                 .heightIn(min = 48.dp)
+                .rowFocusRing()
                 .clickable(role = Role.Button, onClick = onClick)
                 .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -140,6 +143,7 @@ internal fun OutboxMenu(
             DropdownMenuItem(
                 text = { Text(stringResource(words), style = FermixType.body) },
                 leadingIcon = { Icon(painterResource(icon), null) },
+                modifier = Modifier.rowFocusRing(),
                 onClick = { onPick(entry) },
             )
         }

@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.rowFocusRing
 
 /** The chip at the config's default (the canon's `.mc.def`), and disabled with no connection (`.mc.off`). */
 private const val DEFAULT_ALPHA = 0.7f
@@ -111,6 +113,7 @@ internal fun ModelChipButton(
         modifier =
             Modifier
                 .minimumInteractiveComponentSize()
+                .focusRing(FermixShapes.chip)
                 .alpha(alpha)
                 .clip(FermixShapes.chip)
                 .background(if (chip.overridden) colors.hairline else Color.Transparent)
@@ -269,6 +272,7 @@ private fun Choice(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .rowFocusRing()
                 .selectable(selected = active, role = Role.RadioButton) {
                     if (active) actions.onClose() else actions.onPick(pick())
                 }.heightIn(min = 52.dp)

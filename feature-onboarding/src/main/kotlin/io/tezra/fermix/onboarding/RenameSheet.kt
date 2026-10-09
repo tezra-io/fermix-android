@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 
 private val SHEET_SIDES = 24.dp
 private val SHEET_BOTTOM = 16.dp
@@ -58,7 +59,7 @@ fun RenameSheet(
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().focusRing(FermixShapes.card),
                 label = { Text(text = stringResource(R.string.onboarding_rename)) },
                 isError = !takes,
                 singleLine = true,

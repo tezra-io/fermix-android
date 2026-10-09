@@ -34,9 +34,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.rowFocusRing
 
 /** Columns a table fits in the card's width; a wider one pans (design section 13.5). */
 private const val FIT_COLUMNS = 4
@@ -185,7 +188,7 @@ private fun Cell(
         onTextLayout = { cut = it.hasVisualOverflow },
         modifier =
             modifier
-                .then(if (cut) Modifier.clickable(role = Role.Button) { onOpen(text) } else Modifier)
+                .then(if (cut) Modifier.rowFocusRing().clickable(role = Role.Button) { onOpen(text) } else Modifier)
                 .padding(horizontal = CELL_PADDING, vertical = 8.dp),
     )
 }
@@ -197,7 +200,11 @@ private fun WholeCell(
 ) {
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.chat_cell_close)) } },
+        confirmButton = {
+            TextButton(onClick = onClose, modifier = Modifier.focusRing(FermixShapes.button)) {
+                Text(stringResource(R.string.chat_cell_close))
+            }
+        },
         text = { Text(text, style = FermixType.body) },
     )
 }

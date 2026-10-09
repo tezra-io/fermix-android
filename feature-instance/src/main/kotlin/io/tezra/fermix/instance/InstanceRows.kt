@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.iconFocusRing
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.transport.Candidate
 
 // The visual canon's Instance page: `.sh` section headers 18 dp above and 4 below, 24 at the sides; `.kv`
@@ -96,7 +98,7 @@ fun BackBar(
         modifier = modifier.fillMaxWidth().height(BAR_HEIGHT).padding(horizontal = BAR_SIDES),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
+        IconButton(onClick = onBack, modifier = Modifier.iconFocusRing()) {
             Icon(
                 painter = painterResource(R.drawable.ic_instance_back),
                 contentDescription = stringResource(R.string.instance_back),
@@ -137,7 +139,7 @@ internal fun KvRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .then(if (onClick != null) Modifier.rowFocusRing().clickable(onClick = onClick) else Modifier)
                 .heightIn(min = FermixSpacing.minTarget)
                 .padding(horizontal = SIDES, vertical = ROW_ENDS),
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
@@ -169,6 +171,7 @@ internal fun SwitchRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .rowFocusRing()
                 .toggleable(value = on, role = Role.Switch, onValueChange = onChange)
                 .heightIn(min = FermixSpacing.minTarget)
                 .padding(horizontal = SIDES, vertical = ROW_ENDS),

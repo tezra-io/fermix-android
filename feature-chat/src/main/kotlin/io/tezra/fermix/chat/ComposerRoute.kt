@@ -24,14 +24,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import io.tezra.fermix.design.textButtonColors
 import io.tezra.fermix.session.MAX_ATTACHMENTS
 import kotlinx.coroutines.CoroutineDispatcher
@@ -224,12 +227,20 @@ internal fun MicRationale(
             )
         },
         confirmButton = {
-            TextButton(onClick = onContinue, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = onContinue,
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(stringResource(R.string.chat_continue), style = FermixType.label)
             }
         },
         dismissButton = {
-            TextButton(onClick = onNotNow, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = onNotNow,
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(stringResource(R.string.chat_not_now), style = FermixType.label)
             }
         },

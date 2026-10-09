@@ -29,10 +29,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixMotion
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.instance.AvatarSize
 import io.tezra.fermix.instance.InstanceAvatar
 import io.tezra.fermix.instance.dot
@@ -68,11 +72,15 @@ internal fun ChatBar(
             modifier = Modifier.fillMaxWidth().heightIn(min = BAR_HEIGHT).padding(horizontal = BAR_SIDES),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.iconFocusRing()) {
                 Icon(painterResource(R.drawable.ic_chat_back), stringResource(R.string.chat_back), tint = colors.ink)
             }
             Row(
-                modifier = Modifier.weight(1f).clickable(role = Role.Button, onClick = onTitle),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .focusRing(FermixShapes.chip)
+                        .clickable(role = Role.Button, onClick = onTitle),
                 horizontalArrangement = Arrangement.spacedBy(WHO_GAP),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -88,7 +96,7 @@ internal fun ChatBar(
                     Subtitle(subtitle(header))
                 }
             }
-            IconButton(onClick = onSearch) {
+            IconButton(onClick = onSearch, modifier = Modifier.iconFocusRing()) {
                 Icon(
                     painterResource(R.drawable.ic_chat_search),
                     stringResource(R.string.chat_search),
@@ -155,6 +163,7 @@ internal fun BannerLine(
             Banner.UNREACHABLE -> {
                 Modifier
                     .heightIn(min = FermixSpacing.minTarget)
+                    .rowFocusRing()
                     .clickable(role = Role.Button, onClick = onUnreachable)
             }
 
@@ -194,7 +203,7 @@ internal fun SelectionBar(
                 .padding(horizontal = BAR_SIDES),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onClose) {
+        IconButton(onClick = onClose, modifier = Modifier.iconFocusRing()) {
             Icon(
                 painterResource(R.drawable.ic_chat_x),
                 stringResource(R.string.chat_close_selection),
@@ -207,14 +216,14 @@ internal fun SelectionBar(
             color = colors.ink,
             modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
-        IconButton(onClick = onCopy) {
+        IconButton(onClick = onCopy, modifier = Modifier.iconFocusRing()) {
             Icon(
                 painterResource(R.drawable.ic_chat_copy),
                 stringResource(R.string.chat_copy_transcript),
                 tint = colors.ink,
             )
         }
-        IconButton(onClick = onShare) {
+        IconButton(onClick = onShare, modifier = Modifier.iconFocusRing()) {
             Icon(painterResource(R.drawable.ic_chat_share), stringResource(R.string.chat_share), tint = colors.ink)
         }
     }

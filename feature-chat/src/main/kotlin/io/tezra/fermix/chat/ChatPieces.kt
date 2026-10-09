@@ -43,6 +43,7 @@ import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -93,7 +94,10 @@ internal fun ErrorCard(
         if (action == null) {
             Spacer(Modifier.height(8.dp))
         } else {
-            TextButton(onClick = { onAction(error) }, modifier = Modifier.offset(x = (-12).dp).heightIn(min = 48.dp)) {
+            TextButton(
+                onClick = { onAction(error) },
+                modifier = Modifier.offset(x = (-12).dp).heightIn(min = 48.dp).focusRing(FermixShapes.button),
+            ) {
                 Text(action, style = FermixType.label, color = colors.ink, textDecoration = TextDecoration.Underline)
             }
         }

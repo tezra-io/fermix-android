@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,6 +35,10 @@ import io.tezra.fermix.design.GroupPosition
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.Sender
 import io.tezra.fermix.design.bubbleShape
+import io.tezra.fermix.design.contentFocusRing
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.raisedWhileFocused
+import io.tezra.fermix.design.ringedContent
 
 /** A queued bubble's opacity (the canon's `.b.q`). */
 private const val QUEUED_ALPHA = 0.55f
@@ -66,10 +71,14 @@ internal fun MessageItem(
         )
     Box(modifier = modifier.fillMaxWidth().background(wash)) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            when {
-                message.media.isNotEmpty() -> MediaMessage(item, context, gestures, selected)
-                message.sender == Sender.User -> UserMessage(message, context, gestures, selected)
-                else -> AgentMessage(item, context, gestures, selected)
+            // A focused message's ring lies 2 to 4 dp past its bubble, over a link preview 2 dp under it, so the
+            // message is raised over its previews while it shows (the timeline raises the item over its neighbours).
+            Box(modifier = Modifier.raisedWhileFocused()) {
+                when {
+                    message.media.isNotEmpty() -> MediaMessage(item, context, gestures, selected)
+                    message.sender == Sender.User -> UserMessage(message, context, gestures, selected)
+                    else -> AgentMessage(item, context, gestures, selected)
+                }
             }
             LinkPreviews(message.previews, message.sender, context)
         }
@@ -114,7 +123,8 @@ private fun UserMessage(
     val firstReaction = remember { message.reaction }
     val ring = ringAlpha(context.highlight?.seq?.let { it == message.seq } == true)
     val shape = bubbleShape(Sender.User, message.position)
-    val bubble = @Composable { UserBubble(message, context, modifier.pulseRing(ring, colors.ink, shape)) }
+    val gestures = Modifier.focusRing(shape).then(modifier)
+    val bubble = @Composable { UserBubble(message, context, gestures.pulseRing(ring, colors.ink, shape)) }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
         Box(
             modifier = Modifier.fillMaxWidth(FermixSpacing.USER_BUBBLE_MAX_WIDTH),
@@ -202,8 +212,15 @@ private fun AgentMessage(
     val parts = rememberSegments(message.text, message.streaming)
     val shown = parts.ifEmpty { listOf(Segment.Prose(0, "")) }
     val timed = shown.indexOfLast { it is Segment.Prose }.takeIf { it >= 0 } ?: shown.lastIndex
+    // What a tap, a long-press and TalkBack reach spans the 88 % the parts may grow to; the ring, the parts alone.
     Column(
-        modifier = modifier.fillMaxWidth(FermixSpacing.AGENT_BUBBLE_MAX_WIDTH),
+        modifier =
+            Modifier
+                .contentFocusRing(agentRingShape(message, shown, timed))
+                .then(modifier)
+                .fillMaxWidth(FermixSpacing.AGENT_BUBBLE_MAX_WIDTH)
+                .wrapContentWidth(Alignment.Start)
+                .ringedContent(),
         verticalArrangement = Arrangement.spacedBy(FermixSpacing.withinGroup),
     ) {
         shown.forEachIndexed { index, part ->

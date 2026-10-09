@@ -311,6 +311,22 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   update's table, holds each pair of tokens it lists to its WCAG floor, and pins at what it measures each
   pair of tokens under its floor that README's departures name for the owner; a new pair of tokens the app
   draws goes in it, held or, named in README, pinned.
+- Focus: every focusable takes the focus ring (the M51 update's 1.3), and only the design's modifier draws
+  it: a new button, chip, field, card, bubble or row that can take the focus takes `Modifier.focusRing(shape,
+  on)` in its own shape, `Modifier.rowFocusRing(on, shape)` when it spans its column, sheet, menu or window, as a
+  list, a scroll or a card clips a ring outside it, or, a Material `IconButton`, `Modifier.iconFocusRing(on)`;
+  a control wider than what it draws (an agent's message in its 88 %) takes `Modifier.contentFocusRing(shape,
+  on)` and marks what the ring goes round with `Modifier.ringedContent()`, and keeps its own width, which is
+  what a tap and TalkBack reach. The modifier comes before the `clickable`, `toggleable`, `selectable`, field
+  or Material component's own focus in the chain, as it hears only what follows it; `on` names where it lies
+  (`Surface`, `Ink` on an ink fill, `Dark` on a surface dark in both modes, where its ring must lie whole,
+  `Picture` on an image or over content of any colour). A control whose ring lies over what a level above its
+  own draws (a list's item beside it, a preview under a message, the next part of its message) has that level
+  take `Modifier.raisedWhileFocused()`. It shows only under keyboard input while the window has the
+  focus, and changes no colour, size, layout, motion or focus order. A preview draws it with nothing focused
+  only through the design module's `internal` `ring(…, shown = true)`; nothing else forces it. What is not
+  focusable takes none, and a change that makes something focusable rings it; what cannot take it (a link
+  among a message's words) shows its focus another way, and README's departures name it.
 - No secret enters the tree: no keystore, `keystore.properties`, `google-services.json` or service
   account. The one `google-services.json` is `app/google-services.json`, the placeholder project's,
   which holds no real key; a real one goes in `app/src/debug/` or `app/src/release/`, which `.gitignore`

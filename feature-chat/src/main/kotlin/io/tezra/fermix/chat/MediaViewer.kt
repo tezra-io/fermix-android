@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,7 +54,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
 
 /** The longest edge the viewer decodes an image at: a 1440 dp-tall fold at 3×, enough to zoom into. */
 const val VIEWER_EDGE_PX = 4_096
@@ -159,7 +163,11 @@ private fun ViewerBar(onClose: () -> Unit) {
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(
-            modifier = Modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = label, onClick = onClose),
+            modifier =
+                Modifier
+                    .size(48.dp)
+                    .focusRing(CircleShape, RingOn.Dark)
+                    .clickable(role = Role.Button, onClickLabel = label, onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
             Icon(painterResource(R.drawable.ic_chat_back), label, tint = Color.White)
@@ -273,6 +281,7 @@ private fun ViewerAction(
                 .widthIn(
                     min = ACTION_WIDTH,
                 ).heightIn(min = 48.dp)
+                .focusRing(FermixShapes.chip, RingOn.Dark)
                 .clickable(role = Role.Button, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),

@@ -29,9 +29,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import io.tezra.fermix.design.textButtonColors
 import io.tezra.fermix.instance.BackBar
 
@@ -108,12 +110,15 @@ private fun Actions(
     onRemove: () -> Unit,
 ) {
     Column(modifier = Modifier.padding(top = ACTIONS_TOP), verticalArrangement = Arrangement.spacedBy(ACTION_GAP)) {
-        Button(onClick = onPairAgain, modifier = Modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget)) {
+        Button(
+            onClick = onPairAgain,
+            modifier = Modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget).focusRing(FermixShapes.button),
+        ) {
             Text(text = stringResource(R.string.chats_pair_again))
         }
         TextButton(
             onClick = onRemove,
-            modifier = Modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget),
+            modifier = Modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget).focusRing(FermixShapes.button),
             colors = textButtonColors(LocalFermixColors.current),
         ) {
             Text(text = stringResource(R.string.chats_remove))

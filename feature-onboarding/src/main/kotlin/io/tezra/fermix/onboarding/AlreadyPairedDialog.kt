@@ -6,9 +6,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import io.tezra.fermix.design.textButtonColors
 
 /**
@@ -51,12 +54,20 @@ fun AlreadyPairedDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onAnswer(true) }, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = { onAnswer(true) },
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(text = stringResource(R.string.onboarding_already_paired_yes))
             }
         },
         dismissButton = {
-            TextButton(onClick = { onAnswer(false) }, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = { onAnswer(false) },
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(text = stringResource(R.string.onboarding_already_paired_no))
             }
         },

@@ -228,6 +228,11 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   in dark mode is a lighter red that reads on the dark background. A link to a web page is underlined, such as
   "Don't have Fermix yet?" and "Troubleshooting", and so is an action in the app that only the blue told apart
   from the words around it, such as "Test connection", "Run again" or "Try again".
+- **A focus ring.** When you move around the app with a keyboard or a d-pad, the button, chip, row, field or
+  message that has the focus shows a thin ring around it (just inside the edges of a row that spans the screen),
+  in the colour of the words around it, so you can always see where you are, and a link in a message turns
+  light on dark. A list scrolls far enough to show the whole ring, and a menu or a dialog that opens takes the
+  ring with the focus. A touch hides it again, and nothing else about the app changes.
 - **The Fermix mark.** The two-dot mark gives way to the Fermix mark, the design's own drawing, vendored with its
   provenance. On Welcome it drops in: a dot falls, lands with a light tick, swells into the mark, the visor opens
   and the eyes pop in, and the words rise in under it; then it breathes and blinks. On Paired its eyes turn happy

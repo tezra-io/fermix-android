@@ -45,6 +45,7 @@ import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.instance.AvatarSize
 import io.tezra.fermix.instance.InstanceAvatar
 import io.tezra.fermix.instance.Link
@@ -93,7 +94,7 @@ internal fun ChatRowItem(
         RowLayout(
             avatar = { InstanceAvatar(tint = row.record.tint, dot = row.link.dot, size = AvatarSize.ROW) },
             modifier =
-                Modifier.held(open, colors.agentBubble).combinedClickable(
+                Modifier.rowFocusRing().held(open, colors.agentBubble).combinedClickable(
                     hapticFeedbackEnabled = false,
                     onClick = { menu.actions.onOpen(row) },
                     onLongClick = {
@@ -148,7 +149,7 @@ internal fun RepairRowItem(
         RowLayout(
             avatar = { InstanceAvatar(tint = REPAIR_TINT, dot = null, size = AvatarSize.ROW) },
             modifier =
-                Modifier.held(open, colors.agentBubble).combinedClickable(
+                Modifier.rowFocusRing().held(open, colors.agentBubble).combinedClickable(
                     hapticFeedbackEnabled = false,
                     onClick = onRepair,
                     onLongClick = {
@@ -341,6 +342,7 @@ private fun MenuEntry(
     DropdownMenuItem(
         text = { Text(text = stringResource(label), style = FermixType.body, color = colors.ink) },
         leadingIcon = { Icon(painterResource(icon), contentDescription = null, tint = colors.ink) },
+        modifier = Modifier.rowFocusRing(),
         onClick = onClick,
     )
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.transport.Candidate
 import java.time.Instant
@@ -146,7 +147,8 @@ internal fun SelectTextSheet(
                 Modifier
                     .verticalScroll(
                         rememberScrollState(),
-                    ).padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
+                    ).rowFocusRing()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
         ) {
             Text(text, style = FermixType.body, color = LocalFermixColors.current.ink)
         }

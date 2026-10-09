@@ -382,7 +382,10 @@ and the whole window below that, with the window's width class from androidx.win
 no Activity, so a preview gets the class its device has; `FermixMotion`, the named durations, the
 standard spring scheme everywhere and the expressive one inside `ExpressiveMotion { }`, which the SAS
 reveal takes (section 13.1 allows it there, on Paired and for the first chat), and `LocalReducedMotion`,
-true while the animator duration scale is 0; `Modifier.controlPlane(edge, colors)`, the tonal surface with its hairline; and
+true while the animator duration scale is 0; `Modifier.controlPlane(edge, colors)`, the tonal surface with its hairline;
+`Modifier.focusRing(shape, on)`, `Modifier.rowFocusRing(on, shape)`, `Modifier.iconFocusRing(on)`,
+`Modifier.contentFocusRing(shape, on)` with `Modifier.ringedContent()`, and `Modifier.raisedWhileFocused()`,
+the focus ring (below); and
 `HapticFeedback.perform(view, use)`, which plays each `HapticUse` with its meaning (`Haptic`: Act,
 Refuse, Arrive, Threshold) through its platform constant.
 The Fermix mark (the M51 update's sections 2 to 6) is `FermixMark(pose, size)`: a pose in, pixels out, the
@@ -452,6 +455,66 @@ one commit, unmodified, under the SIL Open Font License 1.1: `src/main/res/font/
 `SOURCE.json` the commit and each file's upstream path and sha256, which a test checks. They add
 about 2.6 MB to the APK, 2.4 MB of it Google Sans Flex, a variable font with all its axes.
 
+The focus ring is the M51 update's 1.3, "2 dp `ink` ring, 2 dp offset", and the design's modifier draws it,
+once, for every focusable control (`FocusRing.kt`). `Modifier.focusRing(shape, on)` strokes 2 dp, 2 dp outside
+the control's own bounds and following its shape: the stroke's middle lies 3 dp out, a corner of radius r is
+ringed at r + 3 dp and a square corner stays square, mirrored for right-to-left. `Modifier.rowFocusRing(on,
+shape)` rings a row that spans its column, sheet, menu or window inside its bounds, the ring's outer edge on
+them, a rectangle unless the row ends a card (the code card's "Show all N lines" takes the card's bottom
+corners), since a parent clips a ring outside it (below). `Modifier.iconFocusRing(on)` rings a Material icon
+button 2 dp outside the 40 dp disc it draws its state layer in, which lies inside its 48 dp target, so the ring
+never leaves the button's bounds: the bars' Back, Search, More options and the selection's actions, the code
+card's Copy and Share, Pair's Copy, whose ring stays on the command card, as tall as the button, the rename
+pencil, whose ring no longer crosses the name beside it, and Scan's torch, a Material icon toggle; and the chat
+camera's Close, an icon in a 48 dp target of its own at the window's start edge, where a ring outside the target
+would lie past the window. `Modifier.contentFocusRing(shape, on)` rings a control wider than what it draws round
+what `Modifier.ringedContent()` marks inside it, which Compose hands up as a pair of alignment lines: an agent's
+message spans the 88 % of its row its parts may grow to, which a tap, a long-press and TalkBack reach as before,
+and its ring lies 2 dp past its bubbles, in their corners at the message's top and bottom, square where a bare
+line lies in a corner (a job's tag over a card, the time or the streaming cursor under one), as a rounded corner
+would cut through its words. The ring shows only while its control has the
+focus and the window shows focus: the window has the input focus, so a control under a menu or a dialog that
+holds it shows none, and it is out of touch mode (`InputMode.Keyboard`, which `LocalInputModeManager` reads from
+the window): a d-pad or a keyboard's keys take the window out of touch mode, and a touch puts it back and the
+ring goes, a tapped field's too, though the field keeps the focus.
+TalkBack and switch access draw their own highlight; the ring follows the input focus, not theirs. It is drawn
+in the control's layer after its content, takes no room and changes nothing else: no colour, size, layout or
+motion, no focus order and no hover or pressed look; a text field keeps its own focus look, its border and
+label in the ink, and the ring lies around it. While it shows, the control is placed over its siblings
+(zIndex), so a sibling drawn after it does not cover the ring: a message's image card over the document row
+2 dp under it. A control nested below the level of what lies around its ring takes
+`Modifier.raisedWhileFocused()` on what holds it there: each item of the timeline is raised over its neighbours
+while a control in it shows the ring, as a message's ring lies over the message 2 dp away in its group, which
+the reversed list draws later; a message is raised over its link preview 2 dp under it; and a document's row
+and a voice note, each in a box of its own in its message's column, over the words or the next part 2 dp under
+them. Its colour is named by where it lies (`RingOn`, read
+through `ringColor`): the ink on the canvas, the agent bubble and the tonal surfaces (`Surface`); `onInk` on an
+ink fill (`Ink`: a voice note's play and speed in the owner's bubble); dark mode's ink on a surface dark in both
+modes (`Dark`: the cameras' controls, Scan's pills on the camera, the media viewer, the code card and Pair's
+command card), where it lies on that surface alone; and on a picture, an image grid's cell, the ink lined
+inside with `onInk` (`Picture`), so one of its two lines reads on whatever the picture is, and so is the
+scroll-to-latest pill's, which floats over the owner's ink bubbles as often as over the canvas. `ContrastTest` holds
+each at a mark's 3 : 1, the picture's over every grey. The modifier comes before the control's own
+`clickable`, `toggleable`, `selectable` or field in its chain, as it hears the focus of what follows it.
+What is not focusable takes no ring: the chips and pills that only show (a reaction, a tool, Live, the model
+chip's data, the lock pill), a switch whose row takes the toggle, the microphone, which records while held
+and holds no focus, the mark, and a Material sheet's scrim. A link among a message's words is the markdown
+renderer's `LinkAnnotation`, which Compose makes focusable but which takes no modifier, so it takes no ring:
+focused, it is drawn in `onInk` on the ink (its `TextLinkStyles`' focused style), as text on the ink reads.
+Where a parent clips: a `LazyColumn` or a scroll clips at its viewport, and a card, a surface and the image
+grid at their shape. A ring outside a row that spans its list would be cut, and on a compact window its sides
+would lie past the window's edges: the Chats list, the search results, the palette, the menus, the sheets'
+rows, the settings' rows and an image grid's cells ring inside. A control that a key focuses is brought into
+view by its own focus target; the ring asks the list or the scroll to bring what it lies on into view with it:
+a ring outside its control, the control's bounds grown by the ring's 4 dp, so a message, an onboarding action
+or a sheet's control that the focus scrolls to the viewport's edge stops 4 dp in and its ring is whole; a ring
+inside, the control's own bounds, an icon button's whole 48 dp target round the 40 dp disc Material brings in;
+each as far as the list or the scroll can move. A preview shows
+the ring with nothing focused through `ring(…, shown = true)`, which is `internal` to the design module, so no
+screen can call it and the app never draws a ring it was not given by the focus; `SpecimenFocus` draws a
+pill, a text button, a chip, a card, a switch's row and a plain row on the canvas, the agent bubble and the
+ink. Where the ring departs from 1.3, the departures below name it.
+
 `ContrastTest` measures the update's table of 1.2 by WCAG 2's contrast ratio, each pair to one decimal;
 holds the pairs of the tokens it names that the app draws to their WCAG floor, 4.5 : 1 for text and 3 : 1
 for a mark: the ink and the secondary text on every surface and on the hairline, dark mode's error text,
@@ -497,12 +560,6 @@ reads it where it is silent, for the owner to settle:
 - Sand, one of the six tints, which 1.2 leaves as they are, measures 2.7 : 1 for the avatar on light mode's
   canvas, under a mark's 3 : 1; the other five pass. Nothing is drawn on a tint any more: the avatar is a plain
   disc, as the reference player's Chats row draws it.
-- 1.3's focus, a 2 dp ink ring at a 2 dp offset, is not drawn, and no task owns it yet: this change is
-  colour only and the app draws no focus indicator of its own to recolour, and Tasks 18 and 19 own the
-  update's sections 2 to 7. Until one draws it, a focused button or row shows only Material's state layer,
-  about 1.2 : 1 against its fill or the canvas, and a focused message nothing, which fails section 8's
-  "every button, link and focus ring meets the contrast in 1.2". A text field shows its focus in its
-  border and label, both ink.
 - Where 1.3 names no row, the accent as a fill became the ink with `onInk` on it, and as text or an icon
   the ink: text buttons and dialog actions, Connecting's current step, the SAS ring, the upload bars, the
   approval's Approve and countdown, the model chip's dot and the sheet's check, a Chats row's "thinking…"
@@ -544,6 +601,30 @@ reads it where it is silent, for the owner to settle:
   surface, never on the canvas, and are not the accent.
 - The embedded Photo Picker draws its own accent, the system's: it takes an accent only of a luminance
   between 0.05 and 0.9, which light mode's near-black ink is not.
+- 1.3's focus ring, 2 dp of the ink 2 dp outside a control, is drawn (above), and where a control cannot
+  take it so, the code reads it for the owner to settle: a row that spans its list, sheet or menu, an
+  image cell and the code card's fold toggle are ringed inside their bounds, at no offset, as a parent
+  clips them at their edge, and so is the chat camera's Close, an icon with no disc in a 48 dp target at the
+  window's start edge; a menu item's ring lies at the menu's edges, where Material draws the menu's 1 dp
+  border over its items and clips them to its 16 dp corners (the Chats list's More options, a row's
+  long-press menu), so its sides show 1 dp of their 2 and the first and last items' outer corners less, as
+  a ring clear of both would have to know the menu's 8 dp of padding, which Material keeps internal; an
+  agent's message is ringed square at a corner where a bare line lies, its job's tag over a card or the
+  time under one; an image cell's ring is the ink lined with `onInk`, as one colour cannot read
+  on every picture; Material's buttons, chips and switches take a modifier outside their 48 dp touch
+  target, so the ring lies around the target, and a fill under 48 dp tall has it farther above and below
+  than at its sides (the attach sheet's Send, 40 dp; an approval's answers, 44 dp; Name's chips, 36 dp),
+  and the scroll-to-latest pill and an attachment's remove badge are ringed at their 48 dp targets, the
+  pill's lined with `onInk`, as it floats over the owner's ink bubbles; an outlined field with a label has
+  the label inside its ring; a name or a line that is its own button, with no shape of its own (Instance's
+  name, "Reset to gateway name", the voice hint's "Open settings"), is ringed in a chip's corners round its
+  48 dp target, as a pill round its words would cut their first and last letters; within a group,
+  messages lie 2 dp apart, so a focused message's ring lies on its neighbour, over it, and between two of
+  the owner's bubbles its top or bottom is the ink on the ink and does not show, its sides and corners do; a link
+  among a message's words takes no ring and is drawn in `onInk` on the ink while focused, a look 1.3 does
+  not draw; and a Material sheet's drag handle, which Material makes its first focus stop inside a
+  `clickable` of its own around the handle's slot, shows Material's state layer alone, as a modifier in
+  the slot cannot hear that focus, and ringing it would mean replacing Material's handle and its actions.
 
 Every preview in a `fermix.android.library.compose` module is also a screenshot test. Roborazzi
 draws it on Robolectric, in the JVM. Robolectric's Android runtime is a pinned dependency with its
@@ -555,7 +636,9 @@ annotated `@FermixPreviews`, which draws them twelve times: a compact (412×915 
 Card as the theme hands them the design), `SpecimenControls` (a switch on beside one off, a chosen
 filter chip beside one not, a focused field with its label and selected words, and a progress
 bar, each as Material draws it in the theme), `SpecimenType` (the type scale with its sizes) and
-`SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces), each
+`SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces) and
+`SpecimenFocus` (the focus ring around a pill, a text button, a chip, a card, a switch's row and a plain row
+on the canvas, the agent bubble and the ink, drawn as a preview's ring is, with nothing focused), each
 short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
 twelve images.
 
@@ -2296,7 +2379,14 @@ a clip with a link in it, a rotation and a fold that keep Verify's code and coun
 sheet's text, TalkBack reaching "Paste a pairing link" first, reduce-motion's still code with the setting
 the owner sets, the scan's own reader (`qrReader()`) on real QR, inverted QR, Data Matrix and Micro QR
 images (`src/androidTest/assets/codes`), and its analysis (`qrAnalyzer`) on camera frames made of them,
-and `clipboardClip` on the phone's own clipboard, a clip's URI given as its own words, never opened. The
+and `clipboardClip` on the phone's own clipboard, a clip's URI given as its own words, never opened.
+`FocusRingDeviceTest` moves the focus through Welcome's two actions with the d-pad's down, a key sent through
+the system's input pipeline, which takes the window out of touch mode, and reads the window's pixels: the ink
+in the ring's stroke beside and above the focused action, the canvas in the gap and beside the other action;
+then a tap sent the same way, as a finger's, puts the window back in touch mode and no ring is left. A button
+gives up the focus as the window enters touch mode (Compose's own rule for what is focusable only by keys), so that
+tap would clear the ring even if the ring ignored the input mode; Name's field keeps the focus in touch mode, so
+the test taps it too: focused with no ring, then ringed once a d-pad key takes the window out of touch mode. The
 test APK is signed with the SDK's debug key; it is not the app, and pairs with nothing. `ChatsTestActivity` shows the Chats list and the Instance screen
 over fixed state, two rows and one connected Fermix, with a `ChatsTestRig` kept the same way that counts
 the activity's creations and picks the screen; its tests long-press a row for Move to top · Rename · Details · Unpair…, and keep a rename

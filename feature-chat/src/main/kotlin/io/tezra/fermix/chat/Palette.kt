@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.protocol.CommandDescriptor
 
 /** A command's row at its least: 52 dp, a 48 dp target with room around its two lines. */
@@ -129,6 +130,7 @@ private fun CommandRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = COMMAND_ROW)
+                .rowFocusRing()
                 .clickable(role = Role.Button) { onPick(command) }
                 .padding(horizontal = 24.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),

@@ -61,6 +61,9 @@ import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.Sender
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
+import io.tezra.fermix.design.rowFocusRing
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import java.time.Instant
@@ -102,7 +105,7 @@ internal fun SearchBar(
             modifier = Modifier.fillMaxWidth().heightIn(min = SEARCH_BAR_HEIGHT).padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = actions.onBack) {
+            IconButton(onClick = actions.onBack, modifier = Modifier.iconFocusRing()) {
                 Icon(
                     painterResource(R.drawable.ic_chat_back),
                     stringResource(R.string.chat_search_close),
@@ -124,7 +127,8 @@ internal fun SearchBar(
                     Modifier
                         .weight(1f)
                         .focusRequester(focus)
-                        .semantics { contentDescription = label },
+                        .semantics { contentDescription = label }
+                        .focusRing(FermixShapes.chip),
                 decorationBox = { inner ->
                     Box {
                         if (search.query.isEmpty()) Text(label, style = QUERY_STYLE, color = colors.textSecondary)
@@ -133,7 +137,7 @@ internal fun SearchBar(
                 },
             )
             if (search.query.isNotEmpty()) {
-                IconButton(onClick = { actions.onQuery("") }) {
+                IconButton(onClick = { actions.onQuery("") }, modifier = Modifier.iconFocusRing()) {
                     Icon(
                         painterResource(R.drawable.ic_chat_x),
                         stringResource(R.string.chat_search_clear),
@@ -232,7 +236,7 @@ private fun FailedLine(
             color = colors.textSecondary,
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = onRetry) {
+        TextButton(onClick = onRetry, modifier = Modifier.focusRing(FermixShapes.button)) {
             Text(
                 stringResource(R.string.chat_try_again),
                 style = FermixType.label,
@@ -263,6 +267,7 @@ private fun Chips(
                 modifier =
                     Modifier
                         .heightIn(min = 36.dp)
+                        .focusRing(FermixShapes.chip)
                         .border(FermixSpacing.hairline, if (on) colors.ink else colors.hairline, FermixShapes.chip)
                         .background(if (on) colors.ink else colors.canvas, FermixShapes.chip)
                         .selectable(selected = on, role = Role.RadioButton) { onChip(chip) }
@@ -290,7 +295,7 @@ private fun HitRow(
 ) {
     val colors = LocalFermixColors.current
     val who = if (hit.sender == Sender.User) R.string.chat_you else R.string.chat_search_agent
-    Column(modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onPick)) {
+    Column(modifier = Modifier.fillMaxWidth().rowFocusRing().clickable(role = Role.Button, onClick = onPick)) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -389,7 +394,7 @@ private fun StepButton(
     onStep: () -> Unit,
 ) {
     val ink = LocalFermixColors.current.ink
-    IconButton(onClick = onStep, enabled = enabled) {
+    IconButton(onClick = onStep, modifier = Modifier.iconFocusRing(), enabled = enabled) {
         Icon(painterResource(icon), stringResource(label), tint = if (enabled) ink else ink.copy(alpha = OFF_ALPHA))
     }
 }

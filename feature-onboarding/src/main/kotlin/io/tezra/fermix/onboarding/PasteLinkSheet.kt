@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
 
 private val SHEET_SIDES = 24.dp
 private val SHEET_BOTTOM = 16.dp
@@ -137,11 +139,11 @@ private fun LinkField(
     OutlinedTextField(
         value = field.text,
         onValueChange = actions.onEdit,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().focusRing(FermixShapes.card),
         label = { Text(text = stringResource(R.string.onboarding_paste_link)) },
         placeholder = { Text(text = stringResource(R.string.onboarding_paste_hint)) },
         trailingIcon = {
-            IconButton(onClick = actions.onPaste) {
+            IconButton(onClick = actions.onPaste, modifier = Modifier.iconFocusRing()) {
                 Icon(
                     painter = painterResource(R.drawable.ic_onboarding_paste),
                     contentDescription = stringResource(R.string.onboarding_paste),

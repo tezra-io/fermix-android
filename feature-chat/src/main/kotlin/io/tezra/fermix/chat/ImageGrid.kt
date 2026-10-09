@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.rowFocusRing
 
 /** The longest edge a bubble's image decodes at: a phone's width at 3×, enough for 88 % of it. */
 const val BUBBLE_EDGE_PX = 1_080
@@ -192,7 +194,11 @@ private fun MediaCell(
             ?.let { Color(it) } ?: colors.hairline
     val open = { context.media.onView(spot.messageKey, spot.index) }
     Box(
-        modifier = sized.background(placeholder).clickable(enabled = shown != null, role = Role.Image, onClick = open),
+        modifier =
+            sized
+                .rowFocusRing(RingOn.Picture)
+                .background(placeholder)
+                .clickable(enabled = shown != null, role = Role.Image, onClick = open),
         contentAlignment = Alignment.Center,
     ) {
         if (shown != null) SharedImage(shown, spot.key, Modifier.fillMaxSize())

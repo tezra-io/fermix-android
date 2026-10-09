@@ -10,14 +10,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.MAX_NICKNAME_CHARACTERS
 import io.tezra.fermix.data.NicknameRefusal
 import io.tezra.fermix.data.nicknameRefusal
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import io.tezra.fermix.design.textButtonColors
 
 /**
@@ -42,12 +45,20 @@ fun UnpairDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = onUnpair, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = onUnpair,
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(text = stringResource(R.string.instance_unpair))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(text = stringResource(R.string.instance_cancel))
             }
         },
@@ -78,6 +89,7 @@ fun RenameDialog(
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
+                modifier = Modifier.focusRing(FermixShapes.card),
                 singleLine = true,
                 isError = refusal != null,
                 supportingText = refusal?.let { { Text(text = refusalWords(it)) } },
@@ -92,6 +104,7 @@ fun RenameDialog(
         confirmButton = {
             TextButton(
                 onClick = { onRename(text.trim()) },
+                modifier = Modifier.focusRing(FermixShapes.button),
                 enabled = refusal == null,
                 colors = textButtonColors(colors),
             ) {
@@ -99,7 +112,11 @@ fun RenameDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, colors = textButtonColors(colors)) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.focusRing(FermixShapes.button),
+                colors = textButtonColors(colors),
+            ) {
                 Text(text = stringResource(R.string.instance_cancel))
             }
         },

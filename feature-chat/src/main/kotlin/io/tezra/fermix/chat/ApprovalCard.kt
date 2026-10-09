@@ -56,6 +56,7 @@ import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
+import io.tezra.fermix.design.focusRing
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -230,14 +231,14 @@ private fun Answers(
         Button(
             onClick = onDeny,
             enabled = enabled,
-            modifier = Modifier.weight(1f).then(answer),
+            modifier = Modifier.weight(1f).then(answer).focusRing(FermixShapes.button),
             colors = ButtonDefaults.buttonColors(containerColor = colors.agentBubble, contentColor = colors.ink),
             contentPadding = ANSWER_PADDING,
         ) { AnswerWord(stringResource(R.string.chat_deny)) }
         Button(
             onClick = onApprove,
             enabled = enabled,
-            modifier = Modifier.weight(1f).then(answer),
+            modifier = Modifier.weight(1f).then(answer).focusRing(FermixShapes.button),
             colors = ButtonDefaults.buttonColors(containerColor = colors.ink, contentColor = colors.onInk),
             contentPadding = ANSWER_PADDING,
         ) { AnswerWord(stringResource(R.string.chat_approve)) }

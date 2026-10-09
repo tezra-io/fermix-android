@@ -45,10 +45,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
 
 /** Slid this far left, the held recording is cancelled (design section 13.6). */
 val CANCEL_SLIDE = 120.dp
@@ -109,7 +112,7 @@ internal fun DraftRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PlayButton(running, colors.hairline, colors.ink, onPlay)
+        PlayButton(running, colors.hairline, colors.ink, RingOn.Surface, onPlay)
         Wave(draft.bars, colors.ink, Modifier.width(160.dp), played)
         Text(durationText(draft.durationMs), style = SMALL_MONO, color = colors.textSecondary)
     }
@@ -171,10 +174,10 @@ internal fun VoiceHint(
                 color = colors.ink,
                 textDecoration = TextDecoration.Underline,
                 modifier =
-                    Modifier.minimumInteractiveComponentSize().clickable(
-                        role = Role.Button,
-                        onClick = onSettings,
-                    ),
+                    Modifier
+                        .focusRing(FermixShapes.chip)
+                        .minimumInteractiveComponentSize()
+                        .clickable(role = Role.Button, onClick = onSettings),
             )
         }
     }
@@ -193,6 +196,7 @@ internal fun RowControl(
         modifier =
             Modifier
                 .minimumInteractiveComponentSize()
+                .focusRing(CircleShape)
                 .size(40.dp)
                 .background(if (go) colors.ink else Color.Transparent, CircleShape)
                 .clickable(role = Role.Button, onClick = onClick)

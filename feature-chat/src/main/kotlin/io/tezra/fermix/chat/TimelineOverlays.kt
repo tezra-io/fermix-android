@@ -41,6 +41,8 @@ import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -164,7 +166,12 @@ internal fun ScrollPill(
 ) {
     val colors = LocalFermixColors.current
     Box(
-        modifier = modifier.size(FermixSpacing.minTarget).clickable(role = Role.Button, onClick = onClick),
+        modifier =
+            modifier
+                .size(FermixSpacing.minTarget)
+                // It floats over the timeline, so its ring lies on the owner's ink bubbles as often as on the canvas.
+                .focusRing(CircleShape, RingOn.Picture)
+                .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Box(

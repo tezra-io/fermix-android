@@ -65,7 +65,8 @@ import org.intellij.markdown.flavours.gfm.GFMTokenTypes
 
 /**
  * The renderer's look in an answer bubble (design sections 8.3 and 13.1): body 16/24 in the ink, headings as
- * bold body, inline code in mono on the hairline, links in the ink, always underlined (the M51 update's 1.3).
+ * bold body, inline code in mono on the hairline, links in the ink, always underlined (the M51 update's 1.3), and
+ * a focused link onInk on the ink, as the focus ring cannot go round it.
  */
 @Composable
 private fun colorsOf(colors: FermixColors): MarkdownColors =
@@ -82,6 +83,8 @@ private fun typographyOf(colors: FermixColors): MarkdownTypography {
     val body = FermixType.body.copy(color = colors.ink)
     val heading = body.copy(fontWeight = FontWeight.SemiBold)
     val link = SpanStyle(color = colors.ink, textDecoration = TextDecoration.Underline)
+    // A link is the renderer's own focusable and takes no modifier, so no focus ring: focused, it is onInk on the ink.
+    val focusedLink = SpanStyle(color = colors.onInk, background = colors.ink)
     return markdownTypography(
         h1 = heading,
         h2 = heading,
@@ -97,7 +100,7 @@ private fun typographyOf(colors: FermixColors): MarkdownTypography {
         ordered = body,
         bullet = body,
         list = body,
-        textLink = TextLinkStyles(style = link),
+        textLink = TextLinkStyles(style = link, focusedStyle = focusedLink),
         table = body,
     )
 }

@@ -40,6 +40,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
 import kotlinx.coroutines.awaitCancellation
 import java.io.File
 import java.io.IOException
@@ -141,7 +144,11 @@ private fun CloseButton(
 ) {
     val label = stringResource(R.string.chat_close)
     Box(
-        modifier = modifier.size(48.dp).clickable(role = Role.Button, onClickLabel = label, onClick = onClose),
+        modifier =
+            modifier
+                .size(48.dp)
+                .iconFocusRing(RingOn.Dark)
+                .clickable(role = Role.Button, onClickLabel = label, onClick = onClose),
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(R.drawable.ic_chat_x), label, tint = Color.White)
@@ -159,6 +166,7 @@ private fun Shutter(
         modifier =
             modifier
                 .size(72.dp)
+                .focusRing(CircleShape, RingOn.Dark)
                 .border(4.dp, Color.White, CircleShape)
                 .padding(8.dp)
                 .background(Color.White, CircleShape)

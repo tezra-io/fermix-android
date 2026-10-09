@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.Constraints
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.rowFocusRing
 
 /**
  * The screen's frame (design sections 13.5 and 13.6): [body] fills the window above the dock, so the timeline
@@ -58,6 +59,7 @@ internal fun Scrim(onClose: () -> Unit) {
             Modifier
                 .fillMaxSize()
                 .background(LocalFermixColors.current.scrim)
+                .rowFocusRing()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

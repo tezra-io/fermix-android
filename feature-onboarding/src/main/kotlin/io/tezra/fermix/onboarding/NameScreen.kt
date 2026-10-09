@@ -42,6 +42,7 @@ import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
 import io.tezra.fermix.design.NameMotion
 import io.tezra.fermix.design.Tint
+import io.tezra.fermix.design.focusRing
 
 // The visual canon's "Name this Fermix" (6b): the title 8 dp down, the field 22 dp under it on 16 dp
 // corners, the chips 8 dp apart under the field, and the row as the Chats list will show it 12 dp lower:
@@ -94,7 +95,12 @@ fun NameScreen(
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            modifier = Modifier.fillMaxWidth().padding(top = FIELD_TOP).semantics { contentDescription = title },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = FIELD_TOP)
+                    .semantics { contentDescription = title }
+                    .focusRing(RoundedCornerShape(FIELD_CORNER)),
             singleLine = true,
             isError = !free(text),
             shape = RoundedCornerShape(FIELD_CORNER),
@@ -128,7 +134,7 @@ private fun Suggestions(
                 selected = on,
                 onClick = { onChoose(suggestion) },
                 label = { Text(text = suggestion, style = FermixType.label) },
-                modifier = Modifier.heightIn(min = CHIP_HEIGHT),
+                modifier = Modifier.heightIn(min = CHIP_HEIGHT).focusRing(FermixShapes.chip),
                 shape = FermixShapes.chip,
                 colors =
                     FilterChipDefaults.filterChipColors(

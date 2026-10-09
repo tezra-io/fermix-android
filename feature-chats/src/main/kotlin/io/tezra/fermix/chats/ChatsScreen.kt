@@ -41,13 +41,17 @@ import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.Arrival
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.Moment
 import io.tezra.fermix.design.arrivalAt
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
 import io.tezra.fermix.design.rememberMoment
 import io.tezra.fermix.design.risingIn
+import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.instance.RenameDialog
 import io.tezra.fermix.instance.StillTwoDotMark
 import io.tezra.fermix.instance.UnpairDialog
@@ -230,11 +234,11 @@ private fun TopBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = BAR_TITLE_START).weight(1f),
         )
-        IconButton(onClick = onAdd) {
+        IconButton(onClick = onAdd, modifier = Modifier.iconFocusRing()) {
             Icon(painterResource(R.drawable.ic_chats_plus), stringResource(R.string.chats_add), tint = colors.ink)
         }
         Box {
-            IconButton(onClick = { overflow = true }) {
+            IconButton(onClick = { overflow = true }, modifier = Modifier.iconFocusRing()) {
                 Icon(painterResource(R.drawable.ic_chats_more), stringResource(R.string.chats_more), tint = colors.ink)
             }
             DropdownMenu(
@@ -253,6 +257,7 @@ private fun TopBar(
                         )
                     },
                     leadingIcon = { Icon(painterResource(R.drawable.ic_chats_lock), null, tint = colors.ink) },
+                    modifier = Modifier.rowFocusRing(),
                     onClick = {
                         overflow = false
                         onAppLock()
@@ -279,7 +284,12 @@ private fun EmptyState(onAdd: () -> Unit) {
             StillTwoDotMark(modifier = Modifier.padding(bottom = MARK_BELOW))
             Button(
                 onClick = onAdd,
-                modifier = Modifier.fillMaxWidth().padding(top = ACTION_TOP).heightIn(min = FermixSpacing.minTarget),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = ACTION_TOP)
+                        .heightIn(min = FermixSpacing.minTarget)
+                        .focusRing(FermixShapes.button),
             ) {
                 Text(text = stringResource(R.string.chats_add))
             }

@@ -49,6 +49,7 @@ import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -191,6 +192,7 @@ private fun SheetChip(
         modifier =
             Modifier
                 .minimumInteractiveComponentSize()
+                .focusRing(FermixShapes.chip)
                 .heightIn(min = 36.dp)
                 .clip(FermixShapes.chip)
                 .background(colors.canvas)
@@ -250,6 +252,7 @@ private fun CaptionField(
             Modifier
                 .padding(start = 16.dp, top = 8.dp, end = 16.dp)
                 .fillMaxWidth()
+                .focusRing(FIELD_SHAPE)
                 .clip(FIELD_SHAPE)
                 .background(colors.canvas)
                 .border(1.dp, colors.hairline, FIELD_SHAPE)
@@ -280,6 +283,7 @@ private fun SendRow(
             modifier =
                 Modifier
                     .heightIn(min = 48.dp)
+                    .focusRing(FermixShapes.chip)
                     .toggleable(attach.asFiles, role = Role.Checkbox, onValueChange = actions.attach.onAsFiles),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -291,6 +295,7 @@ private fun SendRow(
         val view = LocalView.current
         Button(
             onClick = { actions.onSend { HapticFeedback.perform(view, HapticUse.Send) } },
+            modifier = Modifier.focusRing(FermixShapes.button),
             enabled = attach.sendable > 0,
             colors = ButtonDefaults.buttonColors(containerColor = colors.ink, contentColor = colors.onInk),
             shape = FermixShapes.button,
@@ -334,6 +339,7 @@ internal fun PhotosTile(
                 Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
+                    .focusRing(FermixShapes.card)
                     .clip(FermixShapes.card)
                     .background(colors.agentBubble)
                     .clickable(role = Role.Button, onClick = actions.onPhotos),

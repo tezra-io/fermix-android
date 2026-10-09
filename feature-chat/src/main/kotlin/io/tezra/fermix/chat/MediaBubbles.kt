@@ -45,7 +45,10 @@ import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.RingOn
 import io.tezra.fermix.design.Sender
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.raisedWhileFocused
 
 /** The caption under a card's images (the canon's `.cap`, 400 16/24, padded 8 12 10). */
 private val CAPTION_PADDING = Modifier.padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 10.dp)
@@ -71,21 +74,22 @@ internal fun MediaMessage(
     val documents = message.media.filter { it.shape == MediaShape.DOCUMENT }
     val notes = message.media.filter { it.shape == MediaShape.VOICE }
     val width = if (user) FermixSpacing.USER_BUBBLE_MAX_WIDTH else FermixSpacing.AGENT_BUBBLE_MAX_WIDTH
+    val target = Modifier.focusRing(FermixShapes.card).then(modifier)
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (user) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(FermixSpacing.withinGroup),
     ) {
-        if (images.isNotEmpty()) ImagesCard(images, item, context, modifier.fillMaxWidth(width))
+        if (images.isNotEmpty()) ImagesCard(images, item, context, target.fillMaxWidth(width))
         documents.forEach { DocumentRow(it, user, context, Modifier.fillMaxWidth(width)) }
         val side = if (user) Alignment.CenterEnd else Alignment.CenterStart
         notes.forEach {
-            Box(modifier = Modifier.fillMaxWidth(width), contentAlignment = side) {
-                VoiceBubble(it, message, context, modifier)
+            Box(modifier = Modifier.fillMaxWidth(width).raisedWhileFocused(), contentAlignment = side) {
+                VoiceBubble(it, message, context, target)
             }
         }
         val loose = images.isEmpty() && notes.isEmpty() && message.text.isNotBlank()
-        if (loose) WordsBubble(message, context, modifier.fillMaxWidth(width))
+        if (loose) WordsBubble(message, context, target.fillMaxWidth(width))
         MediaLines(message, context, stamped = notes.isEmpty(), washed = selected)
     }
 }
@@ -197,13 +201,13 @@ private fun VoiceBubble(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            PlayButton(playing?.running == true, wash, onInk) { shown.actions.onPlay(media) }
+            PlayButton(playing?.running == true, wash, onInk, RingOn.Ink) { shown.actions.onPlay(media) }
             val bars = noteBars(shown.ui.bars[media.cacheName])
             val played = playing?.let(::playedShare) ?: 0f
             Wave(bars, onInk, Modifier.weight(1f, fill = false).width(NOTE_WAVE), played)
             val lengthInk = onInk.copy(alpha = LENGTH_ALPHA)
             Text(length, style = SMALL_MONO, color = lengthInk, maxLines = 1, softWrap = false)
-            SpeedChip(playing?.speed ?: SPEEDS.first(), wash, onInk, shown.actions.onSpeed)
+            SpeedChip(playing?.speed ?: SPEEDS.first(), wash, onInk, RingOn.Ink, shown.actions.onSpeed)
         }
         media.sent?.let { UploadBar(it, wash, onInk, Modifier.padding(top = 6.dp)) }
         Transcript(message, Modifier.fillMaxWidth().padding(top = 6.dp), onInk)

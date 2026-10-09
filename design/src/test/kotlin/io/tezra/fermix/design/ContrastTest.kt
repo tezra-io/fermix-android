@@ -7,13 +7,15 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.math.pow
 import kotlin.math.round
+import kotlin.math.sqrt
 
 // The M51 update's section 1.2, "Contrast, measured (WCAG ratio)", as a test, each pair at the update's number to
 // one decimal; the pairs of the tokens named here that the app draws and the update does not measure, each held to
 // its WCAG 2 floor (success criteria 1.4.3 and 1.4.11): 4.5 : 1 for text, 3 : 1 for a mark that is not text; and
 // those under their floor that README's departures name, each pinned at what it measures. A translucent token is
 // measured as it lands, over what it is drawn on. The colours of a fixed surface that a module names itself, the
-// code card's syntax and Scan's camera, are its module's and not measured here.
+// code card's syntax and Scan's camera, are its module's and not measured here. The focus ring's pairs are measured in
+// the colour the ring itself draws (ringColor).
 class ContrastTest {
     @Test
     fun `black on white is 21 to 1 either way round, and a colour on itself 1 to 1`() {
@@ -115,6 +117,68 @@ class ContrastTest {
         }
     }
 
+    // The focus ring (the update's 1.3, and section 8: "every button, link and focus ring meets the contrast in
+    // 1.2"), a mark, in the colour the ring draws on each ground (ringColor): the ink on every surface a control lies
+    // on and on a selected row's wash, onInk on the ink, and dark mode's ink on what is dark in both modes, the code
+    // card and, darker than any surface named here, the camera's and the viewer's black.
+    @Test
+    fun `the focus ring reads as a mark on every surface it lies on, in both modes`() {
+        for (colors in listOf(FermixColors.Light, FermixColors.Dark)) {
+            val ring = ringColor(colors, RingOn.Surface)
+            for (surface in surfacesOf(colors)) assertAtLeast(MARK, ring, surface)
+            assertAtLeast(MARK, ring, colors.selection.compositeOver(colors.canvas))
+            assertAtLeast(MARK, ringColor(colors, RingOn.Ink), colors.ink)
+            assertAtLeast(MARK, ringColor(colors, RingOn.Dark), colors.codeCard)
+            assertAtLeast(MARK, ringColor(colors, RingOn.Dark), FermixColors.Dark.canvas)
+        }
+        // On the canvas, the agent's bubble and the ink, the update's own table: the ink and onInk are its first pairs.
+        val light = FermixColors.Light
+        val dark = FermixColors.Dark
+        assertMeasured(19.7, ringColor(light, RingOn.Surface), light.canvas)
+        assertMeasured(17.9, ringColor(light, RingOn.Surface), light.agentBubble)
+        assertMeasured(19.7, ringColor(light, RingOn.Ink), light.ink)
+        assertMeasured(14.8, ringColor(dark, RingOn.Surface), dark.canvas)
+        assertMeasured(12.9, ringColor(dark, RingOn.Surface), dark.agentBubble)
+        assertMeasured(14.8, ringColor(dark, RingOn.Ink), dark.ink)
+    }
+
+    // Dark mode's ink rings a control on a surface dark in both modes, and lies there alone, in light mode too: an
+    // icon button there is ringed inside its target (iconFocusRing), so Pair's copy button's ring stays on the
+    // command card, which is as tall as the button (PairRingTest), and never on light mode's canvas, where it
+    // measures 1.3 : 1.
+    @Test
+    fun `dark mode's ink is a ring on the dark surfaces alone, and would not read on light mode's canvas`() {
+        assertMeasured(1.3, ringColor(FermixColors.Light, RingOn.Dark), FermixColors.Light.canvas)
+    }
+
+    // A picture can be any colour, so an image cell's ring is two lines, the ink and onInk inside it (RingOn.Picture):
+    // the two ratios a colour makes with them multiply to theirs, so the larger is at least its square root, and over
+    // every luminance (every grey) one of the two lines reads as a mark.
+    @Test
+    fun `on any picture one of the two lines of a picture's ring reads as a mark, in both modes`() {
+        for (colors in listOf(FermixColors.Light, FermixColors.Dark)) {
+            val outer = ringColor(colors, RingOn.Picture)
+            val inner = checkNotNull(ringLining(colors, RingOn.Picture))
+            assertTrue(sqrt(contrast(outer, inner)) >= MARK, "the lines' own ratio's root is under $MARK")
+            for (level in 0..GREY_LEVELS) {
+                val grey = Color(level, level, level)
+                val best = maxOf(contrast(outer, grey), contrast(inner, grey))
+                assertTrue(best >= MARK, "on $grey the picture's ring is $best : 1, under $MARK : 1")
+            }
+        }
+    }
+
+    // A link among a message's words takes no modifier, so no ring: focused, it is drawn in onInk on the ink
+    // (ChatMarkdown's focused link style), text on the ink as the owner's bubble is, a block of the ink on the agent
+    // bubble and on a card it lies on as a mark.
+    @Test
+    fun `a focused link, onInk on the ink, reads as text and as a mark on what it lies on, in both modes`() {
+        for (colors in listOf(FermixColors.Light, FermixColors.Dark)) {
+            assertAtLeast(TEXT, colors.onInk, colors.ink)
+            for (surface in surfacesOf(colors)) assertAtLeast(MARK, colors.ink, surface)
+        }
+    }
+
     // A selected message's row is washed in the selection, and what the row draws on its canvas, outside its
     // bubbles, lies on that wash: a state line under the owner's bubble, a job's tag over a card, a card's time, an
     // upload's line. The error text and the stamp's faded ink read there in neither mode, nor light mode's secondary
@@ -184,6 +248,9 @@ private const val PRECISION = 1e-9
 /** WCAG 2's floors: text, and a mark that is not text (a badge's fill, a divider, an icon). */
 private const val TEXT = 4.5
 private const val MARK = 3.0
+
+/** The last of an 8-bit channel's levels, a grey for each. */
+private const val GREY_LEVELS = 255
 
 private val SIGNAL_BLUE = Color(0xFF2B5CFF)
 

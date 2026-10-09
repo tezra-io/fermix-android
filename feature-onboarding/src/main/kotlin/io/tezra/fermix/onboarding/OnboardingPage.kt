@@ -19,7 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,11 +41,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.design.ColumnWidth
+import io.tezra.fermix.design.FermixColors
 import io.tezra.fermix.design.FermixColumn
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.RingOn
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.iconFocusRing
 import io.tezra.fermix.design.textButtonColors
 
 // The visual canon's onboarding page (.ob, .ft, .fail .ic and .ab): 24 dp at the sides and 16 dp above
@@ -119,8 +123,10 @@ internal fun HapticOnce(use: HapticUse) {
 
 /**
  * A screen's one action, the canon's `.btn.p`: the ink's pill with its label in onInk (the M51 update's 1.3), as
- * Material's Button draws the scheme's primary, at least 48 dp tall. [colors] is for a screen dark in both modes,
- * Scan's camera, whose pill is the dark mode's ink in light mode as well.
+ * Material's Button draws the scheme's primary, at least 48 dp tall, with the focus ring (the update's 1.3). [dark] is
+ * for a screen dark in both modes, Scan's camera, whose pill is the dark mode's ink in light mode as well, and so is
+ * its ring: light mode's ink, near-black, would lie on the frame's near-black at about 1.1 : 1, and read as less than
+ * "Paste a pairing link" under it.
  */
 @Composable
 internal fun PrimaryAction(
@@ -128,11 +134,21 @@ internal fun PrimaryAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
+    dark: Boolean = false,
 ) {
+    val colors =
+        if (dark) {
+            ButtonDefaults.buttonColors(containerColor = FermixColors.Dark.ink, contentColor = FermixColors.Dark.onInk)
+        } else {
+            ButtonDefaults.buttonColors()
+        }
     Button(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = FermixSpacing.minTarget)
+                .focusRing(FermixShapes.button, if (dark) RingOn.Dark else RingOn.Surface),
         enabled = enabled,
         colors = colors,
     ) {
@@ -141,8 +157,8 @@ internal fun PrimaryAction(
 }
 
 /**
- * A secondary action, the canon's `.btn.x`: the ink's words on no fill, at least 48 dp tall; underlined when it is a
- * [link], one that opens a web page (pageOf), as the M51 update's 1.3 underlines every link.
+ * A secondary action, the canon's `.btn.x`: the ink's words on no fill, at least 48 dp tall, with the focus ring;
+ * underlined when it is a [link], one that opens a web page (pageOf), as the M51 update's 1.3 underlines every link.
  */
 @Composable
 internal fun SecondaryAction(
@@ -153,7 +169,7 @@ internal fun SecondaryAction(
 ) {
     TextButton(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget),
+        modifier = modifier.fillMaxWidth().heightIn(min = FermixSpacing.minTarget).focusRing(FermixShapes.button),
         colors = textButtonColors(LocalFermixColors.current),
     ) {
         val decoration = if (link) TextDecoration.Underline else null
@@ -172,7 +188,7 @@ internal fun BackBar(
         modifier = modifier.fillMaxWidth().height(BAR_HEIGHT).padding(horizontal = BAR_SIDES),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onBack) {
+        IconButton(onClick = onBack, modifier = Modifier.iconFocusRing()) {
             Icon(
                 painter = painterResource(R.drawable.ic_onboarding_back),
                 contentDescription = stringResource(R.string.onboarding_back),

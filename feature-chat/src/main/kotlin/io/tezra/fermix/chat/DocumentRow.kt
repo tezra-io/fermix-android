@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,6 +38,9 @@ import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
+import io.tezra.fermix.design.raisedWhileFocused
+import io.tezra.fermix.design.rowFocusRing
 
 /** A document's row (the canon's `.doc`): 64 dp, its extension's tile 40 dp with 10 dp corners. */
 private val DOCUMENT_HEIGHT = 64.dp
@@ -73,12 +77,14 @@ internal fun DocumentRow(
     var menu by remember { mutableStateOf(false) }
     val name = media.name ?: stringResource(R.string.chat_file_tile)
     val origin = if (user) stringResource(R.string.chat_this_phone) else context.host
-    Box(modifier = modifier) {
+    // The ring lies 2 to 4 dp past the row, over the words' bubble 2 dp under it in the message's column.
+    Box(modifier = modifier.raisedWhileFocused()) {
         Row(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = DOCUMENT_HEIGHT)
+                    .focusRing(FermixShapes.card)
                     .clip(FermixShapes.card)
                     .background(colors.agentBubble)
                     .combinedClickable(
@@ -141,6 +147,7 @@ private fun SaveButton(onSave: () -> Unit) {
         modifier =
             Modifier
                 .minimumInteractiveComponentSize()
+                .focusRing(CircleShape)
                 .size(40.dp)
                 .clip(RoundedCornerShape(20.dp))
                 .combinedClickable(role = Role.Button, onClickLabel = label, onClick = onSave),
@@ -167,6 +174,7 @@ private fun DocumentMenu(
         DropdownMenuItem(
             text = { Text(stringResource(R.string.chat_share), style = FermixType.body) },
             leadingIcon = { Icon(painterResource(R.drawable.ic_chat_share), null) },
+            modifier = Modifier.rowFocusRing(),
             onClick = {
                 onDismiss()
                 onShare()
@@ -175,6 +183,7 @@ private fun DocumentMenu(
         DropdownMenuItem(
             text = { Text(stringResource(R.string.chat_save), style = FermixType.body) },
             leadingIcon = { Icon(painterResource(R.drawable.ic_chat_save), null) },
+            modifier = Modifier.rowFocusRing(),
             onClick = {
                 onDismiss()
                 onSave()

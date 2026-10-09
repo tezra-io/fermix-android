@@ -59,6 +59,7 @@ import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
 import io.tezra.fermix.design.Sender
+import io.tezra.fermix.design.focusRing
 import io.tezra.fermix.protocol.LinkPreviewCard
 
 /**
@@ -205,6 +206,7 @@ private fun LinkPreview(
     Column(
         modifier =
             modifier
+                .focusRing(shape)
                 .clip(shape)
                 .background(colors.agentBubble)
                 .clickable(role = Role.Button, onClickLabel = open) { context.cards.onLink(card.url) },

@@ -32,8 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
+import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.focusRing
 import java.time.ZoneId
 
 // The visual canon's `.ihd`: centred, 12 dp above, 8 below and 24 at the sides, 4 dp between its lines and
@@ -145,6 +147,7 @@ private fun Header(
             textAlign = TextAlign.Center,
             modifier =
                 Modifier
+                    .focusRing(FermixShapes.chip)
                     .clickable(
                         onClickLabel = stringResource(R.string.instance_rename),
                         role = Role.Button,
@@ -162,7 +165,11 @@ private fun Header(
                 text = stringResource(R.string.instance_reset_name),
                 style = RESET_STYLE,
                 color = colors.ink,
-                modifier = Modifier.clickable(role = Role.Button, onClick = onReset).minimumInteractiveComponentSize(),
+                modifier =
+                    Modifier
+                        .focusRing(FermixShapes.chip)
+                        .clickable(role = Role.Button, onClick = onReset)
+                        .minimumInteractiveComponentSize(),
             )
         }
     }

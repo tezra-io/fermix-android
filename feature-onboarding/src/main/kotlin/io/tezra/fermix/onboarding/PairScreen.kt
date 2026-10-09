@@ -52,7 +52,9 @@ import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
 import io.tezra.fermix.design.PairBuild
+import io.tezra.fermix.design.RingOn
 import io.tezra.fermix.design.deviceShown
+import io.tezra.fermix.design.iconFocusRing
 import io.tezra.fermix.design.linkDrawn
 import io.tezra.fermix.design.lockScale
 import io.tezra.fermix.design.lockShownAt
@@ -314,7 +316,10 @@ private fun CommandLine(
             modifier = Modifier.weight(1f),
         )
         val label = stringResource(R.string.onboarding_copy)
-        IconButton(onClick = onCopy, modifier = Modifier.semantics { contentDescription = label }) {
+        IconButton(
+            onClick = onCopy,
+            modifier = Modifier.semantics { contentDescription = label }.iconFocusRing(RingOn.Dark),
+        ) {
             Icon(
                 painter = painterResource(R.drawable.ic_onboarding_copy),
                 contentDescription = null,
@@ -359,7 +364,7 @@ internal fun ShownAs(
 
 @Composable
 private fun Pencil(onRename: () -> Unit) {
-    IconButton(onClick = onRename) {
+    IconButton(onClick = onRename, modifier = Modifier.iconFocusRing()) {
         Icon(
             painter = painterResource(R.drawable.ic_onboarding_pencil),
             contentDescription = stringResource(R.string.onboarding_rename),
