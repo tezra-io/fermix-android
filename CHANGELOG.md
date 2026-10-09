@@ -264,4 +264,5 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   longer draw an "isn't responding" or "has stopped" dialog, one of which, the launcher's on a slow runner, held
   the screen through eighteen of onboarding's tests; a device test that waits for the screen while such a dialog has
   it says so. Each run stops its emulator itself, within a minute, so an emulator that does not exit no longer
-  keeps a job whose tests all passed running until it is cancelled.
+  keeps a job whose tests all passed running until it is cancelled, and a job has 50 minutes rather than 25, room
+  for a runner twice as slow and for the second run after an emulator that did not boot.

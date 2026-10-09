@@ -72,7 +72,7 @@ internal const val INSTRUMENTATION_RUNNER = "androidx.test.runner.AndroidJUnitRu
 /**
  * How long one instrumented test may run, in milliseconds (AndroidJUnitRunner's `timeout_msec`): past it the test fails
  * by its name, with its thread's stack, and the run goes on to the next. Three times the longest test's own span (a
- * landing's minute, ShareDeviceTest), well inside CI's `ui` job's 25 minutes: a wait with no bound of its own once hung
+ * landing's minute, ShareDeviceTest), well inside CI's `ui` job's timeout: a wait with no bound of its own once hung
  * a fold test for 15 minutes (Task 14c, Pixel_Fold_API_36.1: Espresso's idle after the fold, the main thread idle).
  */
 internal const val INSTRUMENTED_TEST_TIMEOUT_MILLIS = 180_000L

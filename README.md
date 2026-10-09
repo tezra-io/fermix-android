@@ -2565,7 +2565,7 @@ fails by its name with its thread's stack and the run goes on. Once, on `Pixel_F
 feature-chats' fold test hung for more than 15 minutes: the instrumentation was parked in Espresso's idle
 (`FutureTask.get` with no timeout, under Compose's `waitForIdle`) right after the fold, the main thread idle in
 its message queue, until the emulator was killed; a rerun of that AVD passed, and it was not seen again. A run so
-stuck would have shown on CI only as the `ui` job's 25 minutes. The idle after a rotation or a fold is waited for
+stuck would have shown on CI only as the `ui` job's timeout. The idle after a rotation or a fold is waited for
 15 s at most (`idleWithin` in each module's `Device.kt`), failing with the window that has the focus.
 
 CI's `ui` job runs them on API 35 and 36, as `medium_phone` (the fold test left out) and as
@@ -2592,7 +2592,7 @@ requires it.
 The runs end the emulator themselves, bounded (`scripts/stop_emulator.sh`). The action keeps its step
 open until the emulator's process has exited, and its own end is one `adb emu kill`: in run 37956921652
 an emulator answered that kill with "OK: killing emulator, bye bye" and never exited, so the step, every
-test in it green, ran on until the job's 25 minutes cancelled it. The script finds the emulator's process
+test in it green, ran on until the job's timeout cancelled it. The script finds the emulator's process
 as the listener of its console port, the port in its serial (`ss`), and refuses one that is not an
 emulator's qemu: a process's name would not do, as `qemu-system-x86_64` is past the 15 characters `pgrep`
 matches and a machine can run other emulators and VMs. It asks `adb -s <serial> emu kill`, given 10 s to
@@ -2607,9 +2607,20 @@ log saying why: it fails only when the emulator outlived its SIGKILL (exit 1), w
 until the job's timeout all the same, or when a tool failed or its console port's listener is no
 emulator (exit 2), a process left for someone to look at, never passed over. The summary then reads that
 the tests failed, and the step's log names the stop. An emulator that never boots never reaches the
-script, and only the action's kill ends it. The job's 25 minutes stay: the stop takes a few seconds
-(2 to 5 s measured on this machine's emulators), 40 s when it must kill and 50 s at most, and the longest
-green job took 18 minutes.
+script, and only the action's kill ends it. The job's timeout is 50 minutes, twice section 3's budget of
+25, as the contract, unit and screens timeouts are twice theirs. It was the budget itself until the
+stop's first CI run (run 37981702866) showed 25 short: three runners went green in 15 to 18 minutes, each
+stop taking 2 s, but the fourth, `ui (36, pixel_fold)`, ran its emulator steps at about half their speed
+(onboarding 4:27 and the chat 7:27, against 2:15 and 3:47 on the fold at API 35) and was cancelled at 25
+minutes with the app's tests 1:37 in, on course for about 29. A runner twice as slow as the slowest green
+one (18.3 minutes, each step at its longest of the three) needs about 37, with the stop's 50 s at most (2
+to 5 s measured, 40 s when it must kill); and 25 never held the second run, which on a normal runner adds
+to the build and the tests the first emulator's boot timeout (its 300 s are 5.3 minutes of the action's
+tries) and a second launch and settle: 25.2 minutes, and 30 to 37.5 when the boot takes its 300 s and the
+settle then fails its 30 polls, which the script counts but does not time (the first polls of that run's
+three green runners took 5.5 to 20.9 s). 50 is a third over the larger, and `ci.yml` works the sum out
+beside the number. The stop keeps so long a timeout from costing a long wait: a job that reaches it ends
+within a minute of its tests.
 
 ## Releasing
 

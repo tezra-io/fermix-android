@@ -7,11 +7,12 @@
 # No job retries, except that ui runs its tests once more when the emulator did not boot, and says so
 # in its summary (section 3's one exception).
 #
-# The contract, unit and screens timeouts are twice their budgets in section 3 (2, 5 and 8 minutes):
-# the budget is the target, the timeout the ceiling past which a job is stuck, not slow. The build
-# job's is 30 minutes, as it runs the whole build, which outgrew twice section 3's 8 (below, and among
-# README.md's departures). ui's is its budget, 25 minutes, room for the build, a boot that fails and
-# the second one. The policy check's is its budget, 2 minutes, after 16 for the release build.
+# The contract, unit, screens and ui timeouts are twice their budgets in section 3 (2, 5, 8 and 25
+# minutes): the budget is the target, the timeout the ceiling past which a job is stuck, not slow. ui's
+# 50 also holds a runner twice as slow, and the second run after a boot that failed (the sum is at the job).
+# The build job's is 30 minutes, as it runs the whole build, which outgrew twice section 3's 8 (below,
+# and among README.md's departures). The policy check's is its budget, 2 minutes, after 16 for the
+# release build.
 #
 # setup-gradle runs with cache-provider basic, the open-source cache on the GitHub Actions cache,
 # not its default proprietary one. Basic saves ~/.gradle/caches (the dependencies, the build cache
@@ -226,7 +227,18 @@ jobs:
   # the summary says which happened.
   ui:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # Run 37981702866, the longest of each step on its three green runners: set-up 14 s, build 5:15, the
+    # action's SDK, AVD, boot and settle 1:58, the tests 10:47, the stop and the rest 5 s: 18.3 minutes. Its
+    # fourth runner was twice as slow on the emulator (onboarding 4:27 and the chat 7:27, where the fold at
+    # API 35 took 2:15 and 3:47) and was cancelled at 25, on course for about 29. A runner twice as slow
+    # throughout: 2 x 18.3 = 36.6, 37.4 with the stop's 50 s at most. The second run on a normal runner:
+    # set-up and build 5.5, the first run's SDK and AVD 0.75 and its boot timeout 5.3 (the launch's 10 s,
+    # then 150 tries about 2.06 s apart), the second launch and settle 2.0, the tests 10.8, the stop and the
+    # rest 0.9 at most: 25.2. A boot that takes its 300 s and a settle that then fails its 30 polls add to
+    # that the polls and a stop, 4.6 to 12.3 at the green runners' first polls (5.5 to 20.9 s each, then 2 s
+    # apart; the script counts its polls but does not time them): 30 to 37.5. 50 is a third over the larger,
+    # 37.5, and twice section 3's budget.
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
