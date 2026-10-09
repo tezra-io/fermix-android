@@ -41,7 +41,7 @@ fetch() {
 
 main() {
   [ $# -eq 0 ] || { echo "usage: lint_workflows.sh" >&2; exit 2; }
-  local tool workflows python
+  local tool workflows python fake
   for tool in curl python3 sha256sum tar; do command -v "$tool" >/dev/null || fatal "no $tool on the PATH"; done
   [ "$(uname -sm)" = "Linux x86_64" ] || fatal "the pinned tools are Linux x86-64's, as CI's runner is"
   work="$(mktemp -d)" || fatal "could not make a scratch directory"
@@ -57,8 +57,12 @@ main() {
   tar -xzf "$work/ruff.tar.gz" -C "$work" --strip-components=1 ruff-x86_64-unknown-linux-gnu/ruff
   # GitHub runs a .yaml file as it runs a .yml one.
   workflows=("$ROOT_DIR"/.github/workflows/*.yml "$ROOT_DIR"/.github/workflows/*.yaml)
-  # The fakes are Python with no extension, which ruff lints when it is named them.
-  python=("$ROOT_DIR"/scripts/*.py "$ROOT_DIR"/scripts/tests/*.py "$ROOT_DIR"/scripts/tests/fakes/*)
+  # The fakes are Python with no extension, which ruff lints when it is named them, each by its own path: in a
+  # directory it is given, ruff finds only .py files, and the emulator's fakes are a directory of fakes/.
+  python=("$ROOT_DIR"/scripts/*.py "$ROOT_DIR"/scripts/tests/*.py)
+  for fake in "$ROOT_DIR"/scripts/tests/fakes/* "$ROOT_DIR"/scripts/tests/fakes/emulator/*; do
+    if [ -f "$fake" ]; then python+=("$fake"); fi
+  done
   "$work/actionlint" -shellcheck="$work/shellcheck" "${workflows[@]}"
   "$work/shellcheck" "$ROOT_DIR"/scripts/*.sh
   "$work/ruff" check --no-cache --isolated --select E,F,W --line-length 120 "${python[@]}"

@@ -29,13 +29,16 @@ internal fun shell(command: String): String {
  * Waits for the rule's activity to have the window focus, which a key event and a read of the clipboard need: on an
  * emulator just booted, a system dialog can hold it, System UI's "isn't responding" among them. The activity is asked
  * for again at every poll: a fold can make it again while this waits, and the one made before never has the focus back.
- * Past [STEP_MILLIS] it fails with the window that has the focus, as `dumpsys window` names it.
+ * Past [STEP_MILLIS] it fails with the window that has the focus, as `dumpsys window` names it, and says so when that
+ * window is the system's dialog for an app that hung or stopped ([noFocusWords]). It never answers the dialog: with
+ * `scripts/settle_emulator.sh`'s hide_error_dialogs there is none, and a test that pressed its buttons would hide what
+ * happened.
  */
 internal fun AndroidComposeTestRule<*, *>.awaitWindowFocus() {
     try {
         waitUntil("the activity has the window focus", STEP_MILLIS) { activity.hasWindowFocus() }
     } catch (timeout: ComposeTimeoutException) {
-        throw AssertionError("${activity.localClassName} never had the window focus: ${focusedWindow()}", timeout)
+        throw AssertionError(noFocusWords(activity.localClassName, focusedWindow()), timeout)
     }
 }
 

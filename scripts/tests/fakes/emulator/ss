@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""A stand-in for ss in stop_emulator.sh's tests: the listener of a port, as the script asks for it.
+
+  ss -Hltnp "sport = :<port>"
+      For each pid of $FAKE_LISTENERS (space-separated, none when it is empty or unset), the two lines the real ss
+      prints for an emulator's console, its IPv4 and its IPv6 socket, when <port> is $FAKE_CONSOLE_PORT; nothing
+      for any other port. The name in each line is the process's own, from /proc, as ss reads it. Each call is
+      recorded in $FAKE_DEVICE_ROOT/ss.jsonl.
+
+Anything else fails loudly.
+"""
+import json
+import os
+import pathlib
+import sys
+
+ROOT = pathlib.Path(os.environ["FAKE_DEVICE_ROOT"])
+LINES = (
+    'LISTEN 0      4      127.0.0.1:{port} 0.0.0.0:* users:(("{name}",pid={pid},fd=66))',
+    'LISTEN 0      4          [::1]:{port}    [::]:* users:(("{name}",pid={pid},fd=67))',
+)
+
+
+def name_of(pid):
+    comm = pathlib.Path(f"/proc/{pid}/comm")
+    return comm.read_text(encoding="utf-8").strip() if comm.exists() else "gone"
+
+
+def main():
+    arguments = sys.argv[1:]
+    with open(ROOT / "ss.jsonl", "a", encoding="utf-8") as calls:
+        calls.write(json.dumps(arguments) + "\n")
+    if len(arguments) != 2 or arguments[0] != "-Hltnp" or not arguments[1].startswith("sport = :"):
+        sys.exit(f"fake ss: no answer for {arguments}")
+    port = arguments[1].removeprefix("sport = :")
+    if port != os.environ["FAKE_CONSOLE_PORT"]:
+        return 0
+    for pid in os.environ.get("FAKE_LISTENERS", "").split():
+        for line in LINES:
+            print(line.format(port=port, name=name_of(pid), pid=pid))
+    return 0
+
+
+sys.exit(main())

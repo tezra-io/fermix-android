@@ -89,10 +89,13 @@ docs/                 RELEASING.md: a release, from the tag to Play, and what on
                       as app_shots.sh copies it from a record
 scripts/              verify_protocol_contract.sh, check_release_policy.sh (the policy job), app_shots.sh
                       (docs/app-shots from a record, on this machine or in the screens job),
-                      settle_emulator.sh (the ui job's wait for a booted emulator's home screen), the release
+                      settle_emulator.sh (the ui job's wait for a booted emulator's home screen, which then
+                      hides the system's error dialogs), stop_emulator.sh (the ui job's bounded end of its
+                      emulator), the release
                       pipeline's steps (release_preflight.sh to play_upload.py), lint_workflows.sh and
                       check_workflows.py, check_git_isolation.sh (the tests' git, on a hostile machine and
-                      under a hostile caller); their tests in scripts/tests, with a fake gh and cosign
+                      under a hostile caller); their tests in scripts/tests, with a fake gh and cosign, and
+                      the emulator scripts' fake adb, ps, ss and sleep in scripts/tests/fakes/emulator
 .github/workflows/    ci.yml: contract, build, unit, screens, ui, policy, release-scripts, and gate, the one
                       required check; candidate.yml on a vX.Y.Z tag; promote.yml by hand
 ```
@@ -199,11 +202,19 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   `:push:connectedDebugAndroidTest` and `:app:connectedDebugAndroidTest`, one Gradle run each, on an emulator
   (`README.md`), the app's on an app with nothing paired, as its share tests pair records of their own and
   remove them, and set a screen lock and take it away again, settled first
-  by `scripts/settle_emulator.sh`, and on CI's own Google APIs images when the run is evidence for CI. A
-  test that needs the window's focus (a key event, the clipboard) waits for it with `awaitWindowFocus`. A
+  by `scripts/settle_emulator.sh`, which then hides the system's error dialogs (`hide_error_dialogs`: a slow
+  runner once made the launcher hang, and its "isn't responding" dialog held the focus through eighteen tests;
+  the device keeps the setting, so the script takes only an emulator's `ANDROID_SERIAL`, `emulator-<port>`), and
+  on CI's own Google APIs images when the run is evidence for CI. A
+  test that needs the window's focus (a key event, the clipboard) waits for it with `awaitWindowFocus`;
+  onboarding's names a hung or stopped app's dialog as the cause when one has the focus (`noFocusWords`), while the
+  app's `DemoDeviceTest` wait does not yet; no test answers a system dialog, which would hide what happened. A
   test that changes the device (the animator scale, the rotation, a fold) puts it back however it ends.
   What needs a real camera, `QrPreview`'s torch and its unbinding, is the device gate's. Stop an
-  emulator with `adb -s <serial> emu kill` and wait for its pid, never by matching a process's name.
+  emulator with `adb -s <serial> emu kill` and wait for its pid, never by matching a process's name:
+  `scripts/stop_emulator.sh` finds it as the listener of the serial's console port and ends it with SIGKILL past
+  30 s, and every line of CI's emulator script stops the emulator through it on its way out, as the emulator
+  runner's step stays open until the emulator's process exits, and its own end is a single `emu kill`.
 - A test asserts on state only after waiting on that state, bounded — never after an idle that does not
   know what lands it. Compose's `waitForIdle` on Robolectric drains the main looper alone, so state landed
   after a hop to `Dispatchers.IO` races the assertion that follows it, and loses on a loaded machine (CI's

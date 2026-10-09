@@ -320,9 +320,20 @@ jobs:
       # script line by line, each after the emulator booted; each marks how far it got. A cold boot can
       # leave a system dialog holding the focus a test's key event and clipboard read need, System UI's
       # "isn't responding" among them, so the script first waits for the home screen to have it
-      # (scripts/settle_emulator.sh), and marks the emulator booted only once it settled: one that
-      # never settles is taken for one that never booted. Each module's tests run in a Gradle run of their
-      # own: the build is parallel, and two modules' tests at once would turn and fold one emulator twice.
+      # (scripts/settle_emulator.sh), which then hides the system's error dialogs, as a slow runner can make
+      # an app hang once the tests start (run 37919058881: the launcher's dialog held the focus through
+      # eighteen tests), and marks the emulator booted only once it settled: one that never settles (exit 1)
+      # is taken for one that never booted. A settle whose tool failed (exit 2: with the action's adb on the
+      # PATH, the setting that hides the dialogs) is marked apart, as that emulator did settle. Each
+      # module's tests run in a Gradle run of their own: the build is parallel, and two modules' tests at
+      # once would turn and fold one emulator twice. The script stops the emulator itself, bounded, on every
+      # way out (scripts/stop_emulator.sh): the action ends the script at its first line that fails, so a
+      # line that fails stops it and then fails the step, and the last line stops it after a green run, its
+      # own exit then the step's: a stop that fails says why in the log and fails the step, as an emulator
+      # left running would hold it until the job's timeout. The action's step stays open until the
+      # emulator's process exits, and its own end is one adb emu kill, which an emulator once answered and
+      # never exited, holding a green step until the job's timeout (run 37956921652); after the stop that
+      # kill finds no emulator, and the action only logs that it failed.
       - name: Instrumented tests
         id: first
         continue-on-error: true
@@ -336,17 +347,19 @@ jobs:
           emulator-boot-timeout: 300
           pre-emulator-launch-script: touch "$RUNNER_TEMP/avd-made"
           script: |
-            scripts/settle_emulator.sh
-            touch "$RUNNER_TEMP/emulator-booted"
-            adb shell svc power stayon true
-            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }}
-            ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
-            ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }}
-            ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest
-            ./gradlew --warning-mode fail --console=plain :app:connectedDebugAndroidTest
+            scripts/settle_emulator.sh || { [ $? -ne 2 ] || touch "$RUNNER_TEMP/settle-tool-failed"; scripts/stop_emulator.sh; exit 1; }
+            touch "$RUNNER_TEMP/emulator-booted" || { scripts/stop_emulator.sh; exit 1; }
+            adb shell svc power stayon true || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }} || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }} || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }} || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :app:connectedDebugAndroidTest || { scripts/stop_emulator.sh; exit 1; }
+            scripts/stop_emulator.sh
 
-      # How far the first run got: booted and settled, made its AVD but never booted or never settled
-      # (no-boot), or failed before the AVD was made (no-avd). Only no-boot runs the tests once more.
+      # How far the first run got: booted and settled; settled, but its error dialogs could not be hidden
+      # (settle-tool-failed); made its AVD but never booted or never settled (no-boot); or failed before the
+      # AVD was made (no-avd). Only no-boot runs the tests once more.
       - name: How far the emulator got
         id: boot
         if: steps.first.outcome == 'failure'
@@ -354,6 +367,8 @@ jobs:
         run: |
           if [ -f "$RUNNER_TEMP/emulator-booted" ]; then
             stage=booted
+          elif [ -f "$RUNNER_TEMP/settle-tool-failed" ]; then
+            stage=settle-tool-failed
           elif [ -f "$RUNNER_TEMP/avd-made" ]; then
             stage=no-boot
           else
@@ -375,14 +390,15 @@ jobs:
           emulator-boot-timeout: 300
           pre-emulator-launch-script: touch "$RUNNER_TEMP/avd-made"
           script: |
-            scripts/settle_emulator.sh
-            touch "$RUNNER_TEMP/emulator-booted"
-            adb shell svc power stayon true
-            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }}
-            ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }}
-            ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }}
-            ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest
-            ./gradlew --warning-mode fail --console=plain :app:connectedDebugAndroidTest
+            scripts/settle_emulator.sh || { [ $? -ne 2 ] || touch "$RUNNER_TEMP/settle-tool-failed"; scripts/stop_emulator.sh; exit 1; }
+            touch "$RUNNER_TEMP/emulator-booted" || { scripts/stop_emulator.sh; exit 1; }
+            adb shell svc power stayon true || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :feature-onboarding:connectedDebugAndroidTest ${{ matrix.onboarding-args }} || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :feature-chats:connectedDebugAndroidTest ${{ matrix.chats-args }} || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :feature-chat:connectedDebugAndroidTest ${{ matrix.chat-args }} || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :push:connectedDebugAndroidTest || { scripts/stop_emulator.sh; exit 1; }
+            ./gradlew --warning-mode fail --console=plain :app:connectedDebugAndroidTest || { scripts/stop_emulator.sh; exit 1; }
+            scripts/stop_emulator.sh
 
       - name: Upload the test reports
         if: always()
@@ -394,7 +410,9 @@ jobs:
             */build/reports/androidTests/connected/
             */build/outputs/androidTest-results/connected/
 
-      # The job's result: the first run's, or after a boot that failed, the second's.
+      # The job's result: the first run's, or after a boot that failed, the second's. A settle-tool-failed
+      # mark after a no-boot first run is the second run's own, as the first left none (How far would have
+      # named its stage settle-tool-failed), and is read here, as nothing after that run reads it.
       - name: Summary and result
         if: always()
         shell: bash
@@ -412,8 +430,12 @@ jobs:
             verdict="the tests never ran: a step before them failed, or the job was cancelled ($FIRST)"
           elif [ "$STAGE" = "no-avd" ]; then
             verdict="the emulator's SDK, system image or AVD could not be set up, so the tests did not run again"
+          elif [ "$STAGE" = "no-boot" ] && [ "$SECOND" = "failure" ] && [ -f "$RUNNER_TEMP/settle-tool-failed" ]; then
+            verdict="the emulator did not boot, or never settled; on the second run it settled, but the system's error dialogs could not be hidden (scripts/settle_emulator.sh exit 2, the step's log names the command), so the tests did not run"
           elif [ "$STAGE" = "no-boot" ]; then
             verdict="the emulator did not boot, or never settled, so the tests ran once more: $SECOND"
+          elif [ "$STAGE" = "settle-tool-failed" ]; then
+            verdict="the emulator settled, but the system's error dialogs could not be hidden (scripts/settle_emulator.sh exit 2, the step's log names the command), so the tests did not run, nor again"
           else
             verdict="the tests failed, on an emulator that booted, so they did not run again"
           fi

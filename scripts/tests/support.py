@@ -1,5 +1,6 @@
 """What the release scripts' tests share: a scratch directory, a fake GitHub and cosign on the PATH, git
-repositories made for a test, and throwaway signing keys and packages made with the SDK's own tools.
+repositories made for a test, and throwaway signing keys and packages made with the SDK's own tools; and the emulator
+scripts' fake device, an adb, a ps, an ss and a sleep on their own PATH.
 
 No key, keystore or package is kept in the tree: each is made in the test's scratch directory and removed
 with it (AGENTS.md: no secret in the tree).
@@ -17,6 +18,11 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "scripts"
 FAKES = pathlib.Path(__file__).resolve().parent / "fakes"
+# The fake adb, ps, ss and sleep of the emulator scripts' tests, on the PATH of those alone: a sleep that returns at
+# once has no place under another script.
+EMULATOR_FAKES = FAKES / "emulator"
+# The serial the emulator runner gives its emulator, and its script through ANDROID_SERIAL.
+SERIAL = "emulator-5554"
 REPO = "tezra-io/fermix-android"
 ENGINE = "tezra-io/fermix"
 # build-tools' revision, as scripts/check_release_policy.sh names it.
@@ -25,6 +31,9 @@ BUILD_TOOLS_VERSION = "36.0.0"
 PLATFORM = "android-36"
 # A script that runs longer than this is stuck, not slow.
 SCRIPT_TIMEOUT_SECONDS = 300
+# An emulator script on the fake device, whose longest wait is a kill given 10 s to answer and 40 polls of the fake
+# sleep: past this it is waiting, or spinning, without its bound.
+EMULATOR_SCRIPT_TIMEOUT_SECONDS = 60
 # The identity of every commit and annotated tag a test's own set-up makes (Repository), its tagger included. A
 # script under test is given none, as CI's runner names none, so a script that comes to need one fails its tests.
 GIT_IDENTITY = {
@@ -86,9 +95,9 @@ def git_environment(env, scratch):
     }
 
 
-def run(command, cwd=None, env=None, stdin=None):
-    """Runs [command], bounded, with [stdin] as its input when given, and returns what it did; a test asserts on
-    its status and words."""
+def run(command, cwd=None, env=None, stdin=None, timeout=SCRIPT_TIMEOUT_SECONDS):
+    """Runs [command], bounded by [timeout] seconds, with [stdin] as its input when given, and returns what it did; a
+    test asserts on its status and words."""
     return subprocess.run(
         [str(part) for part in command],
         cwd=cwd,
@@ -96,7 +105,7 @@ def run(command, cwd=None, env=None, stdin=None):
         input=stdin,
         capture_output=True,
         text=True,
-        timeout=SCRIPT_TIMEOUT_SECONDS,
+        timeout=timeout,
         check=False,
     )
 
@@ -189,6 +198,40 @@ class ScriptTest(unittest.TestCase):
 
     def assertPassed(self, result):
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+
+class EmulatorTest(ScriptTest):
+    """A device for the scripts that drive CI's emulator: the fake adb, ps, ss and sleep of fakes/emulator first on the
+    PATH, answering from files under the scratch directory and recording there what they are asked."""
+
+    def setUp(self):
+        super().setUp()
+        self.device = self.scratch / "device"
+        self.device.mkdir()
+
+    def emulator_script(self, name, **extra):
+        """Runs the script [name] with $ANDROID_SERIAL naming the emulator, as the emulator runner sets it for its
+        script, and the fakes' environment [extra]."""
+        env = self.environment()
+        env["PATH"] = os.pathsep.join([str(EMULATOR_FAKES), env["PATH"]])
+        env["FAKE_DEVICE_ROOT"] = str(self.device)
+        env["ANDROID_SERIAL"] = SERIAL
+        env.update({key: str(value) for key, value in extra.items()})
+        return run([SCRIPTS / name], cwd=self.scratch, env=env, timeout=EMULATOR_SCRIPT_TIMEOUT_SECONDS)
+
+    def adb_calls(self):
+        """Each call the fake adb took, in order: {"arguments": [...], "focus": the index of a dumpsys answer}."""
+        log = self.device / "adb.jsonl"
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+    def ss_calls(self):
+        log = self.device / "ss.jsonl"
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+    def sleeps(self):
+        """The seconds of each sleep the script asked for, in order."""
+        log = self.device / "sleeps"
+        return log.read_text().splitlines() if log.exists() else []
 
 
 class Repository:

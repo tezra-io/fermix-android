@@ -260,3 +260,8 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   plays all of it anew, even after the app lock hid the last one. Going back just after the camera has read a code
   ends the pairing it would have started, and so does a back swipe begun then and let go. With Remove animations
   on, nothing moves and every screen changes at once.
+- **CI's emulators keep the system's error dialogs off the screen, and end in time.** The `ui` job's emulators no
+  longer draw an "isn't responding" or "has stopped" dialog, one of which, the launcher's on a slow runner, held
+  the screen through eighteen of onboarding's tests; a device test that waits for the screen while such a dialog has
+  it says so. Each run stops its emulator itself, within a minute, so an emulator that does not exit no longer
+  keeps a job whose tests all passed running until it is cancelled.

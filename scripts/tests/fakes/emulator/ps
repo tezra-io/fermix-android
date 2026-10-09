@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""A stand-in for ps in stop_emulator.sh's tests: the state of a process, as the script asks for it.
+
+  ps -o stat= -p <pid>
+      The next answer of the list in $FAKE_DEVICE_ROOT/ps.json, one per call, each recorded in
+      $FAKE_DEVICE_ROOT/ps.jsonl: a state, such as "S" or "Zl" (a zombie whose other threads are still ending),
+      printed as ps prints it; or "fail", ps's own error and exit 1, as procps answers an option it cannot read.
+      With no list, or once it is spent, the real ps answers, so a test scripts only the polls it is about.
+
+Anything else fails loudly.
+"""
+import json
+import os
+import pathlib
+import shutil
+import sys
+
+ROOT = pathlib.Path(os.environ["FAKE_DEVICE_ROOT"])
+HERE = pathlib.Path(__file__).resolve().parent
+
+
+def scripted():
+    """The next scripted answer, or None when there is none left."""
+    answers = ROOT / "ps.json"
+    if not answers.exists():
+        return None
+    states = json.loads(answers.read_text(encoding="utf-8"))
+    asked = ROOT / "ps.count"
+    count = int(asked.read_text(encoding="utf-8")) if asked.exists() else 0
+    asked.write_text(str(count + 1), encoding="utf-8")
+    return states[count] if count < len(states) else None
+
+
+def real_ps():
+    """The ps the PATH has past this directory."""
+    path = os.pathsep.join(
+        entry for entry in os.environ["PATH"].split(os.pathsep) if entry and pathlib.Path(entry).resolve() != HERE
+    )
+    found = shutil.which("ps", path=path)
+    if found is None:
+        sys.exit("fake ps: no real ps on the PATH")
+    return found
+
+
+def main():
+    arguments = sys.argv[1:]
+    if len(arguments) != 4 or arguments[:3] != ["-o", "stat=", "-p"] or not arguments[3].isdigit():
+        sys.exit(f"fake ps: no answer for {arguments}")
+    answer = scripted()
+    with open(ROOT / "ps.jsonl", "a", encoding="utf-8") as calls:
+        calls.write(json.dumps({"pid": arguments[3], "answer": answer}) + "\n")
+    if answer is None:
+        os.execv(real_ps(), ["ps", *arguments])
+    if answer == "fail":
+        print("error: unknown user-defined format specifier", file=sys.stderr)
+        return 1
+    print(answer)
+    return 0
+
+
+sys.exit(main())

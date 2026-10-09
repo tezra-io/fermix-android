@@ -2534,7 +2534,17 @@ cold boot never comes online, while with the feature off it boots in 20 s.
 `ANDROID_SERIAL` names the device to use. `scripts/settle_emulator.sh` waits, 30 polls 2 s apart, for
 the home screen to have the focus, as a cold boot can leave a system dialog holding it, System UI's
 "isn't responding" among them; each poll wakes the phone, dismisses the keyguard and closes system
-dialogs, and it fails naming the window that has the focus. A fold test (each module's `@FoldingPhone`)
+dialogs, and it fails naming the window that has the focus. Once settled, it puts Android's own setting
+for a test device, `settings put global hide_error_dialogs 1`, and says so: from then on no "isn't
+responding" or "has stopped" dialog is drawn. The system still logs the error, and an app that stops
+responding is killed where its dialog would have been (AOSP's `AppErrors`), so a test whose own app hangs
+fails as a crash. A setting that cannot be put fails the script. The emulator keeps it in its data, as
+an AVD keeps any setting, so the script settles only the emulator `ANDROID_SERIAL` names,
+`emulator-<port>`, and refuses any other serial, or none, before it asks adb anything: a phone on USB is
+never given the setting. If a focus wait (`awaitWindowFocus`) fails all the same because such a
+dialog has the focus, onboarding's words say so: "the emulator's <package> hung and its dialog has the
+window focus, so <activity> never had it: <window>", or "stopped" for a "has stopped" dialog
+(`noFocusWords`). A fold test (each module's `@FoldingPhone`)
 folds the phone and waits for its screen drawn again; a Pixel Fold locks as it folds, and the test
 activity shows over the lock screen (`showWhenLocked` in `src/androidTest/AndroidManifest.xml`), as the
 lock can come after the activity is made again. The chat's draft-keeping window-change test waits,
@@ -2567,9 +2577,39 @@ run, as the build job does, and builds the test APKs before the emulator starts,
 taken for a boot that failed. The action's pre-launch script marks the AVD made,
 and the script settles the emulator (`scripts/settle_emulator.sh`) and marks the boot before the tests:
 only when the AVD was made and the emulator never booted or never settled do the tests run once more,
-and a setup that failed before the AVD existed is not retried. The job's summary
-says which happened, or that the tests never ran, and whether KVM was open, and the reports are
-uploaded. `gate` requires it.
+and a setup that failed before the AVD existed is not retried. Both runs settle through the script, and
+so both hide the system's error dialogs. That is for a slow runner: on 2026-10-09 (run 37919058881) the
+launcher missed its input deadline once the tests began, and its "isn't responding" dialog held the focus
+from the first of onboarding's tests to the eighteenth, failing the six of them that wait for the focus,
+and on the next commit (run 37956921652) it failed nine, while the same AVDs ran green on every machine
+that tried them. A settle that could not put the setting (its exit 2, a tool that failed: on CI, with the
+action's adb on the PATH, the setting) leaves a mark of its own, as that emulator did settle: on the
+first run its tests are not run again, and on either run the summary says the dialogs could not be hidden
+(the second run's mark is read by the summary itself, as the first left none). The job's summary says which run
+happened, or that the tests never ran, and whether KVM was open, and the reports are uploaded. `gate`
+requires it.
+
+The runs end the emulator themselves, bounded (`scripts/stop_emulator.sh`). The action keeps its step
+open until the emulator's process has exited, and its own end is one `adb emu kill`: in run 37956921652
+an emulator answered that kill with "OK: killing emulator, bye bye" and never exited, so the step, every
+test in it green, ran on until the job's 25 minutes cancelled it. The script finds the emulator's process
+as the listener of its console port, the port in its serial (`ss`), and refuses one that is not an
+emulator's qemu: a process's name would not do, as `qemu-system-x86_64` is past the 15 characters `pgrep`
+matches and a machine can run other emulators and VMs. It asks `adb -s <serial> emu kill`, given 10 s to
+answer, waits 30 polls 1 s apart for the process to be gone, and otherwise ends it with SIGKILL and says
+so; an emulator that exits as the SIGKILL is sent is gone, as one that exited before. The action runs its
+script a line at a time and stops at the first line that fails, so every line but the last ends with
+`|| { scripts/stop_emulator.sh; exit 1; }`, the settle's line marking its exit 2 first, which stops the
+emulator and still fails the step, and the last line stops it after a green run; the action's own kill
+then finds no emulator, and only logs that it failed (`killEmulator` catches the error). That last
+line's exit is the step's, so a stop that fails fails a step whose tests all passed, its words in the
+log saying why: it fails only when the emulator outlived its SIGKILL (exit 1), which would hold the step
+until the job's timeout all the same, or when a tool failed or its console port's listener is no
+emulator (exit 2), a process left for someone to look at, never passed over. The summary then reads that
+the tests failed, and the step's log names the stop. An emulator that never boots never reaches the
+script, and only the action's kill ends it. The job's 25 minutes stay: the stop takes a few seconds
+(2 to 5 s measured on this machine's emulators), 40 s when it must kill and 50 s at most, and the longest
+green job took 18 minutes.
 
 ## Releasing
 

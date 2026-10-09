@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""A stand-in for adb in the emulator scripts' tests (settle_emulator.sh, stop_emulator.sh), which have no device.
+
+It records every call in $FAKE_DEVICE_ROOT/adb.jsonl as {"arguments": [...], "focus": <the answer's index>} and
+answers the forms the scripts use, with or without -s <serial>:
+
+  adb shell dumpsys window
+      The window that has the focus, as dumpsys prints it, "  mCurrentFocus=Window{...}": the next of the list in
+      $FAKE_DEVICE_ROOT/focus.json, one per call, and past its end the last again; "focus" in the record is its index.
+  adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
+      The match flags the platform prints first, then the home activity, $FAKE_HOME.
+  adb shell input keyevent KEYCODE_WAKEUP, adb shell wm dismiss-keyguard,
+  adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS
+      What an emulator that is up prints.
+  adb shell settings put global hide_error_dialogs 1
+      Nothing; or, when $FAKE_SETTINGS is "fail", the platform's words for a settings provider it cannot reach, and
+      exit 255, as adb passes on the shell command's status.
+  adb -s <serial> emu kill
+      As $FAKE_EMU_KILL says. "exit": "OK: killing emulator, bye bye", and the process $FAKE_EMULATOR_PID ends on
+      SIGTERM, as an emulator that exits. "stay": the same words, and the process runs on, as CI's emulator did on
+      2026-10-09. "gone": adb's words for a console nobody listens on, and exit 1, the process $FAKE_EMULATOR_PID,
+      when one is named, ended on SIGTERM, as an emulator that went as it was asked. "hang": no answer at all.
+
+Anything else fails loudly, so a script that starts to call something new is seen at once.
+"""
+import json
+import os
+import pathlib
+import signal
+import sys
+import time
+
+ROOT = pathlib.Path(os.environ["FAKE_DEVICE_ROOT"])
+HOME_INTENT = [
+    "cmd", "package", "resolve-activity", "--brief",
+    "-a", "android.intent.action.MAIN", "-c", "android.intent.category.HOME",
+]
+CLOSE_DIALOGS = ["am", "broadcast", "-a", "android.intent.action.CLOSE_SYSTEM_DIALOGS"]
+HIDE_ERROR_DIALOGS = ["settings", "put", "global", "hide_error_dialogs", "1"]
+# What adb's emu prints when the console's port has no listener.
+NO_CONSOLE = "error: could not connect to TCP port {port}: Connection refused"
+# Long enough for any bound a script under test sets, short enough that a stray fake ends of itself.
+HANG_SECONDS = 600
+
+
+def record(arguments, focus=None):
+    with open(ROOT / "adb.jsonl", "a", encoding="utf-8") as calls:
+        calls.write(json.dumps({"arguments": arguments, "focus": focus}) + "\n")
+
+
+def next_focus():
+    """(the index of this call's answer, the window): each dumpsys call takes the next of focus.json, the last
+    repeating once the list is spent."""
+    windows = json.loads((ROOT / "focus.json").read_text(encoding="utf-8"))
+    asked = ROOT / "focus.count"
+    count = int(asked.read_text(encoding="utf-8")) if asked.exists() else 0
+    asked.write_text(str(count + 1), encoding="utf-8")
+    index = min(count, len(windows) - 1)
+    return index, windows[index]
+
+
+def shell(command):
+    if command == ["dumpsys", "window"]:
+        index, window = next_focus()
+        record(["shell", *command], focus=index)
+        print(f"WINDOW MANAGER WINDOWS (dumpsys window windows)\n  mCurrentFocus={window}\n  mFocusedApp=null")
+        return 0
+    record(["shell", *command])
+    if command == HOME_INTENT:
+        print("priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true")
+        print(os.environ["FAKE_HOME"])
+        return 0
+    if command in (["input", "keyevent", "KEYCODE_WAKEUP"], ["wm", "dismiss-keyguard"]):
+        return 0
+    if command == CLOSE_DIALOGS:
+        print("Broadcasting: Intent { act=android.intent.action.CLOSE_SYSTEM_DIALOGS flg=0x400000 }")
+        print("Broadcast completed: result=0")
+        return 0
+    if command == HIDE_ERROR_DIALOGS:
+        if os.environ.get("FAKE_SETTINGS") == "fail":
+            print("cmd: Failure calling service settings: Broken pipe (32)", file=sys.stderr)
+            return 255
+        return 0
+    sys.exit(f"fake adb: no answer for shell {command}")
+
+
+def emu_kill(serial):
+    mode = os.environ["FAKE_EMU_KILL"]
+    if mode == "gone":
+        if os.environ.get("FAKE_EMULATOR_PID"):
+            os.kill(int(os.environ["FAKE_EMULATOR_PID"]), signal.SIGTERM)
+        print(NO_CONSOLE.format(port=serial.removeprefix("emulator-")), file=sys.stderr)
+        return 1
+    if mode == "hang":
+        time.sleep(HANG_SECONDS)
+        return 0
+    print("OK: killing emulator, bye bye")
+    if mode == "exit":
+        os.kill(int(os.environ["FAKE_EMULATOR_PID"]), signal.SIGTERM)
+    elif mode != "stay":
+        sys.exit(f"fake adb: FAKE_EMU_KILL is {mode}, not exit, stay, gone or hang")
+    return 0
+
+
+def main():
+    arguments = sys.argv[1:]
+    serial = os.environ.get("ANDROID_SERIAL", "")
+    if arguments[:1] == ["-s"]:
+        serial, arguments = arguments[1], arguments[2:]
+    if arguments[:1] == ["shell"]:
+        return shell(arguments[1:])
+    record(["-s", serial, *arguments])
+    if arguments == ["emu", "kill"]:
+        return emu_kill(serial)
+    sys.exit(f"fake adb: no answer for {sys.argv[1:]}")
+
+
+sys.exit(main())
