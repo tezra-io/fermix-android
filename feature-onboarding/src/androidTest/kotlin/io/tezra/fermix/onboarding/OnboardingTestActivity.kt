@@ -86,11 +86,13 @@ private fun OnboardingHost(
         CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
             Box(modifier = Modifier.fillMaxSize().background(LocalFermixColors.current.canvas)) {
                 val stack = appBackStack(paired = false, chats = NoChats, above = emptyList(), onboarding = onboarding)
-                NavDisplay(
-                    backStack = stack,
-                    onBack = model::back,
-                    entryProvider = entryProvider { onboardingEntries(this, model, rig.camera, rig.clip) },
-                )
+                OnboardingTransitions { changes ->
+                    NavDisplay(
+                        backStack = stack,
+                        onBack = model::back,
+                        entryProvider = entryProvider { onboardingEntries(this, model, rig.camera, rig.clip, changes) },
+                    )
+                }
             }
         }
     }

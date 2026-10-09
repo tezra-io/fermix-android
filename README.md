@@ -411,6 +411,26 @@ so the first frame drawn is that one, and nothing breathes. `TwoDotMark` is the 
 orbiting in the ink. `SpecimenMark` draws the mark's fixed poses: the drop's beats, an idle blink's middle, the
 happy eyes and the hop's top.
 
+The rest of onboarding's motion (the M51 update's 7.2 and 7.4) is data beside the mark's, one table a moment, in
+`OnboardingMotion.kt` for the screen changes and the screens before the ceremony and `CeremonyMotion.kt` for the
+rest: `ScreenChange` (the shared axis's 30 dp on the standard scheme's
+defaultSpatial, the outgoing screen's 90 ms fade on emphasized accelerate, the incoming one's 210 ms after it on
+emphasized decelerate, fade through from 92 %), `PairBuild`, `CopyCheck`, `ReticleMotion`, `HintShake`,
+`ConnectingLine`, `Countdown`, `NameMotion`, `BellSwing`, `Arrival` and `FailureEntrance`, with the pure functions
+that read them (`deviceShown`, `linkDrawn`, `lockScale`, `lockShownAt`, `reticleEnterAt`, `reticleShownAt`,
+`reticleBreathAt`, `hintShakeAt`, `countdownPulseAt`, `arrivalAt`, `failureDiscAt` and `failureEdgeAt`).
+`OnboardingMotionTest` holds every value to the update's literal, or to the reference player's where the update
+gives none, a comment on each row naming which. The mark's eyes are poses in `MarkEyes.kt`, as functions of a clock:
+`searchingAt` (`Search`, side to side), `checkingAt` (`Narrow`, back to the centre and narrowed), `securingAt`
+(`Open`, opened with one blink) and `lookingDownAt` (`LookDown`); `MarkPose` carries `eyeX`, `eyeY` and `squint`,
+which `FermixMark` draws, and `MarkEyesTest` holds each pose to its table. Each number is written once, in its
+table, and the screens read it from there. A screen's moment runs on `rememberMoment(length, played, onClock)`: one
+linear clock that runs once to its length and stands, made at its end once `played` or under Remove animations, so
+the first frame drawn is the last. Its loop, for ongoing work alone (the reticle's breath, Connecting's search),
+runs on `rememberLoop(running)`: only while `running`, never under Remove animations, a frame moving it on 100 ms
+at most and ten minutes of it at most, and it asks for no frame once its work ends or its screen leaves
+(`MomentTest`).
+
 A new drawing of the mark is vendored whole, in one change. Copy `fermix-mark.svg` and `fermix-mark-geometry.json`
 from the design-docs commit into `design/mark/` byte for byte, and write the commit and each file's sha256 into
 `SOURCE.json`. Write `MarkGeometry.kt` from the JSON, every number as the JSON writes it: `outline` and `visor` as
@@ -515,10 +535,6 @@ reads it where it is silent, for the owner to settle:
 - Fixed dark surfaces now meet the ink in light mode: Pair's `fermix pair` command card and the code card,
   `codeCard` (`#16171B`, which the update leaves standing), lie beside the "Scan the code" pill and the
   owner's bubble, `#0B0B0D`, at 1.1 : 1; they are told apart by shape alone.
-- Connecting's steps are dots for now (7.4's 20 dp pill for the current one is Task 19's): the current one
-  in the ink against the done ones in `textSecondary` measures 3.0 : 1 in light mode and 1.8 : 1 in dark,
-  and those to come, `hairline`, 1.2 and 1.3 : 1 on the canvas. Until the pill lands, colour alone tells
-  the current step, and barely in dark mode.
 - A failure screen's alert disc is the agent bubble's grey with its icon in `errText`, as the reference
   player draws it, under a title in `errText`.
 - Scan is dark in both modes, so its "Continue" and "Open settings" are dark mode's ink pill in light mode
@@ -798,11 +814,94 @@ mark leaves the ground, never as the screen is composed, the title rising 8 dp a
 breathing; once, too, and the approval is confirmed once (`rememberSaveable`), at once when the hop is not drawn:
 under Remove animations, and when Paired is restored before the mark left the ground. Connecting (88 dp) and Verify
 (56 dp, centred over the title, 32 dp under the status bar as the player has it, and the title 20 dp under it)
-show it resting and idling. Each screen is a thin stateful shell over a stateless `WelcomeAt`, `PairedAt`,
-`ConnectingAt` or `VerifyAt`, which takes the pose and the clock as functions read while drawing, so a moment
+show it idling, its eyes moving with the screen's work (below). Each screen is a thin stateful shell over a
+stateless `WelcomeAt`, `PairedAt`, `ConnectingAt`, `VerifyAt` or the like, which takes the pose and the clock as
+functions read while drawing, so a moment
 moves the mark and the words in one phase without composing the screen again, and a preview passes one fixed
 pose. The idle's blinks come from the `Random` each screen takes, which the entries pass as Kotlin's default and a
 test as a seeded one.
+
+Onboarding moves between its screens as the M51 update's 7.2 has it, and only its own entries do: the Chats list,
+a chat and the Instance screen keep NavDisplay's default. `ScreenChanges.metadataFor(key)` puts on each onboarding
+entry the screen it shows and its three changes, NavDisplay's `TransitionKey` for the way in, `PopTransitionKey`
+for the way out as back pops it and `PredictivePopTransitionKey` for the back swipe, which scrubs the very change
+back runs, so a cancelled swipe settles back along it, and one let go finishes it. The three are made once, so an
+entry's metadata is equal each time NavDisplay asks for it: made anew each time, it made each scene unequal to the
+last for the same screen, and a swipe let go at its very end ran the change again from its start between the two.
+`moveBetween(from, to, pops)` picks the change: Material's
+shared axis X between the flow's steps, 30 dp on defaultSpatial with the outgoing screen fading in 90 ms and the
+incoming one in 210 ms after it, from the end side going forward and the start side going back, which a right-to-left
+layout mirrors; fade through, the incoming screen scaling up from 92 %, into and out of Scan, into and out of a
+failure, and from the last screen into the Chats list. Welcome is the root and has no way back. Under Remove
+animations every change is a cut. Each onboarding entry but Welcome's goes by a name of its own in NavDisplay, its
+saved state's key (`OnboardingViewModel.entryNames`, `EntryNames`), which a screen takes anew each time it is
+pushed and keeps while it stays on the stack and once popped, until it is pushed again: NavDisplay forgets a popped
+entry's state only while it draws, and nothing draws the screens behind the app lock, so screens popped there, an
+approval or an expiry coming as the lock held, or before a process died, would otherwise leave their played
+moments, and Verify's told seconds, to the next pairing under the screen's own key.
+`OnboardingTransitions { changes -> }` is the `SharedTransitionLayout` the app's NavDisplay and the instrumented
+tests' lie in: the Fermix mark is one shared element, `Modifier.sharedElement` keyed
+`"onboarding-mark"` in `LocalNavAnimatedContentScope` (`SharedMark`), so it moves and grows between Connecting's
+88 dp, Verify's 56 dp and Paired's 88 dp on defaultSpatial, and snaps under Remove animations; it stays decorative,
+outside what TalkBack reads. A screen drawn outside the layout, in a preview or its own test, draws its mark as its
+own. Each screen's own motion (7.4) is its stateful shell's, which samples design's tables as it draws, and its
+stateless `…At` draws the pose a preview fixes:
+
+- Pair's diagram builds once, the phone, then the computer, the dashed link drawing from the one to the other and
+  the lock popping last, over 900 ms; a rotation and the way back from Scan find it built, even mid-build. Copy
+  cross-fades its icon to a check over 200 ms and back after 1,500 ms.
+- Scan's reticle settles from 108 % as it fades in, once a visit, as the camera first shows in it: on a first
+  pairing once the camera is allowed, not while the rationale or the system's prompt stands in its place, and anew
+  each time the scan comes back, from Connecting, Verify's "Cancel" or a failure's "Scan again"; then it breathes
+  between 100 % and 102 % while the camera searches. A Fermix code stops the breath, locks the reticle to 66 % on the
+  standard scheme's fastSpatial and flashes it to 14 % white, plays `CONFIRM`, takes away a refusal an earlier code
+  drew, and Connecting follows 250 ms later, the camera's reads ignored meanwhile. The ViewModel holds the code for
+  those 250 ms (`OnboardingViewModel.found`, `OnboardingUi.scanFound`), not the screen, so a rotation in them keeps
+  it, and back in them, or anything else that takes the scan off the top, ends the wait, zeroes the link's secret and
+  starts no ceremony. A back swipe begun in them holds the wait until it ends, as Navigation 3 hears a swipe only as
+  it is let go: let go, it is back, which ends the wait; cancelled, the code goes on to Connecting then
+  (`BackSwipe`, which the scan and Notifications follow from the activity's navigation events, `FollowBackSwipe`).
+  The ViewModel lets the code go and starts the scan's next visit (`OnboardingUi.scanVisit`) as the scan leaves the
+  top, so a back swipe into it draws it searching from the swipe's first frame, while the scan going out stands
+  locked on its code, holding what it showed last once it is no longer on top. A refused code's hint cross-fades
+  over 200 ms and shakes once, three cycles dying away over 300 ms.
+- Connecting's eyes sweep side to side while it reaches and tries Tailscale, come back and narrow at Checking, and
+  open with a blink at Securing, each turn once; its line changes by a vertical fade through, rising 8 dp on the
+  screen changes' times, in a box as tall as the tallest line or 64 dp, so the mark and the steps hold still at any
+  font size; the current step is a 20 dp pill that grows from its dot.
+- Verify's eyes look down at the code between 200 and 500 ms, once. The ring depletes linearly through each second.
+  At 30 s and at 10 s left its stroke goes from 3 dp to 5 dp and back over 300 ms, and the clock tells TalkBack the
+  time left, "30 seconds left", politely, once each: the clock carries a polite live region and that words only
+  during those two seconds, a saved list keeping a rotation from telling it again.
+- Paired has only the mark's arrival from Verify, and its own hop (above).
+- Name's avatar cross-fades to a new tint over 200 ms.
+- Notifications' bell swings once from its top, 14, −10, 6 and −3 degrees from 300 to 1,000 ms. A grant
+  cross-fades it to a check over 200 ms and ends onboarding 400 ms later. The grant is the answer as it comes: the
+  record says so and push registers at once, and the 600 ms is the ViewModel's wait
+  (`notificationsAnswered(granted, endAfterMillis)`), so a rotation in it changes nothing, back in it leaves sooner
+  with the grant given, and a back swipe in it holds it until the swipe ends; "Allow notifications" and "Not now"
+  are not heard once the grant has come. "Not now" ends onboarding at once.
+- A failure's disc settles from 94 % between 90 and 350 ms, and a refusal's `REJECT` plays as it lands, at 200 ms;
+  the wrong machine's disc stands, its `REJECT` plays at once, and its 4 dp red edge draws across from the start side
+  between 100 and 400 ms.
+- Leaving onboarding, by "Continue", "Not now", a grant, or back from Paired or Notifications, the new Fermix's row
+  on the Chats list rises 12 dp as it fades in over 300 ms, 250 ms after the list shows:
+  `OnboardingViewModel.arrival` names its record (`ArrivingFermix.id`) until the Chats list says it has taken it
+  (`arrived()`), as the rise starts; the list keeps it, saved, until the row has risen. A back swipe out of
+  onboarding draws the list before it is let go, and back names the Fermix only then: the list takes a Fermix named
+  after it was first drawn at once, and its row, already in place on screen, does not rise.
+
+Each moment is played as it starts: its saved flag is set on its first frame, as Welcome's and Paired's are, so a
+screen restored mid-moment, after a rotation, a fold, a theme or a font size changed, stands at the moment's end and
+never plays it again, but for a haptic it had not reached, which plays then. Loops run only for ongoing work and end
+with it or with their screen; under Remove animations every screen stands at its moment's end from its first frame
+and no loop runs, the reticle standing at 100 % even when it is turned on mid-breath, a refusal's haptic plays at
+once and a grant ends onboarding after the 400 ms alone. The countdown's sweep is no loop but a moment a second, one
+linear tween keyed by the second, which ends with Verify. Haptics come only from `HapticUse`. The live regions stand
+as they were, and every target is still 48 dp; the motion moves nothing out of the insets. The ring and the reticle,
+drawn on every frame they move, make their strokes once for their size (`drawWithCache`); each frame of a moving
+pose still makes one small object, the reticle's `ReticlePose`, the ring's `RingPose` and, on Connecting and Verify,
+the eyes' `MarkPose` (below, among the departures).
 `QrPreview` binds CameraX's preview and a 1280×720 analysis (16:9, the latest frame only, at the
 camera's own rate) to the screen's lifecycle, on the back camera or the front one, and reads each frame
 with zxing-cpp's Android binding in process, through `qrReader()`: QR codes of Model 2 alone, the model
@@ -820,8 +919,8 @@ whole from a terminal, its end with it, gives its link. A clip with a pairing li
 phone makes of the link, is cleared once Paste reads it, or once "Continue" takes or refuses a link;
 a clip with none is the owner's own and stays. Paste takes the clip's first item's text, or else its URI's own
 words, and never opens that URI, which the app would read with its own rights (`clipboardClip`).
-`onboardingEntries(builder, viewModel, camera, clip)` registers the screens as Navigation 3 entries,
-with what lies outside the app: the pages, the Tailscale app (seen through the
+`onboardingEntries(builder, viewModel, camera, clip, changes)` registers the screens as Navigation 3 entries,
+each with its screen changes, with what lies outside the app: the pages, the Tailscale app (seen through the
 manifest's `<queries>`), the VPN settings, the app's settings page, the camera and notification prompts,
 the camera (`phoneCamera()`, or a test's stub) and the primary clip (`clipboardClip`, or a test's fake).
 The manifest asks for `CAMERA` and requires no camera: `camera.any`, `camera` and `camera.autofocus`,
@@ -851,7 +950,32 @@ showing the last frame on the next one, the mark with the words; `CLOCK_TICK` on
 restoration before it or when Remove animations, on from the start or turned on before 380 ms, is turned off
 again; `CONFIRM` once at 90 ms and once after a restoration before it; on a phone on its side (914 × 411 dp, its
 24 dp bars), the drop's first dot whole and "Get started" above the navigation bar; and no frame asked for once
-the screen leaves. Its instrumented
+the screen leaves. The rest of onboarding's motion runs on the same test clock (`MotionRig`, with the haptics
+played): the screen changes in a NavDisplay (`ScreenChangesTest`: the shared axis's 30 dp forward, back and right
+to left, each screen's opacity on every frame of the shared axis and of fade through, in and out, held to 7.2's
+times and easings, fade through's 92 %, a cut under Remove animations, a back swipe scrubbing the change back runs,
+a cancelled one settling back, one let go halfway or at its very end finishing the change without starting it
+again, and an entry's metadata equal each time it is asked for) and which change each move takes (`MovesTest`); the
+shared mark (`SharedMarkTest`: one mark moving and growing between Connecting, Verify and Paired, snapping under
+Remove animations); and each screen's moments in `PairMotionTest`, `ScanMotionTest`, `ConnectingMotionTest`,
+`VerifyMotionTest`, `NameMotionTest`, `NotificationsMotionTest`, `FailureMotionTest` and `OnboardingArrivalTest`:
+each at the update's times, played once and not again after a restoration, even one mid-moment, standing at its end
+under Remove animations, its loop asking for no frame once its work or its screen ends, and the pixels where a test
+can see them (the diagram's parts in order, the red edge from the start side, right to left too, Connecting's old
+line and new one as opaque on every frame as 7.4's vertical fade through has them). Connecting at font scale 2.0
+holds its mark and its steps still on every frame as the line changes; the countdown tells TalkBack "30 seconds
+left" and "10 seconds left" and nothing at any other second, and nothing again after a rotation; a found code brings
+Connecting 250 ms
+later (`OnboardingScreensTest`); and the waits between a moment and the next screen hold what may come in them
+(`EntryWaitsTest`: the found code's 250 ms on the ViewModel's clock, back in them, a back swipe begun in them let go
+or cancelled, the ViewModel cleared in them, a rotation in them, a refusal taken away as the reticle locks on, a
+grant answered as it comes and onboarding ended 600 ms after it, 400 under Remove animations, back or a rotation in
+that wait, and "Not now" after a grant); a back swipe from Connecting into the scan, its reticle read off the frames
+(`ScanReturnTest`: searching, never locked, as the swipe draws it and once it is let go, and the scan going out
+locked on its code); each entry's name (`EntryNamesTest`: named anew as it is pushed, and a pairing whose screens
+were popped behind the lock leaving nothing played for the next one); a back swipe out of Scan or a failure
+scrubbing fade through, Connecting's lines rising on their own curves frame by frame, and the shared mark on
+defaultSpatial frame by frame (`ScreenChangesTest`, `ConnectingMotionTest`, `SharedMarkTest`). Its instrumented
 tests run the same screens on an emulator (below). Every screen and every failure is a preview at the twelve
 windows, each failure a preview of its own named for its case, drawn by a record into
 `feature-onboarding/src/test/screenshots`, the SAS in them the vendored IKpsk2 vector's.
@@ -934,19 +1058,68 @@ them where they are silent, for the owner to settle:
   380 ms, which shows the resting mark, and not when Welcome comes back from out of sight past 470 ms. Paired's `CONFIRM` plays once whatever
   happens, at once when the hop is not drawn, as the approval still lands.
 - Verify's mark is centred over the left-aligned title, 32 dp under the status bar with the title 20 dp under
-  it, where the player centres the whole page; the rest of Verify is as it was. The mark's eyes on Connecting and
-  Verify (the update's 7.4) and the shared element between them (7.3) are Task 19's. On a phone on its side
-  Verify's "Shown as" and "Cancel" sit below the fold, as they did before the mark, now 36 dp lower.
+  it, where the player centres the whole page; the rest of Verify is as it was. On a phone on its side Verify's
+  "Shown as" and "Cancel" sit below the fold, as they did before the mark, now 36 dp lower.
 - Welcome's mark stands 120 dp under the status bar on a portrait phone, as the player draws it, and 24 dp under
   it on a window under 480 dp tall, a phone on its side, which the update does not draw: there the player's 120 dp
   put "Get started" under the navigation bar. 24 dp is the room the drop's first dot takes above the mark's box
   (21 of its units at 112 dp). The last few dp of "Don't have Fermix yet?" stay under the fold there.
 - Connecting keeps the visual canon's group centred in the room above the actions, where the player raises its
-  mark, line and step dots by 60 dp (120 dp under them); Connecting's dots stand 12 dp under a line box 64 dp tall
-  there, 20 dp under the line here, and their shape is Task 19's. With no box, the mark here moves 16 dp (24 at
-  font scale 2.0) as the line goes from one line to two and back; the player's fixed box keeps it still, which
-  7.3's anchor wants, and holding the line so is 7.4's line change, Task 19's. Paired stands as the player does,
-  its mark and title 30 dp above the centre.
+  mark, line and steps by 60 dp (120 dp under them). Paired stands as the player does, its mark and title 30 dp
+  above the centre.
+
+Where the rest of onboarding's motion departs from the M51 update's 7.2 to 7.5 or from its reference player, or
+reads them where they are silent, for the owner to settle:
+
+- Verify's "Cancel" goes back a step on the back stack, to Scan, as it did before, so it fades through; 7.2 has it
+  go back to Pair by the shared axis.
+- The changes live on the onboarding entries' metadata, not on NavDisplay's `transitionSpec`, `popTransitionSpec`
+  and `predictivePopTransitionSpec`, where 7.2's "Where" puts the shared axis: specs on NavDisplay would change the
+  Chats list's, a chat's and the Instance screen's changes too, which 7.2 says keep what they have. Nor is fade
+  through an override on the fade-through entries' own metadata, as "Where" has it: every onboarding entry carries
+  the same three changes, and each picks the shared axis or fade through from the two scenes' screens
+  (`OnboardingScreen`), as on a push Navigation 3 1.2.0 reads only the incoming entry's `TransitionKey`, and on a
+  pop only the popped one's `PopTransitionKey`, so the way out of Scan into Connecting, a fade through, is
+  Connecting's to give, and it must see that it comes from Scan.
+- The shared axis's incoming screen fades in on emphasized decelerate, `CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)`,
+  as 7.5's "emphasized decelerate for what enters" has it; 7.2 names no easing for it, and the reference player
+  fades it on standard, `cubic-bezier(0.2, 0, 0, 1)` (`ease("std", t0 + 90, 210, now)`), so 120 ms into a change
+  the incoming screen stands at 0.71 here and at 0.33 in the player. Fade through's incoming screen is emphasized
+  decelerate in both.
+- Scan's reticle locks to 66 % whatever the code's size: 7.4 locks it to the code's bounds from the analyser, 66 %
+  when they are not known. zxing-cpp gives the code's four corners in the analysis frame, cropped and turned to the
+  sensor, and nothing here maps that frame onto the preview on screen, which needs the preview's and the
+  analysis's shared viewport and transform, and a camera to test them on.
+- A refusal's `REJECT` plays at 200 ms, the reference player's time, when the disc's settle (90 to 350 ms on
+  emphasized decelerate) is all but over; 7.4's "as it lands" could also be read as 350 ms. The wrong machine's
+  plays at once, as before, where the player plays none.
+- Under Remove animations a back swipe shows the screen it goes back to as it starts, and a cancelled one cuts back:
+  a cut has no time to scrub.
+- The 250 ms between a found code and Connecting holds under Remove animations, as does a grant's 400 ms before
+  onboarding ends: they are waits, not motion. Without Remove animations a grant ends onboarding 600 ms after it,
+  the check's 200 ms and then 400. A back swipe under way when either wait is over holds it until the swipe ends, as
+  7.4 does not say: Navigation 3 hears a swipe only as it is let go, and a stack changed under a swipe would make the
+  swipe let go take back the screen the wait brought.
+- Each frame of a moving pose makes one small object: the reticle's `ReticlePose` while it breathes, the ring's
+  `RingPose` through each second's sweep, and on Connecting and Verify the eyes' `MarkPose` and its idling copy, as
+  Welcome's and Paired's mark do. Drawing from the clocks with a `fun interface` of primitive returns would make
+  none (a Kotlin `() -> Float` boxes its float, and a `fun interface` does not), but `MarkPose` is Task 18's
+  drawing's own interface, pose in and pixels out, which this change does not rework, and the reticle and the ring
+  keep its shape so that a preview passes a fixed pose; whether to rework the mark's drawing for it is the owner's
+  to settle.
+- Copy's check shows for 1,500 ms from the copy, fading in over its first 200 ms and out over the 200 ms after it,
+  and it shows its 1,500 ms under Remove animations too, with no fade.
+- The update gives Pair's lock no fade; it fades in as it pops, whole once it has popped 1 / 1.6 of the way, as the
+  player has it.
+- The bell swings about the top of the app's own bell icon, (12, 5) in its 24-unit box; the player's is at (12, 3).
+- Connecting's steps stand 12 dp under the line's box, as the player has them; the box is 64 dp tall, the player's,
+  or as tall as the tallest line at the font size, so at font scale 2.0 the mark and the steps still hold still.
+- Under Remove animations Connecting's eyes rest at the centre, open, through every phase, as 7.4 says, so Checking
+  does not narrow them either.
+- The countdown tells TalkBack the time left by giving the clock, during the 30th and the 10th second only, the
+  words "30 seconds left" or "10 seconds left" and a polite live region; at any other second it carries neither,
+  and TalkBack reads the figures as before. A screen that opens past a mark, or comes back from a rotation, does not
+  tell it again.
 
 `feature-instance` (`io.tezra.fermix.instance`) is design section 13.7's Instance screen and what the
 Chats list shares with it, a Compose library on core-session and data. `Link` is how a Fermix's link

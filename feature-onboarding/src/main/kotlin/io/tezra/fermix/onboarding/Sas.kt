@@ -1,12 +1,13 @@
 package io.tezra.fermix.onboarding
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,15 +16,25 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.DrawResult
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.center
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import io.tezra.fermix.design.Countdown
 import io.tezra.fermix.design.FermixMotion
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticFeedback
@@ -143,36 +154,77 @@ fun SasCode(
     }
 }
 
-/** The time left, a ring that empties from the top and the clock beside it (the canon's `.cnt`). */
+/**
+ * The countdown ring as drawn (the M51 update's 7.4): the share of the pairing window [left], and how far the stroke
+ * has thickened, from its 3 dp at 0 to 5 dp at 1, [thick].
+ */
+@Immutable
+data class RingPose(
+    val left: Float,
+    val thick: Float = 0f,
+) {
+    companion object {
+        /** The ring standing at [secondsLeft], its stroke at rest. */
+        fun at(secondsLeft: Int): RingPose = RingPose(secondsLeft.toFloat() / PAIRING_COUNTDOWN_SECONDS)
+    }
+}
+
+/**
+ * The time left, a ring that empties from the top and the clock beside it (the canon's `.cnt`): the ring in [ring],
+ * read as it is drawn, in the ink on the hairline grey whatever the time, and the clock in tabular figures, changing
+ * without motion. While it is [announcing], at 30 s and at 10 s left, the clock tells TalkBack the time left, politely.
+ */
 @Composable
 fun CountdownRing(
     secondsLeft: Int,
+    ring: () -> RingPose,
+    announcing: Boolean,
     modifier: Modifier = Modifier,
 ) {
     require(secondsLeft in 0..PAIRING_COUNTDOWN_SECONDS) { "$secondsLeft s is outside the pairing window" }
     val colors = LocalFermixColors.current
-    val left = secondsLeft.toFloat() / PAIRING_COUNTDOWN_SECONDS
+    val said = pluralStringResource(R.plurals.onboarding_verify_seconds_left, secondsLeft, secondsLeft)
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(RING_GAP),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(modifier = Modifier.size(RING)) {
-            val radius = RING_RADIUS.toPx()
-            val stroke = Stroke(width = RING_STROKE.toPx(), cap = StrokeCap.Round)
-            val corner = Offset(center.x - radius, center.y - radius)
-            val box = Size(radius * 2f, radius * 2f)
-            drawCircle(color = colors.hairline, radius = radius, style = Stroke(width = RING_STROKE.toPx()))
-            drawArc(
-                colors.ink,
-                TOP,
-                FULL_TURN * left,
-                useCenter = false,
-                topLeft = corner,
-                size = box,
-                style = stroke,
-            )
-        }
-        Text(text = clock(secondsLeft), style = CLOCK, color = colors.ink)
+        Spacer(modifier = Modifier.size(RING).drawWithCache { ringDrawing(ring, colors.hairline, colors.ink) })
+        Text(
+            text = clock(secondsLeft),
+            style = CLOCK,
+            color = colors.ink,
+            modifier =
+                Modifier.semantics {
+                    if (announcing) {
+                        contentDescription = said
+                        liveRegion = LiveRegionMode.Polite
+                    }
+                },
+        )
+    }
+}
+
+/**
+ * The ring in [ring], read as each frame draws it: the [track] circle and the arc of the time left in [ink]. Its
+ * strokes are made once for the ring's size, as it redraws on every frame of the countdown; only the pulse, 300 ms at a
+ * mark, makes the stroke it thickens to.
+ */
+private fun CacheDrawScope.ringDrawing(
+    ring: () -> RingPose,
+    track: Color,
+    ink: Color,
+): DrawResult {
+    val radius = RING_RADIUS.toPx()
+    val corner = Offset(size.center.x - radius, size.center.y - radius)
+    val box = Size(radius * 2f, radius * 2f)
+    val circle = Stroke(width = RING_STROKE.toPx())
+    val resting = Stroke(width = RING_STROKE.toPx(), cap = StrokeCap.Round)
+    return onDrawBehind {
+        val now = ring()
+        val width = (RING_STROKE + (Countdown.thickTo - RING_STROKE) * now.thick).toPx()
+        val arc = if (now.thick == 0f) resting else Stroke(width = width, cap = StrokeCap.Round)
+        drawCircle(color = track, radius = radius, style = circle)
+        drawArc(ink, TOP, FULL_TURN * now.left, useCenter = false, topLeft = corner, size = box, style = arc)
     }
 }

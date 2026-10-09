@@ -31,6 +31,9 @@ dependencies {
     api(libs.androidx.navigation3.runtime)
     api(libs.androidx.lifecycle.viewmodel.compose)
     implementation(project(":design"))
+    // Each entry carries its own screen change for NavDisplay (the M51 update's 7.2), in the UI library's
+    // metadata keys over its Scenes; the instrumented tests show the screens in NavDisplay, as the app does.
+    implementation(libs.androidx.navigation3.ui)
     // The notification and camera permissions are asked for through an activity result.
     implementation(libs.androidx.activity.compose)
     // The scan (design sections 12.1 and 13.3): CameraX's preview and analysis bound to the screen's
@@ -45,6 +48,4 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // CodeAndCountdownTest reads the previews' SAS from the vendored noise_vectors.json.
     testImplementation(libs.kotlinx.serialization.json)
-    // The instrumented tests show the screens in Navigation 3's NavDisplay, as the app does.
-    androidTestImplementation(libs.androidx.navigation3.ui)
 }

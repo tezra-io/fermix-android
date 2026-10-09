@@ -57,6 +57,11 @@
     <string name="onboarding_verify_title">Do the codes match?</string>
     <string name="onboarding_verify_body">Approve on your computer if they match.</string>
     <string name="onboarding_verify_cancel">Cancel</string>
+    <!-- The M51 update's 7.4 and its reference player: what TalkBack is told at 30 s and at 10 s left. -->
+    <plurals name="onboarding_verify_seconds_left">
+        <item quantity="one">%1$d second left</item>
+        <item quantity="other">%1$d seconds left</item>
+    </plurals>
 
     <!-- Step 6, Paired, and section 9.2's same-host name; the row's subtitle is section 13.7's. -->
     <string name="onboarding_paired_title">Paired with %1$s</string>

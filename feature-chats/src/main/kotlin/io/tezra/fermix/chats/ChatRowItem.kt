@@ -83,12 +83,13 @@ private val BADGE_STYLE = FermixType.labelSmall.copy(lineHeight = 20.sp, letterS
 internal fun ChatRowItem(
     row: ChatRow,
     menu: RowMenu,
+    modifier: Modifier = Modifier,
 ) {
     val view = LocalView.current
     val colors = LocalFermixColors.current
     var open by rememberSaveable { mutableStateOf(false) }
     var height by remember { mutableIntStateOf(0) }
-    Box(modifier = Modifier.onSizeChanged { height = it.height }) {
+    Box(modifier = modifier.onSizeChanged { height = it.height }) {
         RowLayout(
             avatar = { InstanceAvatar(tint = row.record.tint, dot = row.link.dot, size = AvatarSize.ROW) },
             modifier =

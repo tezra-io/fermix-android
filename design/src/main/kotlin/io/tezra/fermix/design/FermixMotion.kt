@@ -2,6 +2,7 @@ package io.tezra.fermix.design
 
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.FloatSpringSpec
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
@@ -70,7 +71,23 @@ data class MotionSpring(
     /** The spring, or a snap under reduce-motion: "springs snap" (section 13.1). */
     fun <T> spec(reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) snap() else spring(dampingRatio = dampingRatio, stiffness = stiffness)
+
+    /**
+     * The spring's value [ms] after it set off at rest from [from] towards [to]: a spring read off a moment's one
+     * clock (the M51 update's section 6), so a preview or a test can pose any instant of it.
+     */
+    fun valueAt(
+        ms: Float,
+        from: Float,
+        to: Float,
+    ): Float {
+        if (ms <= 0f) return from
+        val nanos = (ms * NANOS_PER_MILLI).toLong()
+        return FloatSpringSpec(dampingRatio, stiffness).getValueFromNanos(nanos, from, to, initialVelocity = 0f)
+    }
 }
+
+private const val NANOS_PER_MILLI = 1_000_000f
 
 /**
  * Material's motion schemes as their six springs, with material3's StandardMotionTokens and

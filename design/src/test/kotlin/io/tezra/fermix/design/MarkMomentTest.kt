@@ -1,14 +1,12 @@
 package io.tezra.fermix.design
 
 import android.provider.Settings
-import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import com.github.takahirom.roborazzi.RoborazziActivity
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -23,30 +21,6 @@ import org.robolectric.annotation.Config
 import kotlin.random.Random
 
 private const val LENGTH = 1_000
-
-/** One frame of a phone's display, in ms. */
-private const val FRAME_MILLIS = 16L
-
-/** A frame clock that gives frames at [times], in ms, then gives none: the idle waits on it until the test ends it. */
-private class SteppedClock(
-    times: List<Long>,
-) : MonotonicFrameClock {
-    private val left = ArrayDeque(times)
-
-    /** How many of the frames the idle has not asked for. */
-    val unasked: Int get() = left.size
-
-    override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
-        val time = left.removeFirstOrNull() ?: awaitCancellation()
-        return onFrame(time * 1_000_000L)
-    }
-}
-
-/** Frames [FRAME_MILLIS] apart from [from], [count] of them. */
-private fun frames(
-    from: Long,
-    count: Int,
-): List<Long> = List(count) { from + it * FRAME_MILLIS }
 
 /**
  * A mark's moment on a test clock (the M51 update's sections 4 and 6): its one clock runs once, on the frames, and the

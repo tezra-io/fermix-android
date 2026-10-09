@@ -82,8 +82,10 @@ data class PairedFacts(
 
 /**
  * What the onboarding screens show: the phone's name, the host the link names, why a link was refused at
- * the scan, the Connecting line, Verify's facts, and the pairing approved; [mergeInto], the row whose
- * "Pair again" started this pairing (design section 9.2), which mergeTarget weighs on approval; and
+ * the scan, whether the scan has found a Fermix code ([scanFound], until it leaves the top), the scan's
+ * visit ([scanVisit], one more each time it leaves the top, so that each time it comes back its reticle
+ * settles in anew), the Connecting line, Verify's facts, and the pairing approved; [mergeInto], the row
+ * whose "Pair again" started this pairing (design section 9.2), which mergeTarget weighs on approval; and
  * [alreadyPaired], the title of the row a scanned or pasted link's daemon is paired as already, while
  * section 9.2's question about it waits for the owner's answer.
  */
@@ -91,6 +93,8 @@ data class OnboardingUi(
     val deviceName: String,
     val host: String = "",
     val scanRefusal: String? = null,
+    val scanFound: Boolean = false,
+    val scanVisit: Int = 0,
     val connecting: ConnectingPhase = ConnectingPhase.REACHING,
     val verify: VerifyFacts? = null,
     val paired: PairedFacts? = null,

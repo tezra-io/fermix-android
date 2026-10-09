@@ -14,6 +14,9 @@ import androidx.compose.ui.unit.dp
 object MarkEasing {
     val EmphasizedDecelerate: Easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 
+    /** What leaves a screen (the update's 7.2 and 7.5). */
+    val EmphasizedAccelerate: Easing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
+
     /** The update's "standard", (0.2, 0, 0, 1): Material's emphasized curve, which the app already names. */
     val Standard: Easing = FermixMotion.emphasized
     val InOut: Easing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
@@ -195,8 +198,10 @@ object Hop {
 }
 
 /**
- * One instant of the mark, every value the drawing takes (the update's sections 3 to 6, the reference player's
- * `REST` and `render`): the drop's, the hop's and the idle's. [Rest] is the mark standing, eyes open.
+ * One instant of the mark, every value the drawing takes (the update's sections 3 to 6 and 7.4, the reference player's
+ * `REST` and `render`): the drop's, the hop's, the idle's, and where the eyes look and how far open they are
+ * ([eyeX] and [eyeY], in mark units, down positive; [squint], a share of their height). [Rest] is the mark standing,
+ * eyes open, looking ahead.
  */
 @Immutable
 data class MarkPose(
@@ -216,6 +221,9 @@ data class MarkPose(
     val breathX: Float = 1f,
     val breathY: Float = 1f,
     val idleBlink: Float = 1f,
+    val eyeX: Float = 0f,
+    val eyeY: Float = 0f,
+    val squint: Float = 1f,
 ) {
     companion object {
         val Rest = MarkPose()

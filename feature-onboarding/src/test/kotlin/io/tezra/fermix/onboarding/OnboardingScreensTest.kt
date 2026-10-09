@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -43,6 +44,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.get
+import androidx.navigation3.ui.NavDisplay
 import com.github.takahirom.roborazzi.RoborazziActivity
 import io.tezra.fermix.attest.GateResult
 import io.tezra.fermix.design.FermixTheme
@@ -58,6 +61,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -89,7 +93,13 @@ private val NAVIGATION_BAR = 48.dp
 /** A camera the screens may use, which shows nothing and reads nothing. */
 private val NO_CAMERA = ScanCamera(allowed = { true }, preview = { _, _ -> })
 
+/** The entries' screen changes, which these tests, drawing each entry on its own, never run. */
+private val CHANGES = ScreenChanges(reduced = { false }, axisShift = { 0 })
+
 private val NO_SCAN_ACTIONS = ScanActions({}, {}, {}, {}, {})
+
+/** The frames a camera reads the same code on, past the 250 ms the scan waits after the first. */
+private const val READS = 30
 
 /** The scan with its camera and the torch off, nothing refused. */
 private val SCANNING = ScanUi(refused = false, torchOn = false)
@@ -267,11 +277,43 @@ class OnboardingScreensTest {
     }
 
     @Test
+    fun `every onboarding entry carries its screen and its changes in, out, and out by a back swipe`() {
+        val entries =
+            entryProvider<NavKey> {
+                onboardingEntries(
+                    this,
+                    pairingModel(FakeStarter()),
+                    NO_CAMERA,
+                    FakeClip(null),
+                    CHANGES,
+                )
+            }
+        val keys =
+            listOf(
+                OnboardingKey.Welcome,
+                OnboardingKey.Pair,
+                OnboardingKey.Scan,
+                OnboardingKey.Connecting,
+                OnboardingKey.Verify,
+                OnboardingKey.Paired,
+                OnboardingKey.Name,
+                OnboardingKey.Notifications,
+            ) + FailureCase.entries.map { OnboardingKey.Failure(it) }
+        for (key in keys) {
+            val metadata = entries(key).metadata
+            assertEquals(key, metadata[OnboardingScreen])
+            assertNotNull("$key's change in", metadata[NavDisplay.TransitionKey])
+            assertNotNull("$key's change out", metadata[NavDisplay.PopTransitionKey])
+            assertNotNull("$key's change out by a swipe", metadata[NavDisplay.PredictivePopTransitionKey])
+        }
+    }
+
+    @Test
     fun `a rotation keeps the paste sheet open with its half-typed link`() {
         val model = pairingModel(FakeStarter())
         model.paste.open()
         model.paste.edit("fermix://pair?v=2&candid")
-        val entries = entryProvider<NavKey> { onboardingEntries(this, model, NO_CAMERA, FakeClip(null)) }
+        val entries = entryProvider<NavKey> { onboardingEntries(this, model, NO_CAMERA, FakeClip(null), CHANGES) }
         val restoration = StateRestorationTester(rule)
         restoration.setContent { FermixTheme { entries(OnboardingKey.Pair).Content() } }
         rule.onNode(hasSetTextAction()).assertTextContains("fermix://pair?v=2&candid")
@@ -309,7 +351,32 @@ class OnboardingScreensTest {
         val model = scanningModel()
         showScanEntry(model, cameraReading(linkText()))
         assertEquals(HapticFeedbackConstants.CONFIRM, shadowOf(composeView()).lastHapticFeedbackPerformed())
+        // The ViewModel holds the code 250 ms on its own clock, the reticle locking on.
+        main.scheduler.advanceTimeBy(250L)
+        main.scheduler.runCurrent()
         assertEquals(OnboardingKey.Connecting, model.stack.value.last())
+    }
+
+    @Test
+    fun `Connecting follows a Fermix code 250 ms after it is read, the camera's reads meanwhile left unread`() {
+        val starter = FakeStarter()
+        val model = pairingModel(starter)
+        model.scan()
+        rule.mainClock.autoAdvance = false
+        showScanEntry(model, cameraReadingEveryFrame(linkText()))
+        // The first frame: the camera reads the code, and the phone confirms it.
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(HapticFeedbackConstants.CONFIRM, shadowOf(composeView()).lastHapticFeedbackPerformed())
+        // The camera reads on, unread, as the ViewModel's clock nears 250 ms.
+        rule.mainClock.advanceTimeBy(240L)
+        main.scheduler.advanceTimeBy(249L)
+        main.scheduler.runCurrent()
+        assertEquals(OnboardingKey.Scan, model.stack.value.last())
+        assertTrue(starter.started.isEmpty())
+        main.scheduler.advanceTimeBy(1L)
+        main.scheduler.runCurrent()
+        assertEquals(OnboardingKey.Connecting, model.stack.value.last())
+        assertEquals(1, starter.started.size)
     }
 
     @Test
@@ -409,7 +476,7 @@ class OnboardingScreensTest {
         main.scheduler.advanceUntilIdle()
         assertEquals(OnboardingKey.Verify, model.stack.value.last())
         time += 18.seconds
-        val entries = entryProvider<NavKey> { onboardingEntries(this, model, NO_CAMERA, FakeClip(null)) }
+        val entries = entryProvider<NavKey> { onboardingEntries(this, model, NO_CAMERA, FakeClip(null), CHANGES) }
         val restoration = StateRestorationTester(rule)
         restoration.setContent { FermixTheme { entries(OnboardingKey.Verify).Content() } }
         rule.onNodeWithText("1:42").assertIsDisplayed()
@@ -449,6 +516,12 @@ class OnboardingScreensTest {
         return model
     }
 
+    /** A camera this app may use, whose preview reads [text] off a code on each of its first [READS] frames. */
+    private fun cameraReadingEveryFrame(text: String): ScanCamera =
+        ScanCamera(allowed = { true }, preview = { onRead, _ ->
+            LaunchedEffect(Unit) { repeat(READS) { withFrameMillis { onRead(text) } } }
+        })
+
     /** A camera this app may use, whose preview reads [text] off a code as it shows. */
     private fun cameraReading(text: String): ScanCamera =
         ScanCamera(allowed = { true }, preview = { onRead, _ -> LaunchedEffect(Unit) { onRead(text) } })
@@ -463,7 +536,7 @@ class OnboardingScreensTest {
             object : ActivityResultRegistryOwner {
                 override val activityResultRegistry: ActivityResultRegistry = prompts
             }
-        val entries = entryProvider<NavKey> { onboardingEntries(this, model, camera, FakeClip(null)) }
+        val entries = entryProvider<NavKey> { onboardingEntries(this, model, camera, FakeClip(null), CHANGES) }
         show {
             CompositionLocalProvider(LocalActivityResultRegistryOwner provides owner) {
                 entries(OnboardingKey.Scan).Content()

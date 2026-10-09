@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.Dp
@@ -71,20 +72,23 @@ private fun DrawScope.drawMark(
         scale(scaleX = scaleX, scaleY = scaleY, pivot = MarkGeometry.feet)
     }) {
         drawPath(paths.body(pose), ink)
-        drawEye(MarkGeometry.leftEye, pose.eyeLeft, eyeHeight(MarkGeometry.leftEye, pose), ink)
-        drawEye(MarkGeometry.rightEye, pose.eyeRight, eyeHeight(MarkGeometry.rightEye, pose), ink)
-        drawHappyArcs(paths, pose.happy, ink)
+        // Where the eyes look moves them and their happy arcs together, inside the visor (the update's 7.4).
+        translate(left = pose.eyeX, top = pose.eyeY) {
+            drawEye(MarkGeometry.leftEye, pose.eyeLeft, eyeHeight(MarkGeometry.leftEye, pose), ink)
+            drawEye(MarkGeometry.rightEye, pose.eyeRight, eyeHeight(MarkGeometry.rightEye, pose), ink)
+            drawHappyArcs(paths, pose.happy, ink)
+        }
     }
 }
 
 /**
- * [eye]'s height in [pose]: the drop's blink, the idle's and the happy eyes each shrink it about its centre, and only
- * the drop's pop scales it whole.
+ * [eye]'s height in [pose]: the drop's blink, the idle's, a squint and the happy eyes each shrink it about its centre,
+ * and only the drop's pop scales it whole.
  */
 internal fun eyeHeight(
     eye: MarkEye,
     pose: MarkPose,
-): Float = max(EYE_MIN_HEIGHT, eye.height * pose.blink * pose.idleBlink * (1f - pose.happy))
+): Float = max(EYE_MIN_HEIGHT, eye.height * pose.blink * pose.idleBlink * pose.squint * (1f - pose.happy))
 
 /**
  * An eye's corner radius at [height]: the mark's 2.2 units, never more than half the height, so the corners stay

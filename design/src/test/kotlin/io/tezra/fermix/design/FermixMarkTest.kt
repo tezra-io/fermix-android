@@ -119,6 +119,35 @@ class FermixMarkTest {
     }
 
     @Test
+    fun `the eyes look aside and down by their offsets, the happy arcs with them`() {
+        val eye = MarkGeometry.leftEye
+        // An eye's edge, 3.63 units either side of its centre: 3 units to the side moves it past that point.
+        pose = MarkPose.Rest.copy(eyeX = 3f)
+        val aside = drawn()
+        assertEquals(canvas, aside.at(eye.centre.x - 3f, eye.centre.y))
+        assertEquals(ink, aside.at(eye.centre.x + 3f, eye.centre.y))
+        pose = MarkPose.Rest.copy(eyeY = 2.6f)
+        val down = drawn()
+        assertEquals(canvas, down.at(eye.centre.x, eye.centre.y - eye.height / 2f + 1f))
+        assertEquals(ink, down.at(eye.centre.x, eye.centre.y + eye.height / 2f + 1.5f))
+        pose = MarkPose.Rest.copy(happy = 1f, eyeY = 2.6f)
+        assertEquals(ink, drawn().at(eye.centre.x, eye.centre.y - 2.1f + 2.6f))
+    }
+
+    @Test
+    fun `a squint shrinks the eye's height about its centre, with a blink on top`() {
+        assertEquals(15.42f * 0.72f, eyeHeight(MarkGeometry.leftEye, MarkPose.Rest.copy(squint = 0.72f)), 1e-4f)
+        val both = MarkPose.Rest.copy(squint = 0.72f, blink = 0.5f, idleBlink = 0.5f)
+        assertEquals(15.42f * 0.72f * 0.25f, eyeHeight(MarkGeometry.leftEye, both), 1e-4f)
+        pose = MarkPose.Rest.copy(squint = 0.72f)
+        val image = drawn()
+        val eye = MarkGeometry.leftEye
+        // 72 % of 15.42 is 11.1 units, so 6.5 above the centre is now the visor's.
+        assertEquals(ink, image.at(eye.centre.x, eye.centre.y - 5f))
+        assertEquals(canvas, image.at(eye.centre.x, eye.centre.y - 6.5f))
+    }
+
+    @Test
     fun `a new pose draws the mark again without composing it again`() {
         drawn()
         val composed = changes()

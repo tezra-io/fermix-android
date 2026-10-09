@@ -10,8 +10,11 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -19,8 +22,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
+import androidx.navigationevent.NavigationEventTransitionState
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import io.tezra.fermix.design.BellSwing
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
+import io.tezra.fermix.design.LocalReducedMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -34,23 +41,29 @@ import kotlin.time.TimeMark
  * mark's blinks come when Kotlin's default random source draws.
  * An action reaches [viewModel] only from the screen on top ([topOf]): one popped off the stack is still
  * drawn, and hit, as it leaves, and a second quick tap lands there. The app keeps [viewModel] for its
- * activity, so a rotation or a fold keeps the pairing.
+ * activity, so a rotation or a fold keeps the pairing. Each entry carries its screen changes, [changes]'s
+ * (the M51 update's 7.2), which NavDisplay takes from the entry coming in, or from the one back takes off,
+ * and each but the root's goes by the name [viewModel] gave its screen as it was pushed (EntryNames), so its
+ * saved state is that entry's alone.
  */
 fun onboardingEntries(
     builder: EntryProviderScope<NavKey>,
     viewModel: OnboardingViewModel,
     camera: ScanCamera,
     clip: PrimaryClip,
+    changes: ScreenChanges,
 ) {
-    builder.entry<OnboardingKey.Welcome> { WelcomeEntry(viewModel) }
-    builder.entry<OnboardingKey.Pair> { PairEntry(viewModel, clip) }
-    builder.entry<OnboardingKey.Scan> { ScanEntry(viewModel, camera, clip) }
-    builder.entry<OnboardingKey.Connecting> {
+    val metadata = changes::metadataFor
+    val contentKey = viewModel.entryNames::of
+    builder.entry<OnboardingKey.Welcome>(metadata = metadata) { WelcomeEntry(viewModel) }
+    builder.entry<OnboardingKey.Pair>(contentKey, metadata) { PairEntry(viewModel, clip) }
+    builder.entry<OnboardingKey.Scan>(contentKey, metadata) { ScanEntry(viewModel, camera, clip) }
+    builder.entry<OnboardingKey.Connecting>(contentKey, metadata) {
         val ui by viewModel.ui.collectAsState()
         ConnectingScreen(phase = ui.connecting, host = ui.host, random = Random.Default)
     }
-    builder.entry<OnboardingKey.Verify> { VerifyEntry(viewModel) }
-    builder.entry<OnboardingKey.Paired> { key ->
+    builder.entry<OnboardingKey.Verify>(contentKey, metadata) { VerifyEntry(viewModel) }
+    builder.entry<OnboardingKey.Paired>(contentKey, metadata) { key ->
         val ui by viewModel.ui.collectAsState()
         PairedScreen(
             host = ui.host,
@@ -58,15 +71,15 @@ fun onboardingEntries(
             random = Random.Default,
         )
     }
-    builder.entry<OnboardingKey.Name> { key ->
+    builder.entry<OnboardingKey.Name>(contentKey, metadata) { key ->
         val ui by viewModel.ui.collectAsState()
         NameScreen(
             paired = checkNotNull(ui.paired) { "Name names a stored pairing" },
             onContinue = { nickname -> if (topOf(viewModel.stack.value) == key) viewModel.name(nickname) },
         )
     }
-    builder.entry<OnboardingKey.Notifications> { NotificationsEntry(viewModel) }
-    builder.entry<OnboardingKey.Failure> { key -> FailureEntry(key.case, viewModel, clip) }
+    builder.entry<OnboardingKey.Notifications>(contentKey, metadata) { NotificationsEntry(viewModel) }
+    builder.entry<OnboardingKey.Failure>(contentKey, metadata) { key -> FailureEntry(key.case, viewModel, clip) }
 }
 
 @Composable
@@ -138,17 +151,42 @@ private fun VerifyEntry(viewModel: OnboardingViewModel) {
     VerifyScreen(state = VerifyUi(verify.sas, left, verify.deviceName), onCancel = cancel, random = Random.Default)
 }
 
+/**
+ * Notifications: a no from the system's prompt ends onboarding at once, as "Not now" does; a yes is the answer as it
+ * comes, the record told and push registered at once, and onboarding ends once the check has shown, the check's 200 ms
+ * and then 400, or the 400 alone under Remove animations (the M51 update's 7.4), a wait the ViewModel holds, so back
+ * in it leaves sooner with the grant given. Once the yes has come, "Allow notifications" and "Not now", still drawn as
+ * the check shows, are not heard.
+ */
 @Composable
 private fun NotificationsEntry(viewModel: OnboardingViewModel) {
     val key = OnboardingKey.Notifications
+    val checkShown = (if (LocalReducedMotion.current) 0 else BellSwing.CHECK_MILLIS) + BellSwing.END_AFTER_MILLIS
+    var granted by rememberSaveable { mutableStateOf(false) }
     val prompt =
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (topOf(viewModel.stack.value) == key) viewModel.notificationsAnswered(granted)
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { yes ->
+            if (topOf(viewModel.stack.value) != key) return@rememberLauncherForActivityResult
+            granted = yes
+            viewModel.notificationsAnswered(yes, endAfterMillis = if (yes) checkShown.toLong() else 0L)
         }
+    FollowBackSwipe(viewModel.backSwipe)
     NotificationsScreen(
-        onAllow = viewModel.whileShowing(key) { prompt.launch(Manifest.permission.POST_NOTIFICATIONS) },
-        onNotNow = viewModel.whileShowing(key) { viewModel.notificationsAnswered(false) },
+        onAllow = viewModel.whileShowing(key) { if (!granted) prompt.launch(Manifest.permission.POST_NOTIFICATIONS) },
+        onNotNow = viewModel.whileShowing(key) { if (!granted) viewModel.notificationsAnswered(false) },
+        granted = granted,
     )
+}
+
+/**
+ * Tells [swipe] whether the system's back gesture is under way, for as long as the screen that holds a wait is drawn:
+ * its start and its end, let go or cancelled, as the activity's navigation events have them.
+ */
+@Composable
+internal fun FollowBackSwipe(swipe: BackSwipe) {
+    val dispatcher = LocalNavigationEventDispatcherOwner.current?.navigationEventDispatcher ?: return
+    LaunchedEffect(dispatcher, swipe) {
+        dispatcher.transitionState.collect { swipe.follow(it is NavigationEventTransitionState.InProgress) }
+    }
 }
 
 @Composable

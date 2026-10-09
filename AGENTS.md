@@ -273,6 +273,32 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   key by key against the update and its reference player, each field of a pose held to its own table at every key
   and every segment's middle (a property wired to another table that starts and ends where it does once passed
   every other test), and each moment runs on one clock (`rememberMarkMoment`).
+- Onboarding's motion (the M51 update's 7.2 to 7.5): a screen change's spec lives on its entry, in the entry's
+  metadata (`ScreenChanges.metadataFor`: NavDisplay's `TransitionKey`, `PopTransitionKey` and
+  `PredictivePopTransitionKey`), never on NavDisplay itself, so the app's other screens keep NavDisplay's own and an
+  entry added to onboarding brings its changes with it (README's departures from 7.2 to 7.5 say why, where 7.2's
+  "Where" puts them on NavDisplay); under Remove animations each is a cut. An entry's metadata is equal each time
+  NavDisplay asks for it: a value in it, a change's lambda among them, is made once, never in the call, or each scene
+  is unequal to the last for the same screen and a back swipe let go at its end plays the change again. Every time,
+  distance and easing is a table in design (`OnboardingMotion.kt`, `CeremonyMotion.kt`, `MarkEyes.kt`), written once,
+  asserted against the update's literal or the player's, and read from there by the screens. A moment plays once
+  on `rememberMoment`, its saved flag set on its first frame (`LaunchedEffect(Unit) { played = true }`), never at
+  its end, so a screen restored mid-moment stands at its end; its test restores it mid-way. A moment's saved flag
+  belongs to its entry and its pairing alone: each onboarding entry but the root's goes by a name its screen takes
+  anew each time it is pushed (`EntryNames`, the entry's `contentKey`), since NavDisplay forgets a popped entry's
+  state only while it draws, and the app lock hides it; a moment that plays again each time its screen comes back,
+  the scan's settle, keys its flag to the ViewModel's count of those returns (`OnboardingUi.scanVisit`). A wait
+  that hands a screen's work on (the scan's 250 ms after a Fermix code, Notifications' check after a grant) is the
+  ViewModel's, so a rotation keeps it and back ends it, and what the wait hands on that the owner gave, the grant,
+  is given as it comes, never at the wait's end; a back swipe under way holds the wait until the swipe ends
+  (`BackSwipe`, fed by `FollowBackSwipe`), as Navigation 3 hears a swipe only once it is let go, and a stack
+  changed under a swipe makes the swipe let go take back the screen the wait brought. What a screen shows while a
+  back swipe draws it under the top is what it shows once the swipe is let go: the ViewModel moves a screen's state
+  on as it leaves the top, not as it comes back, and the screen going out holds what it showed last.
+  A loop is for ongoing work alone and ends with its screen or its work: it runs on `rememberLoop(running)`,
+  never under Remove animations, with a bound, and its test shows that no frame is asked for once its screen has
+  left (`MotionRig.framesAsked`); the countdown's sweep is a moment a second, keyed by the second, and its test shows
+  the same. A preview draws a pose, never a clock (Screenshots, above).
 - Colour: no colour but the tokens of `FermixColors` (the M51 update's section 1, monochrome), with
   Material's roles built from them; a screen names no colour of its own but a fixed surface's, as the
   camera's frame and the code card have. A fill in the ink has `onInk` on it, and a wash on the ink is

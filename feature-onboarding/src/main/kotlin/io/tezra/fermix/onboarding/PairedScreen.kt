@@ -72,7 +72,8 @@ fun PairedScreen(
 
 /**
  * Paired at one instant of its hop: the mark in [pose], the title where the hop's clock at [ms] has it, the two
- * centred over the actions and raised by half the 60 dp under them, as the reference player stands them.
+ * centred over the actions and raised by half the 60 dp under them, as the reference player stands them. The mark is
+ * the shared one, Verify's growing back into it as Paired comes in (the M51 update's 7.3).
  */
 @Composable
 internal fun PairedAt(
@@ -87,7 +88,7 @@ internal fun PairedAt(
         centred = true,
         actions = { PrimaryAction(text = stringResource(R.string.onboarding_continue), onClick = onContinue) },
     ) {
-        FermixMark(pose, MARK)
+        SharedMark { mark -> FermixMark(pose, MARK, mark) }
         Text(
             text = stringResource(R.string.onboarding_paired_title, host),
             style = FermixType.headline,

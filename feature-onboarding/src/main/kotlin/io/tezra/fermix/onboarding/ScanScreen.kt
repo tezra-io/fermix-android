@@ -1,7 +1,6 @@
 package io.tezra.fermix.onboarding
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,22 +29,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.isTraversalGroup
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
@@ -58,9 +50,8 @@ import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.HapticUse
 
 // The visual canon's Scan, dark in both modes: the camera's stand-in, `radial-gradient(120% 80% at 50% 40%,
-// #3A3D46 0%, #17181C 62%, #0B0B0D 100%)`; a 64 dp bar with back and torch in white; a 240 dp reticle
-// 96 dp down, its corners drawn 3 dp wide on a 16 dp radius and 44 dp long; the hint 28 dp under it; and
-// "Paste a pairing link" on white at 16 %.
+// #3A3D46 0%, #17181C 62%, #0B0B0D 100%)`; a 64 dp bar with back and torch in white; the reticle 96 dp
+// down (ScanMotion.kt draws it); the hint 28 dp under it; and "Paste a pairing link" on white at 16 %.
 private val CAMERA_LIGHT = Color(0xFF3A3D46)
 private val CAMERA_MID = Color(0xFF17181C)
 private val CAMERA_DARK = Color(0xFF0B0B0D)
@@ -69,15 +60,11 @@ private const val CAMERA_CENTRE_X = 0.5f
 private const val CAMERA_CENTRE_Y = 0.4f
 private const val CAMERA_RADIUS_X = 1.2f
 private const val CAMERA_RADIUS_Y = 0.8f
-private val ON_CAMERA = Color.White
+internal val ON_CAMERA = Color.White
 private val ON_CAMERA_FILL = Color.White.copy(alpha = 0.16f)
 private val BAR_HEIGHT = 64.dp
 private val BAR_SIDES = 4.dp
-private val RETICLE = 240.dp
 private val RETICLE_TOP = 96.dp
-private val RETICLE_STROKE = 3.dp
-private val RETICLE_CORNER = 16.dp
-private val RETICLE_ARM = 44.dp
 private val HINT_TOP = 28.dp
 private val FOOT_SIDES = 24.dp
 private val FOOT_BOTTOM = 16.dp
@@ -138,13 +125,17 @@ fun cameraAccess(
 
 /**
  * What the scan shows: whether the phone [refused] a link, the torch, on or off as [torchOn] says and not
- * drawn when it is null (a camera without one), and what the frame holds, as [access] allows.
+ * drawn when it is null (a camera without one), what the frame holds, as [access] allows, whether the
+ * camera [found] a Fermix code, which the reticle locks onto before Connecting follows, and the scan's
+ * [visit], a new one each time it comes back to the top, in which the reticle settles in once.
  */
 @Immutable
 data class ScanUi(
     val refused: Boolean,
     val torchOn: Boolean?,
     val access: CameraAccess = CameraAccess.ALLOWED,
+    val found: Boolean = false,
+    val visit: Int = 0,
 )
 
 /**
@@ -153,7 +144,9 @@ data class ScanUi(
  * hint; before the camera is allowed, the rationale in their place with "Continue" to the system's prompt,
  * or "Camera is off for Fermix" with "Open settings". "Paste a pairing link" is at the foot of all three,
  * which TalkBack reaches first (section 13.8). A link the phone refused turns the hint into "That's not a
- * Fermix pairing code.", which TalkBack reads out, and plays `REJECT` (section 13.1).
+ * Fermix pairing code.", which TalkBack reads out, and plays `REJECT` (section 13.1). The reticle settles in,
+ * breathes while the camera searches and locks onto a code it found; a refused code's hint shakes once (the M51
+ * update's 7.4, in ScanMotion.kt).
  */
 @Composable
 fun ScanScreen(
@@ -162,10 +155,24 @@ fun ScanScreen(
     modifier: Modifier = Modifier,
     preview: @Composable () -> Unit = {},
 ) {
+    val allowed = state.access == CameraAccess.ALLOWED
+    if (state.refused && allowed) HapticOnce(HapticUse.Refusal)
+    val reticle = rememberReticle(shown = allowed, found = state.found, visit = state.visit)
+    val shake = rememberShake(refused = state.refused && allowed)
+    ScanAt(state, actions, ScanMotion(reticle, shake), modifier, preview)
+}
+
+/** The scan with the reticle and the hint where [motion] has them, as the screen or a preview gives it. */
+@Composable
+internal fun ScanAt(
+    state: ScanUi,
+    actions: ScanActions,
+    motion: ScanMotion,
+    modifier: Modifier = Modifier,
+    preview: @Composable () -> Unit = {},
+) {
     val access = state.access
-    val refused = state.refused
     val allowed = access == CameraAccess.ALLOWED
-    if (refused && allowed) HapticOnce(HapticUse.Refusal)
     // One traversal group, so that the paste's traversal index puts it before the bar and the hint.
     val frame = modifier.fillMaxSize().drawBehind { drawCameraStandIn() }.semantics { isTraversalGroup = true }
     Box(modifier = frame) {
@@ -178,8 +185,9 @@ fun ScanScreen(
             ) {
                 when (access) {
                     CameraAccess.ALLOWED -> {
-                        Reticle(modifier = Modifier.padding(top = RETICLE_TOP))
-                        Hint(refused = refused)
+                        Reticle(pose = motion.reticle, modifier = Modifier.padding(top = RETICLE_TOP))
+                        val sides = Modifier.padding(top = HINT_TOP, start = FOOT_SIDES, end = FOOT_SIDES)
+                        Hint(refused = state.refused, shake = motion.shake, modifier = sides)
                     }
 
                     CameraAccess.RATIONALE -> {
@@ -338,46 +346,6 @@ private fun Torch(
             painter = painterResource(R.drawable.ic_onboarding_torch),
             contentDescription = stringResource(R.string.onboarding_torch),
         )
-    }
-}
-
-/** The hint, or the refusal in its place, a polite live region so TalkBack reads the refusal as it comes. */
-@Composable
-private fun Hint(refused: Boolean) {
-    val hint = if (refused) R.string.onboarding_scan_not_fermix else R.string.onboarding_scan_hint
-    Text(
-        text = stringResource(hint),
-        style = FermixType.body,
-        color = ON_CAMERA,
-        textAlign = TextAlign.Center,
-        modifier =
-            Modifier
-                .padding(top = HINT_TOP, start = FOOT_SIDES, end = FOOT_SIDES)
-                .semantics { liveRegion = LiveRegionMode.Polite },
-    )
-}
-
-/** The reticle's four corners (the canon's `.ret`). */
-@Composable
-private fun Reticle(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(RETICLE)) {
-        val stroke = RETICLE_STROKE.toPx()
-        val inset = stroke / 2f
-        val box = Size(size.width - stroke, size.height - stroke)
-        val radius = CornerRadius(RETICLE_CORNER.toPx())
-        val arm = RETICLE_ARM.toPx()
-        // The rounded square, kept only where the four corners' arms reach.
-        clipRect(arm, 0f, size.width - arm, size.height, ClipOp.Difference) {
-            clipRect(0f, arm, size.width, size.height - arm, ClipOp.Difference) {
-                drawRoundRect(
-                    color = ON_CAMERA,
-                    topLeft = Offset(inset, inset),
-                    size = box,
-                    cornerRadius = radius,
-                    style = Stroke(width = stroke, cap = StrokeCap.Round),
-                )
-            }
-        }
     }
 }
 

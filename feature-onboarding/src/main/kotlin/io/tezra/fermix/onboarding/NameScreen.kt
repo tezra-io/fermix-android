@@ -1,5 +1,7 @@
 package io.tezra.fermix.onboarding
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,6 +39,8 @@ import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.LocalReducedMotion
+import io.tezra.fermix.design.NameMotion
 import io.tezra.fermix.design.Tint
 
 // The visual canon's "Name this Fermix" (6b): the title 8 dp down, the field 22 dp under it on 16 dp
@@ -152,7 +156,7 @@ private fun InstanceRow(
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.size(FermixSpacing.avatar).background(tintOf(paired.record.tint), CircleShape))
+        Avatar(tint = tintOf(paired.record.tint))
         Column(modifier = Modifier.weight(1f)) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(CHIP_GAP),
@@ -194,5 +198,20 @@ private fun DevTag() {
     )
 }
 
+/**
+ * The avatar, a plain disc in [tint], which cross-fades to a new tint over 200 ms (the M51 update's 7.4), or takes it
+ * at once under Remove animations.
+ */
+@Composable
+internal fun Avatar(
+    tint: Tint,
+    modifier: Modifier = Modifier,
+) {
+    val reduced = LocalReducedMotion.current
+    val fading by animateColorAsState(tint.color, tween(NameMotion.TINT_MILLIS), label = "avatar")
+    val color = if (reduced) tint.color else fading
+    Box(modifier = modifier.size(FermixSpacing.avatar).background(color, CircleShape))
+}
+
 /** The design's tint a record names (data keeps it by name). */
-private fun tintOf(name: String) = Tint.entries.single { it.name == name }.color
+private fun tintOf(name: String) = Tint.entries.single { it.name == name }

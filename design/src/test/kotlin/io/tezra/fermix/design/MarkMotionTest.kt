@@ -202,6 +202,14 @@ private val IDLE_FIELDS: Map<String, (MarkPose) -> Float> =
         "idleBlink" to MarkPose::idleBlink,
     )
 
+/** The eyes' looks of the update's 7.4 (MarkEyes.kt), which neither moment drives. */
+private val EYE_FIELDS: Map<String, (MarkPose) -> Float> =
+    mapOf(
+        "eyeX" to MarkPose::eyeX,
+        "eyeY" to MarkPose::eyeY,
+        "squint" to MarkPose::squint,
+    )
+
 private const val CLOSE = 1e-3f
 
 /**
@@ -282,11 +290,11 @@ class MarkMotionTest {
 
     @Test
     fun `the drop draws each of its tables in its own field, and leaves the hop's and the idle's at rest`() =
-        assertDrives(::dropAt, DROP_TABLES, DROP_FIELDS, HOP_FIELDS + IDLE_FIELDS)
+        assertDrives(::dropAt, DROP_TABLES, DROP_FIELDS, HOP_FIELDS + IDLE_FIELDS + EYE_FIELDS)
 
     @Test
     fun `the hop draws each of its tables in its own field, and leaves the drop's and the idle's at rest`() =
-        assertDrives(::hopAt, HOP_TABLES, HOP_FIELDS, DROP_FIELDS + IDLE_FIELDS)
+        assertDrives(::hopAt, HOP_TABLES, HOP_FIELDS, DROP_FIELDS + IDLE_FIELDS + EYE_FIELDS)
 
     @Test
     fun `the drop starts as a stretched dot above the box and ends at rest`() {
@@ -315,7 +323,7 @@ class MarkMotionTest {
     @Test
     fun `the rest is the player's REST`() {
         // line 147: dropBottom: 96, dropRx: 6, dropRy: 6, morph: 1, bodyScale: 1, visorOpen: 1, eyeLeft: 1,
-        // eyeRight: 1, blink: 1, happy: 0, hopY: 0, hopSy: 1, hopSx: 1 (and the eyes' moves, Task 19's).
+        // eyeRight: 1, blink: 1, happy: 0, hopY: 0, hopSy: 1, hopSx: 1, eyeDX: 0, eyeDY: 0, squint: 1.
         val rest = MarkPose.Rest
         val values =
             listOf(
@@ -334,6 +342,7 @@ class MarkMotionTest {
                 rest.hopScaleX,
             )
         assertEquals(listOf(96f, 6f, 6f, 1f, 1f, 1f, 1f, 1f, 1f, 0f, 0f, 1f, 1f), values)
+        assertEquals(listOf(0f, 0f, 1f), listOf(rest.eyeX, rest.eyeY, rest.squint))
         assertEquals(listOf(1f, 1f, 1f), listOf(rest.breathX, rest.breathY, rest.idleBlink))
     }
 

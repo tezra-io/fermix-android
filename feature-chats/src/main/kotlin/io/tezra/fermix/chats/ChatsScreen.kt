@@ -23,8 +23,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,11 +38,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.tezra.fermix.design.Arrival
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.Moment
+import io.tezra.fermix.design.arrivalAt
+import io.tezra.fermix.design.rememberMoment
+import io.tezra.fermix.design.risingIn
 import io.tezra.fermix.instance.RenameDialog
 import io.tezra.fermix.instance.StillTwoDotMark
 import io.tezra.fermix.instance.UnpairDialog
@@ -74,23 +83,28 @@ data class ChatsActions(
 /**
  * The Chats list, the root (design section 13.4): "Fermix" with "+" (Add Fermix) and the overflow's "App
  * lock", a row per (instance, profile) and one per Fermix to re-pair, or the empty state's "Add Fermix".
- * The rename and unpair dialogs a row's long-press opens survive a rotation or a fold.
+ * The rename and unpair dialogs a row's long-press opens survive a rotation or a fold. As onboarding leaves
+ * for it, the row of the Fermix just paired, [arriving], rises in, and [onArrived] hears that the list has
+ * taken it, as the rise starts (the M51 update's 7.4).
  */
 @Composable
 fun ChatsScreen(
     ui: ChatsUi,
     actions: ChatsActions,
     modifier: Modifier = Modifier,
+    arriving: String? = null,
+    onArrived: () -> Unit = {},
 ) {
     var renaming by rememberSaveable { mutableStateOf<String?>(null) }
     var unpairing by rememberSaveable { mutableStateOf<String?>(null) }
+    val arrival = rememberArrival(arriving, onArrived)
     Column(modifier = modifier.fillMaxSize().safeDrawingPadding()) {
         TopBar(onAdd = actions.onAdd, onAppLock = actions.onAppLock)
         if (ui.rows.isEmpty() && ui.repairs.isEmpty()) {
             EmptyState(onAdd = actions.onAdd)
         } else {
             val menu = RowMenu(actions, onRename = { renaming = it }, onUnpair = { unpairing = it })
-            Rows(ui, actions, menu)
+            Rows(ui, actions, menu, arrival)
         }
     }
     val records = ui.rows.map { it.record }
@@ -117,15 +131,74 @@ internal class RowMenu(
     val onUnpair: (String) -> Unit,
 )
 
+/** The row of the Fermix just paired, [id], rising in on its moment's clock, read as it is drawn. */
+private class RowArrival(
+    val id: String,
+    val moment: Moment,
+)
+
+/**
+ * [arriving]'s row's moment: it rises 12 dp as it fades in, 300 ms after 250 (the M51 update's 7.4), and stands at
+ * once under Remove animations; [onArrived] hears that the list has taken it, as it starts. The list keeps the Fermix
+ * it took until its row has risen, a rotation mid-rise standing the row in its place. A Fermix named once the list is
+ * drawn already, as a back swipe out of onboarding draws it before it is let go, has its row in place on screen: the
+ * list takes it at once, and it does not rise.
+ */
+@Composable
+private fun rememberArrival(
+    arriving: String?,
+    onArrived: () -> Unit,
+): RowArrival? {
+    var rising by rememberSaveable { mutableStateOf<String?>(null) }
+    val latest by rememberUpdatedState(onArrived)
+    val drawnWith = remember { arriving }
+    val late = arriving != null && arriving != drawnWith
+    if (late) LaunchedEffect(arriving) { latest() }
+    val id = (if (late) null else arriving) ?: rising ?: return null
+    val taken = {
+        rising = id
+        latest()
+    }
+    val moment = key(id) { rememberRise(onTaken = taken, onRisen = { rising = null }) }
+    return RowArrival(id, moment)
+}
+
+/**
+ * The rise's clock: played as it starts, when [onTaken] hears it, so that a rotation mid-rise stands it at its end;
+ * [onRisen] hears its end.
+ */
+@Composable
+private fun rememberRise(
+    onTaken: () -> Unit,
+    onRisen: () -> Unit,
+): Moment {
+    val length = Arrival.DELAY_MILLIS + Arrival.MILLIS
+    var played by rememberSaveable { mutableStateOf(false) }
+    // Taken before the clock runs, so that a rise standing at its end at once, under Remove animations, ends after it;
+    // a rise restored has been taken already.
+    LaunchedEffect(Unit) {
+        if (played) return@LaunchedEffect
+        played = true
+        onTaken()
+    }
+    return rememberMoment(length, played) { ms -> if (ms >= length) onRisen() }
+}
+
 @Composable
 private fun Rows(
     ui: ChatsUi,
     actions: ChatsActions,
     menu: RowMenu,
+    arrival: RowArrival?,
 ) {
     FermixColumn(ColumnWidth.Wide) {
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(ui.rows, key = { "${it.record.id}:${it.profileId}" }) { row -> ChatRowItem(row, menu) }
+            items(ui.rows, key = { "${it.record.id}:${it.profileId}" }) { row ->
+                val rises = arrival?.takeIf { it.id == row.record.id }
+                val modifier =
+                    if (rises == null) Modifier else Modifier.risingIn({ arrivalAt(rises.moment.ms) }, Arrival.rise)
+                ChatRowItem(row, menu, modifier)
+            }
             items(ui.repairs, key = { "repair:${it.id}" }) { notice ->
                 RepairRowItem(
                     notice.title,

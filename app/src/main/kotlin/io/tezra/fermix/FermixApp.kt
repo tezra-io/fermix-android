@@ -23,6 +23,7 @@ import io.tezra.fermix.chats.LockScreen
 import io.tezra.fermix.chats.ShareSheet
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.onboarding.OnboardingTransitions
 import io.tezra.fermix.onboarding.OnboardingViewModel
 import io.tezra.fermix.onboarding.appBackStack
 import io.tezra.fermix.onboarding.clipboardClip
@@ -205,23 +206,27 @@ private fun Screens(
     val context = LocalContext.current
     val camera = remember { phoneCamera() }
     val clip = remember(context) { clipboardClip(context) }
-    NavDisplay(
-        backStack = stack,
-        onBack = {
-            if (models.onboarding.stack.value
-                    .isNotEmpty()
-            ) {
-                models.onboarding.back()
-            } else {
-                models.navigator.back()
-            }
-        },
-        entryProvider =
-            entryProvider {
-                onboardingEntries(this, models.onboarding, camera, clip)
-                appEntries(this, services, models, showing(current))
+    // Onboarding's entries carry their own screen changes, and its mark moves between them (the M51 update's 7.2
+    // and 7.3); the app's entries keep NavDisplay's own.
+    OnboardingTransitions { changes ->
+        NavDisplay(
+            backStack = stack,
+            onBack = {
+                if (models.onboarding.stack.value
+                        .isNotEmpty()
+                ) {
+                    models.onboarding.back()
+                } else {
+                    models.navigator.back()
+                }
             },
-    )
+            entryProvider =
+                entryProvider {
+                    onboardingEntries(this, models.onboarding, camera, clip, changes)
+                    appEntries(this, services, models, showing(current))
+                },
+        )
+    }
 }
 
 /** Whether [key] is the screen on top: an action from a screen leaving is still drawn, and hit, and dropped. */

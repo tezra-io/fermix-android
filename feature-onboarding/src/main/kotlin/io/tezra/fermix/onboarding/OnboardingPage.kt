@@ -185,24 +185,34 @@ internal fun BackBar(
 /**
  * A failure's or the notifications step's icon on its disc (the canon's `.fail .ic`): the agent bubble's grey
  * behind the ink, or for the security event, [alert], the error text's colour, as the M51 update's reference player
- * draws it: the update leaves no white for an icon on the error's fill in dark mode, where onInk is near-black.
+ * draws it: the update leaves no white for an icon on the error's fill in dark mode, where onInk is near-black. The
+ * icon takes [iconModifier], and [over] draws on it: the bell's check.
  */
 @Composable
 internal fun IconDisc(
     @DrawableRes icon: Int,
     alert: Boolean,
     modifier: Modifier = Modifier,
+    iconModifier: Modifier = Modifier,
+    over: @Composable () -> Unit = {},
 ) {
-    val colors = LocalFermixColors.current
     Box(
-        modifier = modifier.size(DISC).clip(CircleShape).background(colors.agentBubble),
+        modifier = modifier.size(DISC).clip(CircleShape).background(LocalFermixColors.current.agentBubble),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            painter = painterResource(icon),
-            contentDescription = null,
-            modifier = Modifier.size(DISC_ICON),
-            tint = if (alert) colors.errText else colors.ink,
-        )
+        DiscIcon(icon = icon, alert = alert, modifier = iconModifier)
+        over()
     }
+}
+
+/** [icon] as a disc draws it, at its icon size, in the ink, or for the security event, [alert], the error text's. */
+@Composable
+internal fun DiscIcon(
+    @DrawableRes icon: Int,
+    alert: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalFermixColors.current
+    val tint = if (alert) colors.errText else colors.ink
+    Icon(painterResource(icon), contentDescription = null, modifier = modifier.size(DISC_ICON), tint = tint)
 }

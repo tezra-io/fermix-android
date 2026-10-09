@@ -94,7 +94,10 @@ private fun ChatsEntry(
                 onDismissRepair = { if (showing()) chats.dismissRepair(it) },
             )
         }
-    ui?.let { ChatsScreen(it, actions) }
+    // The Fermix onboarding just paired, whose row rises in as onboarding leaves (the M51 update's 7.4).
+    val arrival = models.onboarding.arrival
+    val arriving by arrival.id.collectAsState()
+    ui?.let { ChatsScreen(it, actions, arriving = arriving, onArrived = arrival::arrived) }
 }
 
 /** A chat (design section 13.5); a trust state takes its place as soon as it holds. */

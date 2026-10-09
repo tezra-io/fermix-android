@@ -231,7 +231,7 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **The Fermix mark.** The two-dot mark gives way to the Fermix mark, the design's own drawing, vendored with its
   provenance. On Welcome it drops in: a dot falls, lands with a light tick, swells into the mark, the visor opens
   and the eyes pop in, and the words rise in under it; then it breathes and blinks. On Paired its eyes turn happy
-  and it hops once as the phone confirms the pairing. Connecting and Verify show it resting. Each moment plays
+  and it hops once as the phone confirms the pairing. Connecting and Verify show it at work (below). Each moment plays
   once, not again after a rotation, a fold or a return; with Remove animations on, the mark stands still from the
   first frame, and the tick never plays for a landing it did not draw. On a phone on its side Welcome's mark stands
   near the top, so "Get started" stays in view. TalkBack reaches Welcome's words and buttons from the start, before
@@ -240,3 +240,18 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   as does the chat's thinking card, its two dots orbiting in the ink. An instance's avatar is now its colour
   alone, everywhere it is drawn: the Chats list, the share sheet, a chat's bar, the Instance screen, the name
   step of onboarding and the conversation shortcuts.
+- **Onboarding moves.** Its screens slide a short way forward and back between the steps, and fade through into
+  and out of the camera, a failure and the app; a back swipe scrubs the same motion, letting go finishes it, and
+  turning back before letting go settles it back. The mark moves and resizes from Connecting to Verify to Paired as
+  one. Pair's diagram builds once, and Copy shows a check. The scan's frame settles in each time the camera shows,
+  breathes while it looks, locks onto a Fermix code with a flash before Connecting follows, and a code it refuses
+  makes its line shake. On Connecting the mark looks for your computer, narrows its eyes as it checks and opens
+  them as the line is secured; the line changes in place, and the current step is a wider pill. On Verify the mark
+  looks down at the code, the ring empties smoothly, and at 30 and 10 seconds left it pulses once and TalkBack says
+  the time left. The bell on Notifications swings, and turns into a check when you allow them; your yes counts as
+  you give it, even if you go back before onboarding ends. A failure's icon settles in, and the wrong-machine
+  warning draws its red edge across. Your new Fermix's row rises into the Chats list, unless a back swipe has shown
+  it already. A rotation in the middle of any of it shows it done, and plays none of it again, and a new pairing
+  plays all of it anew, even after the app lock hid the last one. Going back just after the camera has read a code
+  ends the pairing it would have started, and so does a back swipe begun then and let go. With Remove animations
+  on, nothing moves and every screen changes at once.
