@@ -27,4 +27,7 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.kotlinx.coroutines.test)
+    // The tests' daemon frames, seals and answers a handshake as the demo daemon does, with its code: the
+    // in-memory link, the responder and the frames are written once, there (demo-daemon's README section).
+    testImplementation(project(":demo-daemon"))
 }

@@ -6,7 +6,7 @@ version.properties' versionCode, whose APK and bundle disagree, or whose APK or 
 Each test plants its failure in a small APK and bundle that aapt2 links and a throwaway key signs. The script
 runs from a tree of its own, with version.properties at versionCode 7 and a stand-in for
 check_release_policy.sh, whose own checks need the app's whole manifest and are the policy job's to prove: the
-stand-in records each APK it was given and passes or fails as the test says."""
+stand-in records each APK it was given, with the mapping given beside it, and passes or fails as the test says."""
 import shutil
 import unittest
 
@@ -18,9 +18,10 @@ AAB = "fermix-android-0.2.0.aab"
 MAPPING = "fermix-android-0.2.0-mapping.txt"
 POLICY = """#!/usr/bin/env bash
 # A stand-in for check_release_policy.sh: records the APK it is given with its manifest's first two bytes, 0300
-# for the binary XML the policy reads, and exits FAKE_POLICY_STATUS for the candidate's APK and
-# FAKE_BUNDLE_POLICY_STATUS for any other, the bundle's base module.
-echo "$1 $(unzip -p "$1" AndroidManifest.xml | head -c 2 | od -An -tx1 | tr -d ' \\n')" >>"$FAKE_POLICY_LOG"
+# for the binary XML the policy reads, and the R8 mapping given with it, and exits FAKE_POLICY_STATUS for the
+# candidate's APK and FAKE_BUNDLE_POLICY_STATUS for any other, the bundle's base module.
+magic="$(unzip -p "$1" AndroidManifest.xml | head -c 2 | od -An -tx1 | tr -d ' \\n')"
+echo "$1 $magic ${2:-no mapping}" >>"$FAKE_POLICY_LOG"
 case "$1" in
   "$FAKE_CANDIDATE"/*) status=$FAKE_POLICY_STATUS ;;
   *) status=$FAKE_BUNDLE_POLICY_STATUS ;;
@@ -62,10 +63,11 @@ class VerifyCandidateTest(ScriptTest):
         self.place()
         self.assertPassed(self.verify())
         apk, bundle = self.policy_log.read_text().splitlines()
-        self.assertEqual(f"{self.candidate / APK} 0300", apk)
-        # The bundle's base module as Play builds from it, its manifest converted to the binary XML the policy reads.
+        self.assertEqual(f"{self.candidate / APK} 0300 {self.candidate / MAPPING}", apk)
+        # The bundle's base module as Play builds from it, its manifest converted to the binary XML the policy reads,
+        # held to the same mapping, as R8 shrank the two in one run.
         self.assertFalse(bundle.startswith(str(self.candidate)), bundle)
-        self.assertTrue(bundle.endswith(" 0300"), bundle)
+        self.assertTrue(bundle.endswith(f" 0300 {self.candidate / MAPPING}"), bundle)
         sums = (self.candidate / "SHA256SUMS").read_text()
         self.assertEqual(sorted([APK, AAB, MAPPING]), sorted(line.split()[1] for line in sums.splitlines()))
         checked(["sha256sum", "--check", "--strict", "SHA256SUMS"], cwd=self.candidate)

@@ -2,6 +2,7 @@ package io.tezra.fermix.session
 
 import io.tezra.fermix.attest.AttestedKey
 import io.tezra.fermix.attest.DeviceKeyFacade
+import io.tezra.fermix.demo.SoftwareKey
 import io.tezra.fermix.noise.StaticKey
 
 private const val SEQUENCE = 0x30

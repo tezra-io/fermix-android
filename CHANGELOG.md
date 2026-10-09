@@ -211,6 +211,12 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **The app's screens from every CI run.** CI's `screens` job keeps every screen's preview in a phone's window,
   light and dark, as its `app-shots` download for 30 days (`app-shots-incomplete` when a preview failed to draw),
   and `scripts/app_shots.sh` makes the same pictures from a developer's own recording.
+- **A demo Fermix in the debug app.** A launcher entry, **Fermix demo**, copies a pairing link the app
+  pairs over as over a real one, through Connecting, Verify and the computer's approval, to six scripted
+  Fermixes with chats, an "Unread messages" divider, a turn still running, an approval card waiting and
+  replies streamed in, all in memory and with no network, so the whole app can be walked with no daemon.
+  The demo offers no notifications. The release never holds it: its policy check refuses an APK with any
+  class, component or resource of the demo, and, with the release's R8 mapping, a class of it under any name.
 
 ### Changed
 

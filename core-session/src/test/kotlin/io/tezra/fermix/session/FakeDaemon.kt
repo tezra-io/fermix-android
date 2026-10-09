@@ -1,14 +1,20 @@
 package io.tezra.fermix.session
 
+import io.tezra.fermix.demo.ClientFrame
+import io.tezra.fermix.demo.IkResponder
+import io.tezra.fermix.demo.MemoryLink
+import io.tezra.fermix.demo.Responded
+import io.tezra.fermix.demo.SealedEnd
+import io.tezra.fermix.demo.SoftwareKey
+import io.tezra.fermix.demo.serverFrame
+import io.tezra.fermix.demo.serverRun
+import io.tezra.fermix.demo.unknownFrame
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.TransportException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -23,62 +29,6 @@ private const val MAX_PINGS_SKIPPED = 100
 /** The most frames a daemon that answers pings reads: an hour of pings, with room. */
 private const val MAX_FRAMES_ANSWERED = 10_000
 
-/**
- * Both ends of one socket in memory. Like core-transport's Connection, a daemon's close ends the
- * phone's incoming messages after those it already holds, and the phone's own close drops the ones
- * it has not read.
- */
-internal class FakeLink : Link {
-    val toDaemon = Channel<ByteArray>(Channel.UNLIMITED)
-    private val toPhone = Channel<ByteArray>(Channel.UNLIMITED)
-    private val ended = CompletableDeferred<TransportException>()
-
-    /** The close this side sent, once it sent one. */
-    val phoneClose = CompletableDeferred<TransportException.Closed>()
-
-    /** What the socket holds unwritten, as a test sets it: a daemon that reads slowly. */
-    @Volatile
-    var queued = 0L
-
-    override val queuedBytes: Long get() = queued
-
-    override val incoming: ReceiveChannel<ByteArray> get() = toPhone
-    override val closed: Deferred<TransportException> get() = ended
-
-    override fun send(message: ByteArray): Boolean = !ended.isCompleted && toDaemon.trySend(message).isSuccess
-
-    override fun close(
-        code: Int,
-        reason: String,
-    ) {
-        val close = TransportException.Closed(code, reason, byDaemon = false)
-        phoneClose.complete(close)
-        ended.complete(close)
-        toPhone.cancel()
-        toDaemon.close()
-    }
-
-    fun deliver(message: ByteArray) {
-        toPhone.trySend(message)
-    }
-
-    fun closeByDaemon(
-        code: Int,
-        reason: String,
-    ) {
-        ended.complete(TransportException.Closed(code, reason, byDaemon = true))
-        toPhone.close()
-        toDaemon.close()
-    }
-
-    /** The socket fails with no close frame, as a dropped network leaves it. */
-    fun fail(cause: Exception) {
-        ended.complete(TransportException.Unreachable(cause))
-        toPhone.close()
-        toDaemon.close()
-    }
-}
-
 /** A `pair_request` as the daemon reads it: its frame, its event, and its raw tail split into the chain. */
 internal class PairRequestRead(
     val frame: ClientFrame,
@@ -86,19 +36,20 @@ internal class PairRequestRead(
     val chain: List<ByteArray>,
 )
 
-/** The daemon's end of one connection: the IK or IKpsk2 responder, its seq, and the frames both ways. */
+/**
+ * The daemon's end of one connection: the IK or IKpsk2 responder, its seq, and the frames both ways, sealed and
+ * opened by the demo daemon's own end ([SealedEnd]), so the tests and the demo seal alike.
+ */
 internal class DaemonConnection(
-    val link: FakeLink,
+    val link: MemoryLink,
     private val gatewayKey: SoftwareKey,
     val candidate: Candidate,
 ) {
-    private var receiving: TransportCipher? = null
-    private var sending: TransportCipher? = null
+    private val end = SealedEnd(link)
     private var seq = 0uL
 
     /** The handshake's outcome on the daemon's side, once message 2 went: its hash and the phone's key. */
-    var responded: Responded? = null
-        private set
+    val responded: Responded? get() = end.responded
 
     /** Reads message 1 and answers it with message 2. */
     suspend fun handshake() = respondWith(IkResponder(gatewayKey))
@@ -116,11 +67,7 @@ internal class DaemonConnection(
     }
 
     private suspend fun respondWith(responder: IkResponder) {
-        val outcome = responder.respond(link.toDaemon.receive())
-        receiving = outcome.receive
-        sending = outcome.send
-        responded = outcome
-        link.deliver(outcome.second)
+        end.respond(link.toDaemon.receive(), responder)
     }
 
     /** Answers message 1 with bytes that do not authenticate as the paired daemon's. */
@@ -130,10 +77,7 @@ internal class DaemonConnection(
     }
 
     /** The phone's next frame, or null once the phone closed. */
-    suspend fun receive(): ClientFrame? {
-        val message = link.toDaemon.receiveCatching().getOrNull() ?: return null
-        return clientFrame(checkNotNull(receiving) { "no handshake yet" }.decrypt(message))
-    }
+    suspend fun receive(): ClientFrame? = end.receive()
 
     /** The phone's next frame; the phone closing first fails the test. */
     suspend fun next(): ClientFrame = checkNotNull(receive()) { "the phone closed" }
@@ -249,9 +193,7 @@ internal class DaemonConnection(
 
     suspend fun phoneClosed(): TransportException.Closed = link.phoneClose.await()
 
-    private fun deliverSealed(frame: ByteArray) {
-        link.deliver(checkNotNull(sending) { "no handshake yet" }.encrypt(frame))
-    }
+    private fun deliverSealed(frame: ByteArray) = end.deliverSealed(frame)
 }
 
 /** The daemon at every candidate: each dial opens a socket a test then accepts and drives. */
@@ -271,7 +213,7 @@ internal class FakeDaemon : Dialer {
     override suspend fun dial(candidate: Candidate): Link {
         dialed += candidate
         refusal(candidate)?.let { throw it }
-        val link = FakeLink()
+        val link = MemoryLink()
         connections.send(DaemonConnection(link, gatewayKey, candidate))
         return link
     }

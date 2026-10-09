@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The debug app's demo (README, "The demo"), never the release's: the application that dials the demo for the
+  demo's own pins (DemoApplication), and the "Fermix demo" launcher entry that starts it (DemoEntry). The entry is an
+  activity, not an alias of MainActivity: a launcher starts an alias with no extra, so MainActivity could not tell
+  the two entries apart without the main code learning of the demo. It has no window and finishes as it hands the
+  app forward; an empty affinity and excludeFromRecents keep it out of the app's task and of Recents, as the share
+  entry is kept. It asks for no permission.
+
+  MainActivity is named first, with nothing of its own (the main manifest gives all of it): the merge keeps this
+  manifest's order, and the package's launch intent is its first launcher activity, which App info's Open, a start
+  by package name and Android Studio's default activity all start. Those start the app, never the demo.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:name="io.tezra.fermix.demo.DemoApplication"
+        tools:replace="android:name">
+
+        <activity android:name="io.tezra.fermix.MainActivity" />
+
+        <activity
+            android:name="io.tezra.fermix.demo.DemoEntry"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/demo_launcher_label"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

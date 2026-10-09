@@ -4,17 +4,20 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import io.tezra.fermix.attest.AttestedKey
 import io.tezra.fermix.attest.DeviceKeyFacade
+import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceGone
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.instance.TestOutcome
 import io.tezra.fermix.noise.StaticKey
+import io.tezra.fermix.protocol.PairingLink
 import io.tezra.fermix.session.Announcement
 import io.tezra.fermix.session.Announcer
+import io.tezra.fermix.session.Dialer
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
-import io.tezra.fermix.transport.WebSocketConnector
+import io.tezra.fermix.transport.TransportException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -22,10 +25,12 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -36,6 +41,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
+import java.util.Base64
 
 private val LAN = Candidate("192.168.1.24", Candidate.Scope.LAN, Candidate.Kind.IP)
 private val TAILNET = Candidate("100.101.42.7", Candidate.Scope.TAILNET, Candidate.Kind.IP)
@@ -68,6 +75,23 @@ private object HeldKey : StaticKey {
     override fun agree(peerPublicKey: ByteArray): ByteArray = error("these sessions never handshake")
 }
 
+/** A version-2 pairing link of [record]'s daemon, as its pairing window writes it, form-encoded. */
+private fun pairingLinkText(record: Instance): String {
+    val parameters =
+        listOf(
+            "v" to "2",
+            "candidates" to record.candidates.joinToString(",", "[", "]") { "\"${it.host}\"" },
+            "port" to "${record.port}",
+            "tls_fp" to record.tlsFp,
+            "gateway_pk" to record.gatewayPk,
+            "secret" to Base64.getEncoder().encodeToString(ByteArray(32) { 5 }),
+            "name" to record.host,
+            "profile" to record.profile,
+        )
+    return "fermix://pair?" +
+        parameters.joinToString("&") { (name, value) -> "$name=${URLEncoder.encode(value, Charsets.UTF_8)}" }
+}
+
 /** A socket a test's race hands back, which says whether it was closed. */
 private class Socket : AutoCloseable {
     var closed = false
@@ -97,14 +121,16 @@ class AppSessionsTest {
 
     private val databases by lazy { ProfileDatabases(ApplicationProvider.getApplicationContext(), folder.root) }
 
-    private fun opener(keys: DeviceKeyFacade) =
-        AppSessions(
-            databases,
-            keys,
-            WebSocketConnector(),
-            MutableStateFlow(NetworkFacts.NONE),
-            announcer = { _, _ -> Announcer { Announcement.NOT_ANNOUNCED } },
-        ) { "0.1.0" }
+    private fun opener(
+        keys: DeviceKeyFacade,
+        dialerFor: (Int, ByteArray) -> Dialer = webSocketDialers(),
+    ) = AppSessions(
+        databases,
+        keys,
+        dialerFor,
+        MutableStateFlow(NetworkFacts.NONE),
+        announcer = { _, _ -> Announcer { Announcement.NOT_ANNOUNCED } },
+    ) { "0.1.0" }
 
     @Test
     fun `a session opens with its record's own key alias, and none without the key or a route`() =
@@ -168,6 +194,27 @@ class AppSessionsTest {
             val refusal = assertThrows(SessionUnavailable::class.java) { opener.open(removed, backgroundScope) }
             assertTrue(refusal.cause is InstanceGone)
             assertFalse(File(folder.root, removed.id).exists())
+        }
+
+    @Test
+    fun `a session, a pairing and a connection test dial what the app's dialers make for a port and pin`() =
+        runTest {
+            val paired = record(1)
+            val asked = mutableListOf<Pair<Int, String>>()
+            val refusing = Dialer { throw TransportException.Unreachable(IOException("no daemon here")) }
+            val opener =
+                opener(FakeKeys(holds = setOf(paired.keyAlias))) { port, pin ->
+                    asked += port to pin.toHexString()
+                    refusing
+                }
+            val pin = paired.tlsFingerprint().toHexString()
+
+            assertSame(refusing, opener.sessionParts(paired).dialer)
+            assertEquals(TestOutcome.NotReached(failed = paired.candidates.toSet()), opener.test(paired))
+            val link = PairingLink.parse(pairingLinkText(paired))
+            val pairing = opener.pairingParts(link, StandardTestDispatcher(testScheduler), backgroundScope)
+            assertSame(refusing, pairing.dialerFor(7, ByteArray(32)))
+            assertEquals(listOf(paired.port to pin, paired.port to pin, 7 to ByteArray(32).toHexString()), asked)
         }
 
     @Test

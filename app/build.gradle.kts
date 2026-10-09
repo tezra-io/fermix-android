@@ -7,6 +7,9 @@ android {
     defaultConfig {
         applicationId = "io.tezra.fermix"
     }
+    // The release's own R8 rules (proguard-rules.pro): a class of the debug app's demo that reached a release
+    // keeps its name, so the release policy's check 10 sees it.
+    buildTypes.getByName("release").proguardFiles("proguard-rules.pro")
     // LauncherIconTest holds the icon and the splash to design's vendored mark, and as a test resource the
     // mark is an input of the test task, so a changed byte or a re-vendor reruns it, which an up-to-date or
     // cached result would pass.
@@ -48,6 +51,9 @@ dependencies {
     implementation(project(":push"))
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
+    // The demo (README, "The demo"): the debug app's alone, which its own application and launcher entry in
+    // src/debug wire in. The release never takes it; scripts/check_release_policy.sh holds its APK to that.
+    debugImplementation(project(":demo-daemon"))
 
     // MainActivityTest starts the activity under Compose's test rule, on Robolectric.
     testImplementation(libs.androidx.compose.ui.test.junit4)

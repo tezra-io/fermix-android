@@ -6,7 +6,8 @@
 #   1. apksigner does not verify the APK at its own minSdk, or zipalign finds it unaligned (an uncompressed
 #      native library off a 16 KB page among it), as the signing happened outside Gradle
 #   2. scripts/check_release_policy.sh, as it is, fails on the APK, or on the app bundle's base module, from
-#      which Play builds every split a phone installs from it; or the bundle holds a module besides base
+#      which Play builds every split a phone installs from it, each with the candidate's R8 mapping, which both
+#      were shrunk with; or the bundle holds a module besides base
 #   3. the APK or the app bundle is debuggable, or either is another package than io.tezra.fermix
 #   4. the APK and the bundle disagree on version, or either is not the tag's versionName with
 #      version.properties' versionCode (section 4.4)
@@ -108,9 +109,11 @@ main() {
   work="$(mktemp -d)" || fatal "could not make a scratch directory"
   trap 'rm -rf -- "${work:?}"' EXIT
   check_signature "$dir/$apk"
-  "$ROOT_DIR/scripts/check_release_policy.sh" "$dir/$apk" || refuse "the signed APK fails the release policy"
+  "$ROOT_DIR/scripts/check_release_policy.sh" "$dir/$apk" "$dir/$mapping" ||
+    refuse "the signed APK fails the release policy"
   base="$(bundle_base_apk "$dir/$aab")"
-  "$ROOT_DIR/scripts/check_release_policy.sh" "$base" || refuse "the app bundle's base module fails the release policy"
+  "$ROOT_DIR/scripts/check_release_policy.sh" "$base" "$dir/$mapping" ||
+    refuse "the app bundle's base module fails the release policy"
   check_versions "$tag" "$dir/$apk" "$base"
   (cd "$dir" && sha256sum "$apk" "$aab" "$mapping" >SHA256SUMS)
   echo "verify_candidate: $apk and $aab are $PACKAGE $version with version.properties' versionCode, signed," \

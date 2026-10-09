@@ -12,6 +12,8 @@ import io.tezra.fermix.instance.TestOutcome
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.PairingLink
 import io.tezra.fermix.session.Announcer
+import io.tezra.fermix.session.Dialer
+import io.tezra.fermix.session.Link
 import io.tezra.fermix.session.PairedInstance
 import io.tezra.fermix.session.PairingParts
 import io.tezra.fermix.session.Session
@@ -37,17 +39,20 @@ import java.util.HexFormat
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.TimeSource
 
+/** A close with nothing wrong (RFC 6455, 7.4.1): the connection test's, of the link it won. */
+private const val NORMAL_CLOSURE = 1000
+
 /** "Test connection" gives up after this long: past every candidate's connect timeout, as one race is. */
 internal const val TEST_TIMEOUT_MILLIS = 20_000L
 
 /**
- * How the app makes what talks to a daemon: each instance's session, over its pinned WebSocket with its
- * Keystore key, its main profile's store and the [announcer] made for it over the same database, racing the
- * candidate the record kept from the last `hello` first; a
- * pairing's parts; and the Instance screen's connection test. Opening a session reads the Keystore and
- * opens the database, so the supervisor calls it off the main thread. A session, its store and its announcer,
- * holds its database for its life, outside ProfileDatabases' count of readers: the supervisor closes each
- * session it keeps before its instance is removed (SessionSupervisor.remove), and the close returns only once
+ * How the app makes what talks to a daemon: each instance's session, over the link [dialerFor] dials for its
+ * port and pin (its pinned WebSocket, but in the debug app's demo) with its Keystore key, its main profile's
+ * store and the [announcer] made for it over the same database, racing the candidate the record kept from the
+ * last `hello` first; a pairing's parts; and the Instance screen's connection test. Opening a session reads the
+ * Keystore and opens the database, so the supervisor calls it off the main thread. A session, its store and its
+ * announcer, holds its database for its life, outside ProfileDatabases' count of readers: the supervisor closes
+ * each session it keeps before its instance is removed (SessionSupervisor.remove), and the close returns only once
  * the session's run and every request made before it have ended (Session.close). A pairing's session is the
  * supervisor's only once handed over (SessionSupervisor.adopt); before that nothing orders it against a removal
  * of the same daemon. "Pair again" merges only into a row in a trust state, whose session's run is over.
@@ -55,7 +60,7 @@ internal const val TEST_TIMEOUT_MILLIS = 20_000L
 internal class AppSessions(
     private val databases: ProfileDatabases,
     private val keys: DeviceKeyFacade,
-    private val connector: WebSocketConnector,
+    private val dialerFor: (port: Int, pin: ByteArray) -> Dialer,
     private val network: StateFlow<NetworkFacts>,
     private val announcer: (instanceId: String, database: Lazy<ProfileDatabase>) -> Announcer,
     private val appVersion: () -> String,
@@ -80,7 +85,7 @@ internal class AppSessions(
         return SessionParts(
             appVersion = appVersion(),
             staticKey = key,
-            dialer = WebSocketDialer(connector, instance.port, PinnedTrust(instance.tlsFingerprint())),
+            dialer = dialerFor(instance.port, instance.tlsFingerprint()),
             store = RoomSessionStore(database, databases.stagedUploads(instance.id, MAIN_PROFILE)),
             announcer = announcer(instance.id, lazyOf(database)),
             network = network,
@@ -90,7 +95,7 @@ internal class AppSessions(
     }
 
     /**
-     * What a pairing over [link] runs on: a pinned WebSocket dialer, the first profile's store and its
+     * What a pairing over [link] runs on: the app's dialers ([dialerFor]), the first profile's store and its
      * announcer, both opening their database at first use, off the main thread the pairing starts on, the
      * [keystore] dispatcher it reads the Keystore on, and [sessionScope], the supervisor's, for the session
      * the approval hands over. That session reads its store before the record is written, so its open lets
@@ -108,7 +113,7 @@ internal class AppSessions(
                 databases.open(instanceId, MAIN_PROFILE)
             }
         return PairingParts(
-            dialerFor = { port, pin -> WebSocketDialer(connector, port, PinnedTrust(pin)) },
+            dialerFor = dialerFor,
             profileId = MAIN_PROFILE,
             store = RoomSessionStore(database, databases.stagedUploads(instanceId, MAIN_PROFILE)),
             announcer = announcer(instanceId, database),
@@ -118,10 +123,10 @@ internal class AppSessions(
         )
     }
 
-    /** "Test connection": one race over [instance]'s candidates, as a session's, over its pinned WebSocket. */
+    /** "Test connection": one race over [instance]'s candidates, as a session's, over the dialer its session dials. */
     suspend fun test(instance: Instance): TestOutcome {
-        val trust = PinnedTrust(instance.tlsFingerprint())
-        return raceOnce(instance.candidates) { candidate -> connector.open(candidate, instance.port, trust) }
+        val dialer = dialerFor(instance.port, instance.tlsFingerprint())
+        return raceOnce(instance.candidates) { candidate -> LinkCloser(dialer.dial(candidate)) }
     }
 
     /** [instanceId]'s main profile, or [SessionUnavailable] once a removal deleted its files. */
@@ -177,6 +182,19 @@ internal suspend fun <T : AutoCloseable> raceOnce(
             TestOutcome.NotReached(failed.toSet())
         }
     }
+}
+
+/** The production dialers: each daemon's pinned WebSocket (core-transport), over one connector. */
+internal fun webSocketDialers(): (port: Int, pin: ByteArray) -> Dialer {
+    val connector = WebSocketConnector()
+    return { port, pin -> WebSocketDialer(connector, port, PinnedTrust(pin)) }
+}
+
+/** A link the connection test won, which it closes at once, normally. */
+private class LinkCloser(
+    private val link: Link,
+) : AutoCloseable {
+    override fun close() = link.close(NORMAL_CLOSURE, "")
 }
 
 /**

@@ -31,8 +31,12 @@ fun decodeServerEvent(bytes: ByteArray): Decoded<ServerEvent> {
     return decodeServerHeader(parseObject(text), text, frame.raw)
 }
 
-/** Decodes one client frame as the daemon would: an unknown client `t` is refused, as there. */
-internal fun decodeClientEvent(bytes: ByteArray): Decoded<ClientEvent> {
+/**
+ * Decodes one client frame as the daemon would: an unknown client `t` is refused, as there, and a known event is
+ * held to the rules of the version it carries. The app never reads a client frame; the debug app's demo daemon
+ * reads the phone's with it (demo-daemon), as the core-session tests' fake daemon does.
+ */
+fun decodeClientEvent(bytes: ByteArray): Decoded<ClientEvent> {
     val frame = Frame.decode(bytes)
     val header = parseObject(utf8(frame.header))
     val envelope = readEnvelope(header)

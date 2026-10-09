@@ -178,7 +178,8 @@ agreement made with the screen locked after the first unlock.
 `core-session` (`io.tezra.fermix.session`) is one paired session with one daemon, for one profile,
 from its first race until it ends. It is an Android library with no android.* in it, tested on the
 JVM against a fake daemon that answers Noise IK and IKpsk2 and builds every event from core-protocol's models,
-on a virtual clock. `Session.open` races the candidates, runs the IK handshake and sends `hello` at
+on a virtual clock; its socket, responder and frames are demo-daemon's (The demo, below), and so its tests
+also run the debug app's demo against the session (`DemoDaemonTest`). `Session.open` races the candidates, runs the IK handshake and sends `hello` at
 seq 1 on the winner alone, with the stored cursors and `protocol_v: 2`; a `hello_ack` whose window
 leaves out 2, or a protocol v1 daemon's `unsupported_protocol_version`, ends the session as
 `OlderDaemon` or `NewerDaemon`. Every frame's seq is the last one's plus one, from 1 on each
@@ -1804,6 +1805,166 @@ notifications do; and `GoogleServicesPlaceholderTest`, which refuses an `app/goo
 not the placeholder's. The lock's check reads every string the posted notification carries, through its
 parcel, and first finds a preview there with the lock off.
 
+`demo-daemon` (`io.tezra.fermix.demo`) is the debug app's demo Fermix, below, and what core-session's tests
+run their fake daemon on: an in-memory socket (`MemoryLink`), the daemon's side of the Noise handshakes
+(`DaemonNoise.kt`: the IK and IKpsk2 responder, a software X25519 key, the SAS) and its frames
+(`DaemonFrames.kt`), and one connection's sealed end (`SealedEnd`). The app takes it as `debugImplementation`
+alone; core-session takes it as `testImplementation`.
+
+## The demo
+
+The debug app carries a demo Fermix, so the whole app can be walked with no daemon: pairing to the
+chat, while the engine's mobile channel is still behind its flag. It is the debug app's alone; the
+release never holds it, and `scripts/check_release_policy.sh` proves that of every release APK (check
+10: no class of `io.tezra.fermix.demo` in any dex, no name of it in the merged manifest, no resource named
+`demo_…`, as the debug source set names the demo's words, the words themselves held out by that source set
+alone; and, given the release's R8 mapping, as CI's `policy` job and the candidate's `verify` give it, no class
+of the package in the mapping, whatever name R8 gave it).
+
+**Walking it.** Install the debug app and open **Fermix demo** from the launcher, an entry beside **Fermix**
+with the same icon. It starts the demo for the app's process, copies a pairing link to the clipboard, labelled
+with the demo Fermix it pairs ("Fermix demo: suj-mbp · fermix"), and brings the app forward where it was left:
+on a phone already paired that may be a chat, so go back to the Chats list first. The system's own clipboard
+preview at the bottom of the screen confirms the copy, as Android 13 and on show for every copy; the entry
+shows no toast, which that preview covered on Android 15. Choose **Get started** (on Welcome) or **Add
+Fermix** (on the Chats list), **Paste a pairing link**, and the sheet's paste button: the link is a
+well-formed version-2 pairing link whose one tailnet address and pin only the demo answers, good for 120 s and
+once, as a daemon's. Connecting shows Reaching for half a second to a second (the dial pauses 0.9 s, part of
+it while the sheet closes), Checking for about a second and Securing for under a second to a second and a
+half; Verify shows its code for 6 to 7 s before the demo's computer approves (the demo approves 7.5 s after
+the phone's `pair_request`, which goes about a second before Verify shows, as the Connecting screen paces
+"Securing the line…"); then Paired, and the Chats list (measured on `Medium_Phone_API_36.1`; a slower emulator
+shows the code a little later and so for a little less). Onboarding's Notifications step never shows, as the
+demo offers no push (a real daemon offers FCM in `pair_approved`), and the Instance screen says notifications
+aren't set up. Each tap of **Fermix demo** copies the link of the next demo Fermix this run has not paired, in
+this order (right after the app restarts, before its sessions have reconnected, that is the first one again),
+and the Chats list has a row for each one paired:
+
+| Fermix | Home | What it holds |
+|---|---|---|
+| suj-mbp | fermix | the day a nightly export failed (drawn from feature-chat's previews' story): two photos, a code card, a table, a log as a document, a job's report, a quote and a link with its preview; an approval waiting; 2 unread |
+| suj-mbp | fermix-dev | a test run still going for two minutes from its pairing: the row that shows "thinking…"; its title is the first one's, so pairing it reaches **Name** |
+| studio | fermix | a reminder delivered as a job's row; 1 unread |
+| nas | fermix | 80 days of the photo backups' reports, more than a chat's first page, so scrolling up loads an older page; 3 unread |
+| build-box | fermix | quiet for four days |
+| pi-garden | fermix | an agent its owner named Basil, twelve days ago |
+
+The unread counts are the demo's read frontier (`read_up_to_seq`), which a chat shows as its "Unread
+messages" divider; the Chats list's badge counts the rows the phone notified, and a Fermix without push
+is never notified, so the demo's rows show no badge there. The waiting approval comes right after
+`hello_ack`, as a daemon replays one, which on a first pairing is before the chat holds its first page:
+the chat may then draw the card out of its place, above the request that raised it or at the end,
+depending on timing (feature-chat's placement of what lands before the first page, not the demo's; a real
+daemon replays its waiting cards at the same moment).
+
+**What it answers.** `hello_ack`, sent a pong's 38 ms after `hello` (the latency the subtitle and the Instance
+screen's Path line show, as every later ping's round trip is), turns on the commands, media, thoughts,
+`turn_done`, models, search and approval replay, and `streaming` as the chat's model has it; push, transcripts
+and replies are off. A message is answered by a turn: the thinking card, its headings, now and then a tool's
+chip (one reply in two), an emoji on the owner's message (one in three), then the words streamed over about
+2 s, a delta every 120 ms, sealed as a row with its route; a link it names gets its preview. On a model the list
+marks `streams: false` (Claude Opus 5.5, Claude Haiku 4.5) a reply sends no `turn_started`, heading, tool or
+delta, only its ending, the card shown from `accepted`, and a model picked while a turn runs applies from the
+next one. A message with "restart", "delete", "remove", "install" or "deploy" in it raises a sandbox approval
+(60 s, as the engine gives one) and its turn ends saying so; the owner's answer is a `/confirm` or `/deny`
+command, answered inline in the engine's words ("Sandbox updated. Access granted — resuming your request." or
+"Sandbox change denied — the pending grant was discarded."), and a grant runs the request again as a turn of
+its own (`grant-resume-N`), which streams the answer. suj-mbp's waiting card works the same way. A photo or a
+file is uploaded as to a daemon (4 at once, 8 MiB each, which `hello_ack`'s `max_media_bytes` says, so the app
+refuses a larger file itself, and 32 MiB in all, past which an upload is refused `store_quota_exceeded`: the
+demo keeps them in the app's own heap) and acknowledged; a message naming an attachment the demo does not hold
+is accepted, then fails (`attachment_unavailable`). `/stop` ends every turn ("cancelled"), `cancel` the one;
+`/model` lists the models, picks one or goes back to the default (`model_changed` on every phone); `/help`,
+`/tasks`, `/new` and `/compact` answer inline. Read state, history pages forward (`after_seq`, each
+reconnect's) and back (`before_seq`), search, media downloads (one 60 KiB chunk copied at a time),
+`request_status`, `mutations_pull` and `models_pull` are answered from what the Fermix keeps. Search matches
+as the engine's index does: each word of the query, split on spaces, is a prefix at a word's start, case and
+accents folded, a word with a hyphen or a dot in it a phrase of its parts, and a row matches only with every
+one; each hit's excerpt is cut at words' edges around its first match and marked "…", and every match in it is
+ranged, a prefix's whole word as the engine's highlight ranges it; `unpair` forgets the phone, stops the
+requests it sent that still run (each ending `cancelled` on every phone) and closes `4003`. The demo reads the
+phone's frames with core-protocol's client decoder, as a daemon does, and closes `1002` on a frame that does
+not open, one the contract refuses, a seq out of order or a `v` other than the session's; `1008` with no
+message 1 or no `hello` in 10 s, `1002` after 150 s without a frame, `1000` at an hour's lifetime, and the
+phone reconnects with its cursors.
+
+**Where the demo is not the engine.** Named so that nothing the demo shows is taken for the engine's:
+suj-mbp's waiting card lives ten minutes from its pairing (`DemoTimes.approvalTtl`), where the engine gives a
+sandbox card 60 s, so the owner reaches it after pairing; every session gets one `call_offer`, an event no
+engine sends, as a newer daemon's would come, so the Instance screen's Diagnostics has a line for each
+connection, "+0:00:00  unknown_event  call_offer" the first (the visual canon's example of an unknown server
+event), on a session where nothing else goes wrong; a model switch writes no `kind: "system"` row, which
+design section 7 persists but gives no shape for; a dial pauses 0.9 s for Connecting's "Reaching" while its
+Fermix has a pairing window open, and a pairing's handshake 0.9 s for "Checking", where a daemon on the
+tailnet answers in tens of milliseconds (any other dial, a reconnect's or Test connection's, lands at once, so
+Test connection reports a few milliseconds and a phone back from the background reconnects with no
+"Connecting…"); an attachment's bound is 8 MiB where a daemon's default is 20 MiB; a search's excerpt is cut
+by characters around its first match where the engine's snippet takes sixteen words around its best; a
+`pair_request` of another version is closed `1002` with no typed refusal; and the replies are canned, so a
+question about the backups may be answered about the export.
+
+**Deterministic.** A seed, `DEMO_SEED` (51), decides every key, pin, secret and choice: each Fermix's
+keys are derived from it, and each Fermix has a `Random` of its own, so two runs given the same messages
+answer them alike, and the clock decides nothing but a new row's time, which floats with the demo's start,
+so no scripted word names a time of the clock, a part of the day or a weekday (`DemoAnswersTest` reads every
+word the demo writes for one; the export's log counts seconds from its start). Every duration is in one table,
+`DemoTimes`, which the tests play on a virtual clock. A restarted app meets the same daemons: the demo takes a
+phone's key that this run never paired, and its cursors, at their word, and numbers its rows on from them.
+What the script had under way is decided item by item from the phone's cursor, as the engine decides it when it
+restarts: it forgets a waiting card, so a phone that holds the script's rows sees no card raised anew; and it
+runs again a request it had accepted and not finished, never a finished one, so the long turn runs again
+unless the phone holds a row past the script's, which the demo takes for its answer. So the app restarted
+inside the long turn's two minutes still gets one answer, and one restarted after it none; but an owner who
+wrote in fermix-dev before its answer came and then restarted the app inside those two minutes sees no answer,
+the one case the cursor cannot tell. The chat's model is the demo's memory alone, so a restarted demo starts
+at the config's model again.
+
+**Routing, and nothing leaks.** The debug app's application (`DemoApplication`, which `src/debug`'s
+manifest names in place of `FermixApplication`) hands every session, pairing and connection test the
+dialer `AppServices` is given for a daemon's port and pin (`dialerFor`). A demo pin is told by its digest
+alone (`demoPins`), and its dialer decides at each dial: the demo once the **Fermix demo** entry has
+started it in this process, and before that unreachable, with no socket opened; every other pin is its
+pinned WebSocket, as in the release. So the **Fermix** entry keeps the real network, a demo chat says it
+cannot reach its computer until **Fermix demo** is opened, and then reconnects at its next try, within
+the backoff's 30 s. The debug manifest names `MainActivity` before the demo's entry, so a start by package
+(App info's Open, Android Studio's default activity) is the app's, never the demo's. The demo opens no
+network socket, starts no service, asks for no permission, and lives in the process's scope, in memory:
+nothing durable is written beyond what a real pairing writes, the instance record, its database and its
+Keystore key, and "Unpair from suj-mbp…" on the Instance screen, the app's way to remove a Fermix,
+removes all three as for any Fermix (`DemoDeviceTest` checks it), and the demo forgets the phone, whose
+next pairing with it starts afresh. One thing does not start afresh, and it is the app's, not the demo's:
+pairing a Fermix again in the same process after unpairing it, its chat shows the removed pairing's rows
+until the app restarts, though the new database holds only the new ones. The app keeps a chat's model in the
+activity under the instance's id and profile (`chatModel` in `AppEntries.kt`), the id is the digest of the
+computer's key, which a pairing with the same computer gives again, and a removal does not clear that model;
+any daemon paired twice so does the same. Force-stop the app between an unpair and a re-pair to walk it as
+new. The release's R8 rules keep the name of any class of the demo's package that reached a release
+(`app/proguard-rules.pro`), so check 10 finds one by name in the dex wherever it came from, and with the
+release's mapping (CI, `verify`) it finds one under any name; `test_check_release_policy.py` runs R8 over a
+class of the package with those rules and without them.
+
+**Attestation on an emulator.** A real daemon holds a pairing's attestation chain to Google's roots,
+KeyMint's facts and a locked bootloader (design section 6.2), and an emulator's chain fails that: an
+emulator cannot pair with a real daemon. The demo checks what the phone checks of its own chain
+(attest's shape check): `platform` `android`, one to six certificates of at most 16 KiB in all whose
+lengths add up to the raw tail, and a leaf that carries the X25519 key that ran the handshake. That is
+the least that lets pairing complete on the emulators, whose Keystore generates the device key and its
+chain as a phone's does (`Pixel_Fold_API_35`, `Medium_Phone_API_36.1`).
+
+**Tests.** core-session's `DemoDaemonTest` drives core-session's own pairing and session against the demo
+on a virtual clock: the ceremony to a stored record, a link past its window refused, each Fermix's script
+replayed in order with an older page, a reply's card, tool and words, a reply on a model that does not
+stream, a reconnect that pulls by the forward page, at once, the rows written while the phone was away, a
+reconnect and a restarted demo keeping the cursors, a restart inside the long turn answering it once and one
+after it not again, a row's media and a preview's image downloaded to their digests, a grant and a denial
+answered as the engine answers them, a stop mid-stream, the diagnostics line, and one seed playing two runs
+alike. demo-daemon's `DemoFermixesTest` holds the links, the pins, the dialer and the blobs, and
+`DemoAnswersTest` the quotes and deltas, a search's matches and excerpts, the scripted words' times, and the
+closes of a socket that says nothing a daemon reads, before its handshake and after it (a seq out of order, a
+`v` other than the session's, a frame sealed under another key); the app's `DemoWiringTest` (`src/testDebug`)
+the routing through the app's services, a dialer made before the entry, the copied link's label, and the
+launcher entries; and `DemoDeviceTest` walks the diagonal on a device, from the entry through Verify to a reply.
+
 ## Build and check
 
 You need JDK 21 to run Gradle and an Android SDK. The app compiles against API 37 (Android 17),
@@ -1827,6 +1988,7 @@ scripts/verify_protocol_contract.sh               # the vendored contract agains
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
 scripts/check_release_policy.sh app/build/outputs/apk/release/app-release-unsigned.apk   # the release APK against the policy
+scripts/check_release_policy.sh app/build/outputs/apk/release/app-release-unsigned.apk app/build/outputs/mapping/release/mapping.txt   # ... and its R8 mapping, as CI does
 scripts/check_git_isolation.sh                    # the tests that start git, on a hostile git configuration and GIT_ variables
 ```
 
@@ -1849,7 +2011,12 @@ test material: no entry named as a file of `contracts/mobile/`, under a `fixture
 with a key store's, a key's or a fixture's extension, no entry holding the bytes of a vendored file
 under any name, and no entry holding a key of the vendored vectors (every private and public key, psk,
 salt, secret and key field of `noise_vectors.json` and `push_vectors.json`) as hex of either case or as
-base64. A backup rule counts only where a phone reads it, as AOSP's `FullBackup.java` does: as a child
+base64; and nothing of the debug app's demo (The demo, above): no class of `io.tezra.fermix.demo` in any
+dex, no name of it in the merged manifest, and no resource named `demo_…` as the debug source set names the
+demo's; given R8's mapping of the release as its second argument, as CI's `policy` job and `verify_candidate.sh`
+give it, the mapping must be the APK's own (its `pg_map_id` the one R8 marks the APK's dex with, or the script
+stops with status 2) and map no class of the demo's package, whatever name R8 gave the class: R8 renames a class
+no rule keeps, so the dex alone shows the demo only by a name a rule kept. A backup rule counts only where a phone reads it, as AOSP's `FullBackup.java` does: as a child
 of its section, read off `aapt2`'s tree by depth, so a section left empty beside rules outside it
 excludes nothing, and anything but a rule inside a section fails the check. It reads the APK with
 `aapt2`, `unzip` and `jq`, and prints every check that fails with what it expected and what it found,

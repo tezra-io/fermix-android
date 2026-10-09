@@ -1,4 +1,4 @@
-package io.tezra.fermix.session
+package io.tezra.fermix.demo
 
 import io.tezra.fermix.noise.StaticKey
 import java.nio.ByteBuffer
@@ -7,26 +7,32 @@ import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
+import java.security.PrivateKey
 import java.security.PublicKey
-import java.security.spec.NamedParameterSpec
+import java.security.spec.PKCS8EncodedKeySpec
 import java.security.spec.X509EncodedKeySpec
-import java.security.spec.XECPrivateKeySpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-// The daemon's half of Noise IK and IKpsk2 over the JDK's own primitives, so a test stands where the
-// daemon does. core-noise's responder lives in its own tests and uses its internal classes, so this one
-// is written again from the Noise spec; PairingVectorTest holds it to the vendored vectors byte for byte.
+// The daemon's half of Noise IK and IKpsk2 over the platform's own primitives, so the demo and core-session's
+// tests stand where the daemon does: SunEC on the JVM, Conscrypt on a phone. core-noise's responder lives in its
+// own tests and uses its internal classes, so this one is written again from the Noise spec; core-session's
+// PairingVectorTest holds it to the vendored vectors byte for byte. Conscrypt takes an X25519 private key only as
+// PKCS#8 or raw, never as an XECPrivateKeySpec, and makes a key pair only with no parameters, so neither is used.
 
 /** The SubjectPublicKeyInfo of an X25519 key, before its 32 raw bytes. */
 private const val SPKI_PREFIX = "302a300506032b656e032100"
 private const val SPKI_BYTES = SPKI_PREFIX.length / 2
+
+/** The PKCS#8 PrivateKeyInfo of an X25519 key, before its 32 raw bytes (RFC 8410). */
+private const val PKCS8_PREFIX = "302e020100300506032b656e04220420"
 private const val KEY_BYTES = 32
 private const val TAG_BYTES = 16
 private const val NONCE_BYTES = 12
+private const val XDH = "XDH"
 private const val IK_NAME = "Noise_IK_25519_ChaChaPoly_SHA256"
 private const val IKPSK2_NAME = "Noise_IKpsk2_25519_ChaChaPoly_SHA256"
 private const val PROLOGUE_TEXT = "fermix-mobile-v1"
@@ -34,27 +40,45 @@ private const val SAS_LABEL = "fermix-mobile-sas-v1"
 private const val SAS_MODULUS = 1_000_000L
 private const val SAS_DIGITS = 6
 
+/** The prelude's mode byte: IK, a paired phone's session, and IKpsk2, a pairing's (PROTOCOL.md). */
+const val PRELUDE_IK: Byte = 1
+const val PRELUDE_IKPSK2: Byte = 2
+
+/** `FXM1` and its mode byte: the clear prelude of message 1. */
+const val PRELUDE_BYTES = 5
+
+/** The HKDF outputs' and MixKeyAndHash's counters (Noise rev 34 section 4.3). */
+private const val FIRST_OUTPUT: Byte = 1
+private const val SECOND_OUTPUT: Byte = 2
+private const val THIRD_OUTPUT: Byte = 3
+
+/** X25519's base point, u = 9: its agreement with a private scalar is that scalar's public key (RFC 7748). */
+private val BASE_POINT = ByteArray(KEY_BYTES).also { it[0] = 9 }
+
 /** The empty associated data of every transport message. */
 private val NO_DATA = ByteArray(0)
 
-/** A software X25519 key: the phone's static in these tests, and the daemon's static and ephemerals. */
-internal class SoftwareKey private constructor(
-    private val pair: KeyPair,
+/** A software X25519 key: a daemon's static and its ephemerals, and the phone's static in core-session's tests. */
+class SoftwareKey private constructor(
+    private val private: PrivateKey,
+    publicKey: ByteArray,
 ) : StaticKey {
-    override val publicKey: ByteArray = pair.public.encoded.copyOfRange(SPKI_BYTES, SPKI_BYTES + KEY_BYTES)
+    private val raw = publicKey.copyOf()
+
+    override val publicKey: ByteArray get() = raw.copyOf()
 
     override fun agree(peerPublicKey: ByteArray): ByteArray {
-        val agreement = KeyAgreement.getInstance("XDH")
-        agreement.init(pair.private)
+        val agreement = KeyAgreement.getInstance(XDH)
+        agreement.init(private)
         agreement.doPhase(publicKeyOf(peerPublicKey), true)
         return agreement.generateSecret()
     }
 
     companion object {
+        /** A fresh key from the platform's generator, which makes X25519 by default. */
         fun generate(): SoftwareKey {
-            val generator = KeyPairGenerator.getInstance("XDH")
-            generator.initialize(NamedParameterSpec.X25519)
-            return SoftwareKey(generator.generateKeyPair())
+            val pair: KeyPair = KeyPairGenerator.getInstance(XDH).generateKeyPair()
+            return SoftwareKey(pair.private, pair.public.encoded.copyOfRange(SPKI_BYTES, SPKI_BYTES + KEY_BYTES))
         }
 
         /** A fixed key, a vector's: its raw 32-byte private scalar and the public key it yields. */
@@ -62,21 +86,36 @@ internal class SoftwareKey private constructor(
             privateKey: ByteArray,
             publicKey: ByteArray,
         ): SoftwareKey {
-            val factory = KeyFactory.getInstance("XDH")
-            val private = factory.generatePrivate(XECPrivateKeySpec(NamedParameterSpec.X25519, privateKey))
-            return SoftwareKey(KeyPair(publicKeyOf(publicKey), private))
+            require(privateKey.size == KEY_BYTES && publicKey.size == KEY_BYTES) { "an X25519 key is $KEY_BYTES bytes" }
+            return SoftwareKey(privateKeyOf(privateKey), publicKey)
+        }
+
+        /** The key of the 32-byte scalar [privateKey], its public key computed as X25519 with the base point. */
+        fun fromScalar(privateKey: ByteArray): SoftwareKey {
+            require(privateKey.size == KEY_BYTES) { "an X25519 private key is $KEY_BYTES bytes" }
+            val private = privateKeyOf(privateKey)
+            val agreement = KeyAgreement.getInstance(XDH)
+            agreement.init(private)
+            agreement.doPhase(publicKeyOf(BASE_POINT), true)
+            return SoftwareKey(private, agreement.generateSecret())
         }
     }
 }
 
+private fun privateKeyOf(raw: ByteArray): PrivateKey =
+    KeyFactory.getInstance(XDH).generatePrivate(PKCS8EncodedKeySpec(PKCS8_PREFIX.hexToByteArray() + raw))
+
 private fun publicKeyOf(raw: ByteArray): PublicKey =
-    KeyFactory.getInstance("XDH").generatePublic(X509EncodedKeySpec(SPKI_PREFIX.hexToByteArray() + raw))
+    KeyFactory.getInstance(XDH).generatePublic(X509EncodedKeySpec(SPKI_PREFIX.hexToByteArray() + raw))
 
 /** One direction of a transport: ChaChaPoly with Noise's counter nonce and no associated data. */
-internal class TransportCipher(
+class TransportCipher(
     private val key: ByteArray,
 ) {
     private var nonce = 0L
+
+    /** How many messages this direction has sealed or opened. */
+    val messages: Long get() = nonce
 
     fun encrypt(plaintext: ByteArray): ByteArray = chaChaPoly(Cipher.ENCRYPT_MODE, key, nonce++, NO_DATA, plaintext)
 
@@ -87,7 +126,7 @@ internal class TransportCipher(
  * What a responder made of message 1: message 2, its receive and send ciphers after Split, the handshake
  * hash the SAS is derived from, and the phone's static key, which message 1 carried.
  */
-internal class Responded(
+class Responded(
     val second: ByteArray,
     val receive: TransportCipher,
     val send: TransportCipher,
@@ -100,12 +139,12 @@ internal class Responded(
  * mixes each `e` into the key too and ends message 2 with `psk`: it reads the phone's message 1, prelude
  * included, writes message 2 on [ephemeral], and splits into its two ciphers.
  */
-internal class IkResponder(
+class IkResponder(
     private val static: SoftwareKey,
     private val psk: ByteArray? = null,
     private val ephemeral: SoftwareKey = SoftwareKey.generate(),
 ) {
-    private val prelude = "FXM1".encodeToByteArray() + byteArrayOf(if (psk == null) 1 else 2)
+    private val prelude = "FXM1".encodeToByteArray() + (if (psk == null) PRELUDE_IK else PRELUDE_IKPSK2)
     private var hash = initialHash(if (psk == null) IK_NAME else IKPSK2_NAME)
     private var chainingKey = hash.copyOf()
     private var key = ByteArray(0)
@@ -158,10 +197,10 @@ internal class IkResponder(
 
     private fun mixKeyAndHash(inputKeyMaterial: ByteArray) {
         val temporaryKey = hmac(chainingKey, inputKeyMaterial)
-        chainingKey = hmac(temporaryKey, byteArrayOf(1))
-        val temporaryHash = hmac(temporaryKey, chainingKey + byteArrayOf(2))
+        chainingKey = hmac(temporaryKey, byteArrayOf(FIRST_OUTPUT))
+        val temporaryHash = hmac(temporaryKey, chainingKey + SECOND_OUTPUT)
         mixHash(temporaryHash)
-        key = hmac(temporaryKey, temporaryHash + byteArrayOf(3))
+        key = hmac(temporaryKey, temporaryHash + THIRD_OUTPUT)
         nonce = 0
     }
 
@@ -182,7 +221,7 @@ private fun initialHash(protocolName: String): ByteArray {
  * The SAS as PROTOCOL.md derives it: HMAC-SHA256 of the handshake hash over `fermix-mobile-sas-v1`, its
  * first four bytes as a big-endian unsigned integer, modulo a million, zero-padded to six digits.
  */
-internal fun sasOf(handshakeHash: ByteArray): String {
+fun sasOf(handshakeHash: ByteArray): String {
     val digest = hmac(handshakeHash, SAS_LABEL.encodeToByteArray())
     val value =
         ByteBuffer
@@ -193,7 +232,8 @@ internal fun sasOf(handshakeHash: ByteArray): String {
     return (value % SAS_MODULUS).toString().padStart(SAS_DIGITS, '0')
 }
 
-private fun sha256(data: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(data)
+/** SHA-256 of [data]. */
+fun sha256(data: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(data)
 
 /** Noise's HKDF over HMAC-SHA256: its first two outputs. */
 private fun hkdf(
@@ -201,8 +241,8 @@ private fun hkdf(
     inputKeyMaterial: ByteArray,
 ): Pair<ByteArray, ByteArray> {
     val temporaryKey = hmac(chainingKey, inputKeyMaterial)
-    val first = hmac(temporaryKey, byteArrayOf(1))
-    return first to hmac(temporaryKey, first + byteArrayOf(2))
+    val first = hmac(temporaryKey, byteArrayOf(FIRST_OUTPUT))
+    return first to hmac(temporaryKey, first + SECOND_OUTPUT)
 }
 
 private fun hmac(

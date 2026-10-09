@@ -2,6 +2,7 @@ package io.tezra.fermix.session
 
 import io.tezra.fermix.attest.AttestationChallenge
 import io.tezra.fermix.attest.DEVICE_KEY_ALIAS_PREFIX
+import io.tezra.fermix.demo.sasOf
 import io.tezra.fermix.protocol.AttestationKind
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.Platform

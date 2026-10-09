@@ -18,7 +18,9 @@ app/                  the application module, io.tezra.fermix: AppServices, the 
                       share entry (ShareTarget) and a share's route (Shares.kt), the launcher icon and
                       the system splash (the Fermix mark), and the activity;
                       its share tests on a device in src/androidTest; google-services.json is the
-                      placeholder project's
+                      placeholder project's; src/debug wires the demo into the debug app alone
+                      (DemoApplication, the "Fermix demo" launcher entry DemoEntry), src/testDebug
+                      tests that wiring
 build-logic/          convention plugins: fermix.android.application (the app, with its JVM,
                       Robolectric and instrumented tests), fermix.android.library,
                       fermix.android.library.compose (Compose and the Roborazzi screenshot tests),
@@ -41,6 +43,9 @@ core-session/         the pairing ceremony and one paired session, io.tezra.ferm
                       library, no android.*, JVM-tested against a fake daemon): Pairing over attest's
                       DeviceKeyFacade, hello, the outbox, cursors and acks, reconnect reconciliation,
                       keepalive and close codes, the turn machines
+demo-daemon/          the debug app's demo Fermix, io.tezra.fermix.demo (Android library, debug only):
+                      six scripted daemons behind core-session's Dialer, in memory, seeded; and the
+                      in-memory socket, Noise responder and frames core-session's tests' fake daemon uses
 design/               design section 13.1 as code, with the M51 update's monochrome colour (section 1)
                       over it, io.tezra.fermix.design (Compose library): tokens,
                       FermixTheme, the bundled OFL fonts with SOURCE.json, the Fermix mark (FermixMark,
@@ -153,6 +158,18 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
 - The build logic's tests are in `build-logic/src/test`. `./gradlew build` runs them through
   `check`; the root `test` does not reach the included build, so CI's unit job names
   `:build-logic:test`.
+- The demo (`demo-daemon`, README's "The demo") is the debug app's alone. The app takes it as
+  `debugImplementation` and wires it in `app/src/debug` only; core-session takes it as `testImplementation`.
+  Never let the release see it: no `implementation` of it, no reference to `io.tezra.fermix.demo` from a main
+  source set, and `scripts/check_release_policy.sh`'s check 10 refuses a release APK that holds a class, a
+  component or a `demo_` resource of it; the release's R8 rules (`app/proguard-rules.pro`) keep the name of any
+  class of the package that reaches a release, so the check sees one in the dex wherever it came from, and given
+  the release's R8 mapping, as CI's `policy` job and `verify_candidate.sh` give it, it refuses a class of the
+  package under any name R8 gave it, as R8 renames what no rule keeps; the debug source set names each demo
+  resource `demo_`. A change to `core-protocol`'s events or to core-session's surface (`Dialer`, `Link`,
+  `Pairing`, `Session`, the states and events) updates the demo and its tests in the same change: core-session's
+  `DemoDaemonTest` runs the demo against core-session's own pairing and session, and the app's `DemoWiringTest`
+  and `DemoDeviceTest` the debug app's wiring.
 - JVM tests never touch a real daemon, the network or the phone's Keystore. The deterministic
   vectors carry fixed private keys, and the JVM gate replays them and the vendored fixtures. The
   hardware half runs on a real phone with a freshly generated Keystore key, never an imported
@@ -168,7 +185,7 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   `-C`, so a test run under it committed into and tagged the repository it named (Task 16b;
   `scripts/check_git_isolation.sh` runs the tests on such a machine and under such a caller).
 - Instrumented tests (`src/androidTest`, CI's `ui` job) need no daemon and no camera, and never get
-  one. The seams are the fake pairing control (`FakeStarter` in `feature-onboarding/src/sharedTest`, the
+  one; the app's `DemoDeviceTest` pairs with the debug app's demo, in the app's own process. The seams are the fake pairing control (`FakeStarter` in `feature-onboarding/src/sharedTest`, the
   JVM tests' too) behind `PairingStarter`, and the stub preview behind `ScanCamera`, whose `allowed`
   stands in for the camera permission, since a connected test's APK is installed with every permission
   granted; the camera's prompt is answered by `PromptRegistry`, an `ActivityResultRegistry` in

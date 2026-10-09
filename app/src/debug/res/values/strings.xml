@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The debug app's demo (README, "The demo"): its launcher entry and its copied link's label. Debug only. -->
+<resources>
+    <string name="demo_launcher_label" translatable="false">Fermix demo</string>
+    <!-- The copied link's label: the demo Fermix it pairs, as Add Fermix will name it, its computer and its home. -->
+    <string name="demo_clip_label" translatable="false">Fermix demo: %1$s · %2$s</string>
+</resources>

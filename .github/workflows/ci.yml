@@ -423,8 +423,11 @@ jobs:
 
   # Section 3's policy: the release APK's manifest says what the design says, minSdk 35, targetSdk 36,
   # not debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer,
-  # exactly the permissions policy/permissions.txt lists, and no camera required; and no test key,
-  # vector or fixture is inside it, by name or by content (scripts/check_release_policy.sh). The release
+  # exactly the permissions policy/permissions.txt lists, no camera required, and exactly the exported
+  # components policy/exported.txt lists; no test key, vector or fixture is inside it, by name or by
+  # content; and nothing of the debug app's demo, no class of io.tezra.fermix.demo in any dex or in R8's
+  # mapping of the release, whatever name R8 gave it, no name of it in the merged manifest and no demo_
+  # resource (scripts/check_release_policy.sh). The release
   # is signed with a key made for this run, as the build job's debug key is (C5), so the APK checked is
   # signed as a release is.
   policy:
@@ -466,7 +469,7 @@ jobs:
 
       - name: The release APK against the policy
         timeout-minutes: 2
-        run: scripts/check_release_policy.sh app/build/outputs/apk/release/app-release.apk
+        run: scripts/check_release_policy.sh app/build/outputs/apk/release/app-release.apk app/build/outputs/mapping/release/mapping.txt
 
   # The release pipeline's own gate (section 4, C12): the tests of the scripts candidate.yml and promote.yml call,
   # each of which plants the failure a refusal exists for (a tag off main, a versionCode not raised, a key that

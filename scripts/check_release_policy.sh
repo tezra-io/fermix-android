@@ -26,13 +26,24 @@
 #      permission it is behind and each of its filters whole, its actions, categories and data and the
 #      filter's own attributes (AGENTS.md): a library that exports one fails it as surely as the app's
 #      own manifest, and so does a category, a scheme or a type added to an exported filter
+#  10. nothing of the debug app's demo (README, "The demo"): no dex entry holds a class of its package,
+#      io.tezra.fermix.demo, by the type descriptor a dex carries for every class it defines or names, no
+#      attribute of the merged manifest names one, the application's name included, and no resource is
+#      named as the debug source set names the demo's, demo_ and its name (the launcher entry's label and
+#      the copied link's label among them); an APK with no dex to search is refused too. R8 renames a class
+#      that no rule keeps, so the dex shows a class of the demo only by a name a rule kept: demo-daemon's
+#      consumer rules keep its own, and the app's (app/proguard-rules.pro) any class of the package that
+#      reaches a release from elsewhere. Given R8's mapping of the release, as the policy job and verify
+#      give it, the check holds whatever name R8 gave a class: the mapping must be the APK's own, its
+#      pg_map_id the one R8 marked the APK's dex with, and must map no class of the package, kept, renamed
+#      or removed
 #
 # It reads the APK with aapt2, unzip and jq, and prints every check that fails, with what it expected
 # and what it found, then exits 1 with the number of checks that failed. Each check prints what it finds
 # wrong on stdout, which main collects. A tool that is missing or fails, grep included, and a reference
 # that is missing or empty end the script at once with status 2.
 #
-#   check_release_policy.sh <release.apk>
+#   check_release_policy.sh <release.apk> [<R8 mapping.txt of it>]
 #
 # aapt2 is build tools BUILD_TOOLS_VERSION's: the Android Gradle plugin's default build-tools revision,
 # which the build installs, noted beside agp in gradle/libs.versions.toml. The plugin itself links
@@ -53,11 +64,22 @@ DOMAINS="root file database sharedpref external device_root device_file device_d
 TEST_EXTENSIONS="jks keystore p12 pk8 pem jsonl"
 # The vendored vectors, whose keys no entry of a release holds.
 VECTOR_FILES="noise_vectors.json push_vectors.json"
+# The package of the debug app's demo, which no release holds a class or a component of (check 10): its
+# classes' type descriptors in a dex, and its names as quoted values in aapt2's manifest tree, as extended
+# regular expressions.
+DEMO_PACKAGE="io.tezra.fermix.demo"
+DEMO_CLASS='Lio/tezra/fermix/demo/[A-Za-z0-9_$/-]*;'
+DEMO_NAME='"io\.tezra\.fermix\.demo(\.[^"]*)?"'
+# The demo's resources as aapt2's resource dump names them, type/name: the debug source set names each demo_.
+DEMO_RESOURCE='[a-z]+/demo_[A-Za-z0-9_.]*'
+# A class of the demo as R8's mapping maps it: its class line, "<original name> -> <name in the dex>:", the
+# original under the demo's package.
+DEMO_MAPPED='^io\.tezra\.fermix\.demo\.[^ ]+ -> [^ ]+:$'
 # The scratch directory main makes, which the EXIT trap removes.
 work=""
 
 usage() {
-  echo "usage: check_release_policy.sh <release.apk>" >&2
+  echo "usage: check_release_policy.sh <release.apk> [<R8 mapping.txt of it>]" >&2
   exit 2
 }
 
@@ -417,10 +439,65 @@ check_features() {
   fi
 }
 
+# 10. Nothing of the demo: its classes by their descriptors in every dex, "L<package with slashes>/<name>;",
+# its names in the manifest tree, each a quoted attribute value of the package or under it, and its resources
+# by their names in the resource dump; and, given R8's [mapping], its classes there (check_demo_mapping).
+check_demo() {
+  local apk=$1 manifest=$2 resources=$3 work=$4 mapping=$5 classes named held status=0
+  unzip -q "$apk" 'classes*.dex' -d "$work/dex" || status=$?
+  [ "$status" -eq 0 ] || [ "$status" -eq 11 ] || fatal "unzip could not unpack the dex entries of $apk"
+  if [ "$status" -eq 11 ]; then
+    violation "demo: expected the app's code in classes*.dex to search for $DEMO_PACKAGE, found no dex"
+    return 0
+  fi
+  status=0
+  classes="$(LC_ALL=C grep -a -r -h -o -E "$DEMO_CLASS" "$work/dex" | LC_ALL=C sort -u)" || status=$?
+  [ "$status" -le 1 ] || fatal "grep for the demo's classes failed with status $status"
+  status=0
+  named="$(LC_ALL=C grep -o -E "$DEMO_NAME" <<<"$manifest" | tr -d '"' | LC_ALL=C sort -u)" || status=$?
+  [ "$status" -le 1 ] || fatal "grep for the demo's components failed with status $status"
+  status=0
+  held="$(LC_ALL=C grep -o -E "$DEMO_RESOURCE" <<<"$resources" | LC_ALL=C sort -u)" || status=$?
+  [ "$status" -le 1 ] || fatal "grep for the demo's resources failed with status $status"
+  if [ -n "$classes" ]; then
+    violation "demo: expected no class of $DEMO_PACKAGE in any dex, found:"
+    echo "$classes"
+  fi
+  if [ -n "$named" ]; then
+    violation "demo: expected no name of $DEMO_PACKAGE in the merged manifest, found:"
+    echo "$named"
+  fi
+  if [ -n "$held" ]; then
+    violation "demo: expected no resource named as the demo's, demo_, found:"
+    echo "$held"
+  fi
+  [ -z "$mapping" ] || check_demo_mapping "$work/dex" "$mapping"
+}
+
+# 10, given R8's [mapping]: the mapping is the one R8 wrote as it made the dex in [dex], whose marker names the
+# mapping's pg_map_id, and it maps no class of the demo, whatever name R8 gave the class or whether it removed it.
+# A mapping that is not R8's or not this APK's ends the script: it would vouch for another build.
+check_demo_mapping() {
+  local dex=$1 mapping=$2 id marked mapped status=0
+  id="$(sed -n -e 's/^# pg_map_id: \([0-9a-f][0-9a-f]*\)$/\1/p' -e '/^[^#]/q' "$mapping")"
+  [ -n "$id" ] || fatal "$mapping names no pg_map_id: it is not R8's mapping"
+  marked="$(LC_ALL=C grep -a -r -h -o -E '"pg-map-id":"[0-9a-f]+"' "$dex" | LC_ALL=C sort -u)" || status=$?
+  [ "$status" -le 1 ] || fatal "grep for R8's marker in the dex failed with status $status"
+  [ "$marked" = "\"pg-map-id\":\"$id\"" ] ||
+    fatal "$mapping is not the mapping of the APK's dex: its pg_map_id is $id, the dex's R8 marker names ${marked:-none}"
+  status=0
+  mapped="$(LC_ALL=C grep -E "$DEMO_MAPPED" "$mapping" | LC_ALL=C sort -u)" || status=$?
+  [ "$status" -le 1 ] || fatal "grep for the demo's classes in $mapping failed with status $status"
+  if [ -n "$mapped" ]; then
+    violation "demo: expected R8's mapping to map no class of $DEMO_PACKAGE, found:"
+    echo "$mapped"
+  fi
+}
+
 # Every check, each printing what it finds wrong. The resource dump is read whole into a variable: a
 # reader that stopped early would end aapt2 with SIGPIPE, which pipefail turns into a silent exit.
 run_checks() {
-  local apk=$1 work=$2 badging manifest resources
+  local apk=$1 work=$2 mapping=$3 badging manifest resources
   badging="$(aapt2_dump badging "$apk")"
   manifest="$(aapt2_dump xmltree --file AndroidManifest.xml "$apk")"
   resources="$(aapt2_dump resources "$apk")"
@@ -430,6 +507,7 @@ run_checks() {
   check_exported "$manifest"
   check_backup "$apk" "$manifest" "$resources"
   check_contents "$apk" "$work"
+  check_demo "$apk" "$manifest" "$resources" "$work" "$mapping"
 }
 
 # Every tool the checks run is there, aapt2 included, before any check starts.
@@ -442,9 +520,10 @@ require_tools() {
 }
 
 main() {
-  [ $# -eq 1 ] || usage
-  local apk=$1 report failed
+  [ $# -eq 1 ] || [ $# -eq 2 ] || usage
+  local apk=$1 mapping=${2:-} report failed
   [ -f "$apk" ] || fatal "no APK at $apk"
+  [ $# -eq 1 ] || [ -s "$mapping" ] || fatal "no R8 mapping at $mapping"
   [ -f "$PERMISSIONS_FILE" ] || fatal "no permissions file at $PERMISSIONS_FILE"
   [ -f "$EXPORTED_FILE" ] || fatal "no exported components file at $EXPORTED_FILE"
   [ -n "${AAPT2:-}" ] || [ -n "${ANDROID_HOME:-}" ] || fatal "ANDROID_HOME names no SDK, and AAPT2 no aapt2"
@@ -453,7 +532,7 @@ main() {
   require_tools
   work="$(mktemp -d)" || fatal "could not make a scratch directory"
   trap 'rm -rf -- "${work:?}"' EXIT
-  report="$(run_checks "$apk" "$work")"
+  report="$(run_checks "$apk" "$work" "$mapping")"
   if [ -n "$report" ]; then
     failed="$(awk '/^check_release_policy: / { n++ } END { print n + 0 }' <<<"$report")"
     echo "$report" >&2
@@ -461,6 +540,7 @@ main() {
     exit 1
   fi
   echo "check_release_policy: $apk is as the design says"
+  [ -z "$mapping" ] || echo "check_release_policy: $mapping is R8's mapping of it and maps no class of $DEMO_PACKAGE"
   echo "check_release_policy: test material searched for: $(searched)"
 }
 

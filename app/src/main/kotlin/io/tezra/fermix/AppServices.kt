@@ -37,11 +37,11 @@ import io.tezra.fermix.onboarding.deviceNameRefusal
 import io.tezra.fermix.onboarding.handleStarter
 import io.tezra.fermix.push.PushLog
 import io.tezra.fermix.push.TrialDecrypt
+import io.tezra.fermix.session.Dialer
 import io.tezra.fermix.session.PhoneIdentity
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.deviceModel
 import io.tezra.fermix.transport.NetworkWatcher
-import io.tezra.fermix.transport.WebSocketConnector
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,26 +76,38 @@ private const val SETTINGS_FILE = "settings.json"
 private const val INSTANCES_DIRECTORY = "instances"
 
 /**
+ * What the app's services run on: blocking work, the files and the Keystore, on [io]; a ceremony and the sessions
+ * on [work].
+ */
+data class ServiceDispatchers(
+    val io: CoroutineDispatcher = Dispatchers.IO,
+    val work: CoroutineDispatcher = Dispatchers.Default,
+)
+
+/**
  * What the app runs on for as long as its process lives, made once by [FermixApplication]: the instance
  * records and their databases, the app's settings, the network facts, the device keys, the sessions'
  * [supervisor], the app lock's [lockGate], the conversations, and the two facts the pairing-wait
  * notification follows, [pairingWait] (onboarding's) and [inBackground] (the activity's), and the
  * notifications: their one owner, a push's inbox ([push]) and the push registrations ([registrations]).
- * Blocking work, the files and the Keystore, runs on [io]; a ceremony and the sessions run on [work].
- * Unpairing asks a daemon to forget the phone through [sendUnpair], `unpair` over the session's live
- * connection, which a test replaces to see who asks; whether a session has an upload in flight is
- * [uploadingOf]'s to say, Session.uploading, which a test replaces to have one; and the device keys are
- * the Keystore's ([keys]), which a test replaces with software keys.
+ * They run on [dispatchers] (ServiceDispatchers). Unpairing asks a daemon to forget the phone through
+ * [sendUnpair], `unpair` over the session's live connection, which a test replaces to see who asks; whether a
+ * session has an upload in flight is [uploadingOf]'s to say, Session.uploading, which a test replaces to have
+ * one; the device keys are the Keystore's ([keys]), which a test replaces with software keys; and every
+ * session, pairing and connection test dials what [dialerFor] makes for a daemon's port and pin, its pinned
+ * WebSocket, which the debug app's demo answers for its own pins (README, "The demo").
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppServices(
     private val context: Context,
-    private val io: CoroutineDispatcher = Dispatchers.IO,
-    private val work: CoroutineDispatcher = Dispatchers.Default,
+    dispatchers: ServiceDispatchers = ServiceDispatchers(),
     sendUnpair: suspend (Session) -> Boolean = { askToForget(it, ::logFault) },
     private val uploadingOf: (Session) -> Flow<Boolean> = { it.uploading },
     private val keys: DeviceKeyFacade = DeviceKeys(),
+    dialerFor: (port: Int, pin: ByteArray) -> Dialer = webSocketDialers(),
 ) {
+    private val io = dispatchers.io
+    private val work = dispatchers.work
     private val scope = CoroutineScope(SupervisorJob() + io)
 
     /** The few threads every chat's landings ask another app's providers on (PhoneMedia's LANDING_THREADS). */
@@ -131,7 +143,7 @@ class AppServices(
         AppSessions(
             databases,
             keys,
-            WebSocketConnector(),
+            dialerFor,
             network.facts,
             announcer = { instanceId, database ->
                 RowAnnouncer(

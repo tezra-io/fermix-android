@@ -1,5 +1,7 @@
 package io.tezra.fermix.session
 
+import io.tezra.fermix.demo.ClientFrame
+import io.tezra.fermix.demo.clientFrame
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.Frame
 import io.tezra.fermix.protocol.ServerEvent
