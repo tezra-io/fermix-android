@@ -16,6 +16,17 @@ extensions.configure<LibraryExtension> {
         .add("mark")
 }
 
+// WordmarkGeometryTest reads the vendored wordmark itself, an input of the unit tests by its own path, so a
+// changed byte or a re-vendor reruns them. It is no second test resource directory: AGP copies every one to
+// the classpath's root and keeps the last of two files of one name without a word, so its SOURCE.json would
+// stand for mark's, which would no longer be an input (MarkGeometryTest fails on that).
+tasks.withType<Test>().configureEach {
+    inputs
+        .dir("wordmark")
+        .withPropertyName("vendoredWordmark")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 dependencies {
     // The theme hands Material 3's ColorScheme, Typography and Shapes to every screen, and
     // @FermixPreviews is a set of @Preview annotations, so callers compile against both.

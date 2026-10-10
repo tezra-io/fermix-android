@@ -10,8 +10,9 @@ import androidx.compose.ui.graphics.Color
  * The colours of one mode, monochrome (the M51 update's section 1.2, which wins over design section 13.1): white
  * in light mode and near-black in dark, one ink for text, the primary action, the owner's bubble and links, status
  * colours for the connection dot, approval receipts and the security event, and Fermix blue as [signal] alone,
- * which the owner kept on 2026-10-05 to mark what is unread. Where the update fixes no value (the tertiary ink, the
- * tonal surface, the scrim, the code card), the value is the visual canon's ("Colour — derived for this page").
+ * which the owner kept on 2026-10-05 to mark what is unread, and which the Fermix wordmark's two eye-dots are (the
+ * owner, 2026-10-10). Where the update fixes no value (the tertiary ink, the tonal surface, the scrim, the code card),
+ * the value is the visual canon's ("Colour — derived for this page").
  * Dynamic Color is rejected in-app (section 13.1), so nothing here comes from the wallpaper.
  */
 @Immutable
@@ -41,7 +42,10 @@ data class FermixColors(
     val err: Color,
     /** The error colour as text and icons: [err] in light mode, lifted in dark mode to read on the canvas. */
     val errText: Color,
-    /** Fermix blue, which marks what is unread and nothing else: a row's count, the timeline's divider, the pill's. */
+    /**
+     * Fermix blue, which marks what is unread and nothing else (a row's count, the timeline's divider, the pill's), and
+     * is the Fermix wordmark's two eye-dots, its file's own #2b5cff (the owner, 2026-10-10): a mark's size, never text.
+     */
     val signal: Color,
     /** The count on the signal. */
     val onSignal: Color,

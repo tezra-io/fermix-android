@@ -58,6 +58,14 @@ class ContrastTest {
         }
     }
 
+    // The Fermix wordmark's two eye-dots are the signal (the owner, 2026-10-10), drawn at a mark's size on the canvas,
+    // Welcome's and the Chats list's bar's, never as text: dark mode's would be under text's 4.5 : 1 (README).
+    @Test
+    fun `the wordmark's dots measure 5,2 to 1 on the light canvas and 3,8 to 1 on the dark, a mark's 3 to 1 or more`() {
+        assertMeasured(5.2, FermixColors.Light.signal, FermixColors.Light.canvas)
+        assertMeasured(3.8, FermixColors.Dark.signal, FermixColors.Dark.canvas)
+    }
+
     @Test
     fun `the ink and the secondary text read on every surface they are drawn on`() {
         for (colors in listOf(FermixColors.Light, FermixColors.Dark)) {

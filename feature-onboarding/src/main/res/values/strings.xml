@@ -4,8 +4,7 @@
   always a format argument. FailureCase.kt is the one table that pairs each failure with its strings.
 -->
 <resources>
-    <!-- Step 1, Welcome. -->
-    <string name="onboarding_welcome_title" translatable="false">Fermix</string>
+    <!-- Step 1, Welcome. Its title is the Fermix wordmark, which TalkBack reads as design's design_wordmark. -->
     <string name="onboarding_welcome_tagline">Your agent. Your machine.</string>
     <string name="onboarding_welcome_get_started">Get started</string>
     <string name="onboarding_welcome_no_fermix">Don\'t have Fermix yet?</string>

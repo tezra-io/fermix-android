@@ -4,8 +4,8 @@
   copy deck, 13.9) verbatim unless a comment names another source; the host is always a format argument.
 -->
 <resources>
-    <!-- The top bar, its "+" and its overflow's one entry (section 13.4). -->
-    <string name="chats_title" translatable="false">Fermix</string>
+    <!-- The top bar's "+" and its overflow's one entry (section 13.4); its title is the Fermix wordmark, which
+         TalkBack reads as design's design_wordmark. -->
     <string name="chats_add">Add Fermix</string>
     <string name="chats_app_lock">App lock</string>
     <!-- Labels the design does not give (section 13.8): the overflow and back buttons. -->

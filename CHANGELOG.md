@@ -223,11 +223,11 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **A monochrome look.** The app is drawn in one ink, near-black on white in light mode and a soft off-white on
   near-black in dark mode: primary buttons, your own messages, links (always underlined), switches, chosen
   chips, progress and the running tool's arc are the ink, and Material's components are given the same colours,
-  so none falls back to a colour of its own. Fermix blue is kept for one thing, what is unread: the count on a
-  Chats row, the line above the first unread message and the count on the scroll-to-latest button. Error text
-  in dark mode is a lighter red that reads on the dark background. A link to a web page is underlined, such as
-  "Don't have Fermix yet?" and "Troubleshooting", and so is an action in the app that only the blue told apart
-  from the words around it, such as "Test connection", "Run again" or "Try again".
+  so none falls back to a colour of its own. Fermix blue is kept for what is unread, the count on a Chats row, the
+  line above the first unread message and the count on the scroll-to-latest button, and for the Fermix wordmark's
+  two eye-dots. Error text in dark mode is a lighter red that reads on the dark background. A link to a web page
+  is underlined, such as "Don't have Fermix yet?" and "Troubleshooting", and so is an action in the app that only
+  the blue told apart from the words around it, such as "Test connection", "Run again" or "Try again".
 - **A focus ring.** When you move around the app with a keyboard or a d-pad, the button, chip, row, field or
   message that has the focus shows a thin ring around it (just inside the edges of a row that spans the screen),
   in the colour of the words around it, so you can always see where you are, and a link in a message turns
@@ -266,3 +266,7 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   it says so. Each run stops its emulator itself, within a minute, so an emulator that does not exit no longer
   keeps a job whose tests all passed running until it is cancelled, and a job has 50 minutes rather than 25, room
   for a runner twice as slow and for the second run after an emulator that did not boot.
+- **The Fermix wordmark.** Welcome's title and the Chats list's bar show the Fermix wordmark that the Mac and Linux
+  apps show, in place of the name set in type: its letters in the app's ink and its two eye-dots in Fermix blue, in
+  light and dark mode alike. It is the apps' own drawing, vendored with its provenance, never redrawn. On Welcome it
+  rises in where the name did; TalkBack reads it as "Fermix", as before.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The design module's words: what TalkBack reads for the Fermix wordmark, which stands where Welcome and the Chats
+  list's bar set the name "Fermix" in words (the owner, 2026-10-10).
+-->
+<resources>
+    <string name="design_wordmark" translatable="false">Fermix</string>
+</resources>

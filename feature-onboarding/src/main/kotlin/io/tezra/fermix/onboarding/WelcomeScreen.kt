@@ -26,6 +26,7 @@ import io.tezra.fermix.design.FermixMark
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
+import io.tezra.fermix.design.FermixWordmark
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.design.LocalFermixColors
@@ -38,10 +39,13 @@ import io.tezra.fermix.design.textButtonColors
 import kotlin.random.Random
 
 // The update's reference player's Welcome: the mark 112 dp across and 120 dp under the status bar, which the page's
-// own 16 dp makes 104 here, the title 20 dp under it, the tagline 8 dp under the title.
+// own 16 dp makes 104 here, the title 20 dp under it, the tagline 8 dp under the title. The title is the Fermix
+// wordmark (the owner, 2026-10-10), 40 dp tall with the file's own margin, its letters 34.5 dp: macOS's welcome draws
+// the wordmark's letters 40 pt tall.
 private val MARK = 112.dp
 private val MARK_TOP = 104.dp
 private val TITLE_TOP = 20.dp
+private val TITLE = 40.dp
 private val TAGLINE_TOP = 8.dp
 
 // The player's 120 dp is a portrait phone's. On a window under 480 dp tall, window-core's compact height (a phone on
@@ -57,13 +61,14 @@ internal data class WelcomeActions(
 )
 
 /**
- * Step 1 (design section 13.3, as the M51 update's section 3 changes it): the Fermix mark dropping in, the name, the
- * tagline, "Get started", and "Don't have Fermix yet?", which opens the install page. The drop runs on one clock: the
- * dot lands at 380 ms with the update's optional `CLOCK_TICK`, the words rise in at 1,100, 1,210 and 1,320 ms, and the
- * idle follows the clock's end, its blinks drawn from [random]. It plays once in an onboarding run: after a rotation,
- * a fold, a return from Pair or the process's restoration the mark rests and the words are there at once; with Remove
- * animations on it opens on the drop's last frame and nothing breathes. The tick plays only on a frame that draws the
- * landing, so never while the mark rests or stands still, nor when Remove animations is turned off again.
+ * Step 1 (design section 13.3, as the M51 update's section 3 changes it): the Fermix mark dropping in, the name as the
+ * Fermix wordmark (the owner, 2026-10-10), the tagline, "Get started", and "Don't have Fermix yet?", which opens the
+ * install page. The drop runs on one clock: the dot lands at 380 ms with the update's optional `CLOCK_TICK`, the words
+ * rise in at 1,100, 1,210 and 1,320 ms, and the idle follows the clock's end, its blinks drawn from [random]. It plays
+ * once in an onboarding run: after a rotation, a fold, a return from Pair or the process's restoration the mark rests
+ * and the words are there at once; with Remove animations on it opens on the drop's last frame and nothing breathes.
+ * The tick plays only on a frame that draws the landing, so never while the mark rests or stands still, nor when Remove
+ * animations is turned off again.
  */
 @Composable
 fun WelcomeScreen(
@@ -141,12 +146,7 @@ internal fun WelcomeAt(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             FermixMark(pose, MARK)
-            Text(
-                text = stringResource(R.string.onboarding_welcome_title),
-                style = FermixType.display,
-                color = colors.ink,
-                modifier = Modifier.padding(top = TITLE_TOP).risingIn(ms, title, Drop.wordsRise),
-            )
+            FermixWordmark(TITLE, Modifier.padding(top = TITLE_TOP).risingIn(ms, title, Drop.wordsRise))
             Text(
                 text = stringResource(R.string.onboarding_welcome_tagline),
                 style = FermixType.body,

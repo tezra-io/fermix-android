@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,7 +36,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.tezra.fermix.design.Arrival
@@ -44,6 +44,7 @@ import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
+import io.tezra.fermix.design.FermixWordmark
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.Moment
 import io.tezra.fermix.design.arrivalAt
@@ -58,10 +59,13 @@ import io.tezra.fermix.instance.UnpairDialog
 
 // The visual canon's `.ab`: 64 dp, 4 dp at the sides, the title 22/28 medium 16 dp in; its menus (`.menu`)
 // on the tonal surface's solid with 16 dp corners and a hairline, 48 dp entries in 16/24. The empty state
-// (`.fail.mid`): the mark 32 dp above "Add Fermix", 16 dp and 24 dp of padding.
+// (`.fail.mid`): the mark 32 dp above "Add Fermix", 16 dp and 24 dp of padding. The Chats list's title is the
+// Fermix wordmark (the owner, 2026-10-10), 24 dp tall with the file's own margin, its letters 20.7 dp, about the
+// 22 px Linux's sidebar gives them, where the title's 28 dp line stood.
 private val BAR_HEIGHT = 64.dp
 private val BAR_SIDES = 4.dp
 private val BAR_TITLE_START = 16.dp
+private val BAR_WORDMARK = 24.dp
 internal val MENU_SHAPE = RoundedCornerShape(16.dp)
 private val EMPTY_ENDS = 16.dp
 private val EMPTY_SIDES = 24.dp
@@ -85,7 +89,7 @@ data class ChatsActions(
 )
 
 /**
- * The Chats list, the root (design section 13.4): "Fermix" with "+" (Add Fermix) and the overflow's "App
+ * The Chats list, the root (design section 13.4): the Fermix wordmark with "+" (Add Fermix) and the overflow's "App
  * lock", a row per (instance, profile) and one per Fermix to re-pair, or the empty state's "Add Fermix".
  * The rename and unpair dialogs a row's long-press opens survive a rotation or a fold. As onboarding leaves
  * for it, the row of the Fermix just paired, [arriving], rises in, and [onArrived] hears that the list has
@@ -214,7 +218,7 @@ private fun Rows(
     }
 }
 
-/** "Fermix", "+" and the overflow with its one entry, "App lock". */
+/** The Fermix wordmark, "+" and the overflow with its one entry, "App lock". */
 @Composable
 private fun TopBar(
     onAdd: () -> Unit,
@@ -226,14 +230,8 @@ private fun TopBar(
         modifier = Modifier.fillMaxWidth().height(BAR_HEIGHT).padding(horizontal = BAR_SIDES),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = stringResource(R.string.chats_title),
-            style = BAR_TITLE,
-            color = colors.ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = BAR_TITLE_START).weight(1f),
-        )
+        FermixWordmark(BAR_WORDMARK, Modifier.padding(start = BAR_TITLE_START))
+        Spacer(Modifier.weight(1f))
         IconButton(onClick = onAdd, modifier = Modifier.iconFocusRing()) {
             Icon(painterResource(R.drawable.ic_chats_plus), stringResource(R.string.chats_add), tint = colors.ink)
         }

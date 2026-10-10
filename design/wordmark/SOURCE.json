@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "description": "Provenance of the Fermix wordmark the design module draws (FermixWordmark: Welcome's title and the Chats list's bar; the owner, 2026-10-10). fermix-wordmark.svg is a byte-identical copy of the file at source_path in fermix-macos at the pinned commit. Nothing reads it at run time and the APK does not carry it: WordmarkGeometry.kt holds its paths, translations and dots as Kotlin, and design's WordmarkGeometryTest holds them to this file, checks its digest below and that this directory holds no other file.",
+  "upstream": {
+    "repository": "tezra-io/fermix-macos",
+    "url": "https://github.com/tezra-io/fermix-macos",
+    "commit": "9573b2b72d3d48148781a2914bfe01700c5ab4bb",
+    "branch": "main",
+    "retrieved_at": "2026-10-10"
+  },
+  "provenance_note": "The engine's fermix_wordmark/1 component (fermix apps/fermix_web/lib/fermix_web_web/components/core_components.ex) saved as a file. fermix-macos added it at commit 266f283 and it is unchanged from there to commit, the Linux app's record of the same file (fermix-linux desktop/app/marks/PROVENANCE.json, key wordmark). macOS draws it as a 1:1 path port (Apps/Fermix/Sources/FermixAppCore/Design/Components/FermixWordmark.swift), its letters in Palette.ink and its dots #2b5cff.",
+  "licence": "MIT, copyright 2026 Tezra, per the fermix-macos LICENSE; first-party artwork.",
+  "permitted_treatment": "Shipped byte for byte here and drawn as a 1:1 port of its paths, scaled uniformly with the file's own margin. The letters are currentColor and take the app's ink; the two eye-dots keep the file's #2b5cff, the app's signal in both modes. Never redrawn, cropped or recoloured otherwise.",
+  "files": [
+    {
+      "path": "wordmark/fermix-wordmark.svg",
+      "source_path": "Apps/Fermix/Sources/FermixAppCore/Resources/Wordmark/fermix-wordmark.svg",
+      "sha256": "8b9b4d1a25bdc38a030fedf0a43461dc966f47e997fa7e60493b3302bafb07d0"
+    }
+  ]
+}

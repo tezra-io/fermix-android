@@ -25,11 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
@@ -52,8 +53,17 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.math.PI
 import kotlin.random.Random
 
-/** Welcome's words in the order they rise: the title, the tagline, the actions. */
-private val WELCOME_WORDS = listOf("Fermix", "Your agent. Your machine.", "Get started", "Don't have Fermix yet?")
+/**
+ * Welcome's words in the order they rise, as a test finds them: the title, the Fermix wordmark, by the description
+ * TalkBack reads, as it draws no text; the tagline; the actions.
+ */
+private val WELCOME_WORDS =
+    listOf(
+        hasContentDescription("Fermix"),
+        hasText("Your agent. Your machine."),
+        hasText("Get started"),
+        hasText("Don't have Fermix yet?"),
+    )
 
 /** A pixel's alpha when it is opaque. */
 private const val OPAQUE = 255.0
@@ -193,7 +203,9 @@ class MarkMomentsTest {
 
     private fun screen(): Bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
 
-    private fun words(text: String): Bitmap = rule.onNodeWithText(text).captureToImage().asAndroidBitmap()
+    private fun words(word: SemanticsMatcher): Bitmap = rule.onNode(word).captureToImage().asAndroidBitmap()
+
+    private fun words(text: String): Bitmap = words(hasText(text))
 
     /** Whether nothing is drawn: a node's image is its own drawing, clear where it draws nothing, or the canvas. */
     private fun Bitmap.blank(): Boolean {
@@ -243,9 +255,9 @@ class MarkMomentsTest {
     /** Whether anything in the composition waits for a frame. */
     private fun framesAsked(): Boolean = Recomposer.runningRecomposers.value.any { it.hasPendingWork }
 
-    /** Whether TalkBack reaches [text]'s node: the platform's node for it is visible to the user. */
-    private fun reachable(text: String): Boolean {
-        val node = rule.onNodeWithText(text).fetchSemanticsNode()
+    /** Whether TalkBack reaches [word]'s node: the platform's node for it is visible to the user. */
+    private fun reachable(word: SemanticsMatcher): Boolean {
+        val node = rule.onNode(word).fetchSemanticsNode()
         val composeView = rule.activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as ViewGroup
         val provider = checkNotNull(composeView.getChildAt(0).accessibilityNodeProvider)
         return provider.createAccessibilityNodeInfo(node.id)?.isVisibleToUser == true
@@ -261,13 +273,13 @@ class MarkMomentsTest {
     fun `before 1,100 ms Welcome draws no word, and from 1,740 ms it draws them all`() {
         show { WelcomeUnderTest() }
         advanceToJustBefore(1_100)
-        for (text in WELCOME_WORDS) assertTrue("$text drawn at $at ms", words(text).blank())
+        for (word in WELCOME_WORDS) assertTrue("${word.description} drawn at $at ms", words(word).blank())
         advanceTo(1_740)
-        val landed = WELCOME_WORDS.map(::words)
+        val landed = WELCOME_WORDS.map { words(it) }
         advanceTo(3_000)
-        for ((text, image) in WELCOME_WORDS.zip(landed)) {
-            assertFalse("$text not drawn at 1,740 ms", image.blank())
-            assertTrue("$text still moving at 1,740 ms", image.sameAs(words(text)))
+        for ((word, image) in WELCOME_WORDS.zip(landed)) {
+            assertFalse("${word.description} not drawn at 1,740 ms", image.blank())
+            assertTrue("${word.description} still moving at 1,740 ms", image.sameAs(words(word)))
         }
     }
 
@@ -278,12 +290,12 @@ class MarkMomentsTest {
         val actions = WELCOME_WORDS.drop(2)
         advanceTo(1_100)
         assertFalse("the title not drawn at $at ms", words(title).blank())
-        for (text in listOf(tagline) + actions) assertTrue("$text drawn at $at ms", words(text).blank())
+        for (word in listOf(tagline) + actions) assertTrue("${word.description} drawn at $at ms", words(word).blank())
         advanceTo(1_210)
         assertFalse("the tagline not drawn at $at ms", words(tagline).blank())
-        for (text in actions) assertTrue("$text drawn at $at ms", words(text).blank())
+        for (word in actions) assertTrue("${word.description} drawn at $at ms", words(word).blank())
         advanceTo(1_320)
-        for (text in actions) assertFalse("$text not drawn at $at ms", words(text).blank())
+        for (word in actions) assertFalse("${word.description} not drawn at $at ms", words(word).blank())
     }
 
     @Test
@@ -305,10 +317,10 @@ class MarkMomentsTest {
         accessibility.setEnabled(true)
         accessibility.setTouchExplorationEnabled(true)
         show { WelcomeUnderTest() }
-        for (text in WELCOME_WORDS) {
+        for (word in WELCOME_WORDS) {
             // The control: the words are not drawn yet.
-            assertTrue("$text drawn at $at ms", words(text).blank())
-            assertTrue("$text hidden from TalkBack at $at ms", reachable(text))
+            assertTrue("${word.description} drawn at $at ms", words(word).blank())
+            assertTrue("${word.description} hidden from TalkBack at $at ms", reachable(word))
         }
     }
 
@@ -334,7 +346,7 @@ class MarkMomentsTest {
         shown = false
         frameAfterWrite()
         // The control: Welcome left, as it does under Pair on the back stack.
-        assertTrue(rule.onAllNodesWithText(WELCOME_WORDS.first()).fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodes(WELCOME_WORDS.first()).fetchSemanticsNodes().isEmpty())
         shown = true
         frameAfterWrite()
         assertTrue("the drop played again", settled.sameAs(screen()))
@@ -354,7 +366,9 @@ class MarkMomentsTest {
         compose(scale = 0f) { WelcomeUnderTest() }
         // As the screen first draws, before the clock's first frame.
         val first = screen()
-        for (text in WELCOME_WORDS) assertFalse("$text not drawn on the first frame", words(text).blank())
+        for (word in WELCOME_WORDS) {
+            assertFalse("${word.description} not drawn on the first frame", words(word).blank())
+        }
         advanceTo(6_000)
         assertTrue("Welcome moved under reduced motion", first.sameAs(screen()))
         assertFalse(framesAsked())

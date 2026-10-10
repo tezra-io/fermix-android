@@ -371,10 +371,11 @@ behind an upload while a second offer comes, and the limits on attachments.
 every screen builds on. `FermixTheme` provides it and hands it to Material 3 too, so that Material's
 components draw in it: `FermixColors`, light and dark, monochrome as the M51 update's section 1 gives
 them (the ink and the `onInk` on it, the secondary text, the `selection`, the status colours with dark
-mode's own error text, `errText`, and `signal`, Fermix blue, for what is unread alone), and the six
-`Tint`s, with every one of Material's colour roles built from them, `primary` the ink, and never Dynamic
-Color; text selection washed in `selection`; and `textButtonColors(colors)`, the ink's words on no fill,
-for the text buttons Material would draw in its primary; `FermixType`, section 13.1's type scale in Google Sans Flex, with Google Sans Code
+mode's own error text, `errText`, and `signal`, Fermix blue, for what is unread and the Fermix wordmark's
+two eye-dots), and the six `Tint`s, with every one of Material's colour roles built from them, `primary`
+the ink, and never Dynamic Color; text selection washed in `selection`; and `textButtonColors(colors)`,
+the ink's words on no fill, for the text buttons Material would draw in its primary; `FermixType`,
+section 13.1's type scale in Google Sans Flex, with Google Sans Code
 and tabular figures for code and the SAS, and tabular figures in label-small's timestamps;
 `FermixShapes` and `bubbleShape(sender, position)`; `FermixSpacing`;
 `FermixColumn`, section 13.11's centred column of 640 dp or 480 dp on a window 600 dp wide or more
@@ -448,6 +449,32 @@ rectangle's path at its exact numbers, `Mx+r,y Hx+w−r Ar,r 0,0 1,x+w,y+r Vy+h�
 Ar,r 0,0 1,x,y+h−r Vy+r Ar,r 0,0 1,x+r,y Z` without the spaces; the foreground filled in `#0B0B0D`, the splash in
 `@color/mark_ink`. `MarkGeometryTest` and `LauncherIconTest` fail until every value and point matches (the body's
 points within 0.05 units) and the icon's farthest point lies inside the safe zone.
+
+The Fermix wordmark (the owner, 2026-10-10) is `FermixWordmark(height)`: the first-party wordmark the Mac and Linux
+apps draw, the engine's `fermix_wordmark/1`, never redrawn here. `design/wordmark/` vendors fermix-macos's
+`fermix-wordmark.svg` byte for byte beside `SOURCE.json` (the repository, the pinned commit, the file's path there
+and its sha256, the MIT licence, and what may be done to it), and `WordmarkGeometry` holds the file's viewBox, its
+six letter groups' translations with their paths as the file's own strings, and the two eye-dots. It is drawn, not
+loaded, a 1:1 port of those paths as macOS's `FermixWordmark.swift` draws them, since the letters are `currentColor`,
+which no Android vector takes: the letters in one path, filled in the ink by the file's even-odd rule (no two of its
+paths overlap, so one path fills what they fill, with no seam where two meet), and the dots in `signal`, the file's
+own `#2b5cff` in both modes; nothing is cropped or recoloured. `height` is the file's whole box with its own margin,
+116 units with the letters 100 of them, and the box is 396 units wide. It is one node, which TalkBack reads as
+"Fermix" (`design_wordmark`), and drawn in dp, it keeps its size at any font scale, as an image does: at 2.0 it
+neither grows nor clips. `WordmarkGeometryTest` parses the SVG and holds the port to it, the viewBox, each group's
+translation and every path's data, the dots' centres, radius and colour against `signal` in both modes, and each
+element's kind and its attributes, so the file holds nothing the port does not draw: a stroke, an opacity or a
+transform the port lacks fails it, and so does an element in a path or a dot (an `<animate>`, a `<set>`); it reads
+the letters' fill as `currentColor` by the even-odd rule, checks the file's digest and that the directory holds
+that file and `SOURCE.json` alone. `FermixWordmarkTest` draws it in both modes on Robolectric's native graphics
+and reads its pixels (the letters the ink, the R's counter cut out, the margin clear, the dots the signal to their
+radius and no further), its box at two heights, and its one node. The directory is an input of design's unit tests
+by its own path, so a changed byte runs them again. It is no test resource, as `design/mark/` is: AGP copies every
+test resource directory to the classpath's root and keeps one of two files of one name without a word, so its
+`SOURCE.json` would stand for the mark's, which would then be no input of the tests (`MarkGeometryTest` holds the
+classpath's copy of each of the mark's files to the file). A new drawing is re-vendored whole, `SOURCE.json` and
+`WordmarkGeometry.kt` in the same change. `SpecimenWordmark` draws it at 96, 40 and 24 dp, each box in the
+hairline. Welcome's title (40 dp) and the Chats list's bar (24 dp) are the wordmark.
 
 The fonts are google/fonts' own files at
 one commit, unmodified, under the SIL Open Font License 1.1: `src/main/res/font/` holds them,
@@ -530,7 +557,11 @@ reads it where it is silent, for the owner to settle:
   and it marks what is unread and nothing else: the unread count on a Chats row, the timeline's unread
   divider and the count on the scroll-to-latest pill. It is never text on the canvas, a button, a link,
   focus, a progress arc, a selection or a caret. It measures 5.2 : 1 on the light canvas and 3.8 : 1 on
-  the dark one, and `onSignal` on it 5.2 : 1.
+  the dark one, and `onSignal` on it 5.2 : 1. The owner, on 2026-10-10, gave it one more place: the Fermix
+  wordmark's two eye-dots, which are the file's own `#2b5cff` in both modes, as macOS and Linux draw them.
+  They are a mark's size, never text, and lie on the canvas in both places the app draws them, Welcome and
+  the Chats list's bar: 5.2 : 1 on the light canvas and 3.8 : 1 on the dark one, over a mark's 3 : 1,
+  though dark mode's would be under text's 4.5 : 1 (`ContrastTest` measures both).
 - The unread divider is `signal` whole, where M51 drew the accent at 70 %: Fermix blue at 70 % measures
   2.4 : 1 on the dark canvas, under a mark's 3 : 1.
 - 1.2's table gives `textSecondary` on the dark canvas as 7.1 : 1, the figure of its row below; `#A3A6AE`
@@ -638,7 +669,9 @@ filter chip beside one not, a focused field with its label and selected words, a
 bar, each as Material draws it in the theme), `SpecimenType` (the type scale with its sizes) and
 `SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces) and
 `SpecimenFocus` (the focus ring around a pill, a text button, a chip, a card, a switch's row and a plain row
-on the canvas, the agent bubble and the ink, drawn as a preview's ring is, with nothing focused), each
+on the canvas, the agent bubble and the ink, drawn as a preview's ring is, with nothing focused) and
+`SpecimenWordmark` (the Fermix wordmark at 96 dp and at the 40 and 24 dp Welcome and the Chats list's bar draw
+it, each box in the hairline), each
 short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
 twelve images.
 
@@ -885,8 +918,11 @@ The Fermix mark is on four of them (the M51 update's 7.3). Welcome drops it in a
 status bar as the reference player has it (on a window under 480 dp tall, 24 dp under it, the room the drop's
 first dot takes, so "Get started" stays in view), on one clock: the dot lands at 380 ms with `HapticUse.MarkLands`
 (`CLOCK_TICK`, the update's optional tick), the title, the tagline and the actions rise in 10 dp at 1,100, 1,210
-and 1,320 ms, and the idle follows; it plays once an onboarding run (`rememberSaveable`), so a rotation, a fold, a
-return from Pair and the process's restoration show the resting mark and the words at once. The tick plays only on
+and 1,320 ms, and the idle follows. The title is the Fermix wordmark (the owner, 2026-10-10), 40 dp
+tall with its own margin, 20 dp under the mark, where the words "Fermix" stood, and it rises in as
+they did: one node TalkBack reads as "Fermix", which a test finds by that description. The drop
+plays once an onboarding run (`rememberSaveable`), so a rotation, a fold, a return from Pair and
+the process's restoration show the resting mark and the words at once. The tick plays only on
 a frame that draws the landing, from 380 ms until its squash settles at 470 (`Drop.drawsLanding`): never on the
 clock standing at its end, as under Remove animations, once it is turned off again, or after a restoration, nor on
 the first frame back after time out of sight, which finds the dot long landed. Words not yet risen keep an alpha of a thousandth, which draws nothing, as Compose leaves a layer at
@@ -1112,6 +1148,11 @@ owner to settle:
   images of `PairPreview` and `FailureAttestationRefusedPreview`). The primary action is in view on
   both. Dropping the top margins on a short window, or a fade above the actions, would bring them in;
   the canon draws no window that short.
+- Welcome's title is the Fermix wordmark, the owner's of 2026-10-10, where section 13.3, the canon and the
+  update's player set the words "Fermix" in the display style: 40 dp tall with the file's own margin, its
+  letters 34.5 dp, where macOS's welcome draws the letters 40 pt tall. It takes the words' place, 20 dp under
+  the mark, and their rise, so the tagline stands 4 dp higher than under the words' 44 dp line. TalkBack reads
+  it as "Fermix", as it read the words; neither the words nor the wordmark is a heading.
 
 Where the mark's moments depart from the M51 update's sections 2 to 6 or from its reference player, or read
 them where they are silent, for the owner to settle:
@@ -1240,8 +1281,10 @@ is a preview at the twelve windows, at its head and at its foot, drawn by a reco
 
 `feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
 screens, section 13.7's app lock screens and the phone's conversations. `ChatsScreen(ui, actions)` is the
-bar ("Fermix", "+", and the overflow's "App lock") over a row per (instance, profile), or, given no row,
-the mark and "Add Fermix", which the app does not reach today (below). A row (`rowOf`, pure) is the avatar with its dot, the title (the
+bar (the Fermix wordmark, 24 dp tall with its own margin where the title's words stood, 16 dp in,
+as Linux heads its sidebar with it and macOS draws it on its welcome; "+"; and the overflow's "App
+lock") over a row per (instance, profile), or, given no row, the mark and "Add Fermix", which the
+app does not reach today (below). A row (`rowOf`, pure) is the avatar with its dot, the title (the
 nickname or the label, with the host-owned agent's name when it is not "Fermix", and the DEV tag), and a
 second line in the canon's order: a link that speaks (a trust state, a protocol error, a connection taken
 over, a daemon too old or too new), "thinking…", "Draft: …", then the newest row's words, the agent's markdown as its plain
@@ -1307,6 +1350,10 @@ owner to settle:
   are kept (section 13.11's rule 3). The whole dialog cannot fit in that room, so which part the owner sees on a
   phone on its side (a scrolling dialog, a shorter landscape form, the keyboard's own full-screen field) is the
   design's to say; `WindowChangeTest` asks only that the title is there until then.
+- The bar's title is the Fermix wordmark, the owner's of 2026-10-10, where section 13.4 and the canon set the
+  words "Fermix" in 22/28 medium: 24 dp tall with the file's own margin, its letters 20.7 dp, near the 22 px
+  Linux's sidebar draws them, 16 dp in as the words were, centred in the 64 dp bar. TalkBack reads it as
+  "Fermix", as it read the words; neither is a heading.
 
 `feature-chat` (`io.tezra.fermix.chat`) is design section 13.5's Chat screen, with section 13.6's composer
 and section 13.7's message actions. `ChatViewModel` builds its `ChatScreenState` in pure, tested functions
@@ -2798,8 +2845,10 @@ repository does not track, so these files are not on GitHub:
   `MILESTONE_51_ANDROID_MONOCHROME_AND_WELCOME_MOTION.html` and the mark's files beside it: the update
   of 2026-10-04 to M51, for monochrome colour, the Fermix mark and onboarding's motion. Where the two
   disagree the update wins, over section 13.1's colour above all; the app departs from it in Fermix
-  blue's one use, the owner's, of 2026-10-05 (the design module, above). It is in the owner's
-  design-docs repository, under `fermix/`, and not yet in an engine checkout's `docs/design/`.
+  blue's use, the owner's of 2026-10-05 and 2026-10-10, and in the Fermix wordmark, the owner's of
+  2026-10-10, which Welcome and the Chats list draw where the design sets the name in words (the design
+  module, above). It is in the owner's design-docs repository, under `fermix/`, and not yet in an engine
+  checkout's `docs/design/`.
 - `MILESTONE_51_ANDROID_APP_PUBLISHING_CHECKLIST.md`: getting to Play.
 
 ## Licence

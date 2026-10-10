@@ -8,6 +8,7 @@ import kotlinx.serialization.json.float
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -35,6 +36,18 @@ class MarkGeometryTest {
         val recorded = files.map { it.getValue("path").jsonPrimitive.content } + "mark/SOURCE.json"
         val present = File("mark").listFiles().orEmpty().map { "mark/${it.name}" }
         assertEquals(recorded.toSet(), present.toSet())
+    }
+
+    @Test
+    fun `each vendored file is the test classpath's file of its name, so a changed byte runs these tests again`() {
+        // The directory is a test resource, copied to the classpath's root, and the classpath is the test task's
+        // input. A second resource directory with a file of the same name may stand in its place in silence.
+        val files = File("mark").listFiles().orEmpty()
+        for (file in files) {
+            val copy = checkNotNull(javaClass.getResource("/${file.name}")) { "no ${file.name} on the classpath" }
+            assertArrayEquals(file.readBytes(), copy.readBytes(), "the classpath's ${file.name} is not mark's")
+        }
+        assertEquals(VENDORED_FILES, files.size)
     }
 
     @Test
@@ -131,6 +144,9 @@ class MarkGeometryTest {
 
     private companion object {
         const val OUTLINE_POINTS = 96
+
+        /** The SVG, the geometry JSON and SOURCE.json. */
+        const val VENDORED_FILES = 3
 
         /** The vector writes the eyes' corners to two decimals. */
         const val ROUNDING = 0.005f

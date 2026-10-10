@@ -49,9 +49,10 @@ demo-daemon/          the debug app's demo Fermix, io.tezra.fermix.demo (Android
 design/               design section 13.1 as code, with the M51 update's monochrome colour (section 1)
                       over it, io.tezra.fermix.design (Compose library): tokens,
                       FermixTheme, the bundled OFL fonts with SOURCE.json, the Fermix mark (FermixMark,
-                      its geometry, motion tables and moments), @FermixPreviews, and the
-                      specimens' previews in src/test; design/mark/ vendors the mark's SVG and
-                      geometry JSON from fermix-design-docs, with SOURCE.json
+                      its geometry, motion tables and moments), the Fermix wordmark (FermixWordmark),
+                      @FermixPreviews, and the specimens' previews in src/test; design/mark/ vendors the
+                      mark's SVG and geometry JSON from fermix-design-docs, and design/wordmark/ the
+                      wordmark's SVG from fermix-macos, each with SOURCE.json
 data/                 the phone's durable state, io.tezra.fermix.data (Android library, JVM-tested
                       on the bundled SQLite): the instance records' DataStore, one Room database
                       per (instance, profile) with its schema in data/schemas, the media cache, the
@@ -280,10 +281,19 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   again: a file a test reads from outside its sources, never declared, let a cached green pass a broken pin. A
   new drawing from the design is re-vendored whole, `SOURCE.json` and `MarkGeometry.kt` in the same change, and
   the launcher icon's and the splash's paths follow it, as `LauncherIconTest` holds them to the SVG (README, the
-  design module, says how each is written). The mark's motion is one table per moment in `MarkMotion.kt`, asserted
-  key by key against the update and its reference player, each field of a pose held to its own table at every key
-  and every segment's middle (a property wired to another table that starts and ends where it does once passed
-  every other test), and each moment runs on one clock (`rememberMarkMoment`).
+  design module, says how each is written). The Fermix wordmark is vendored so too, never redrawn: `design/wordmark/`
+  holds fermix-macos's `fermix-wordmark.svg` byte for byte with `SOURCE.json` (the commit, the file's path, its
+  sha256, its licence and what may be done to it), `WordmarkGeometry.kt` holds its paths as the file's own strings,
+  which `WordmarkGeometryTest` pins path for path, each element's kind and attributes with them, and the file to its
+  digest, and `FermixWordmark` draws them as the file does, the letters in the ink and the two dots in `signal`,
+  scaled whole with the file's margin, never cropped or recoloured otherwise. The directory is an input of design's
+  unit tests by its own path, never a second test resource directory beside `design/mark/`: AGP copies each to the
+  classpath's root and keeps one of two files of one name without a word, so its `SOURCE.json` would stand for the
+  mark's, which would then be no input (`MarkGeometryTest` holds the classpath's copy of each of the mark's files to
+  the file). The mark's motion is one table per moment in `MarkMotion.kt`, asserted key by key against the update and
+  its reference player, each field of a pose held to its own table at every key and every segment's middle (a
+  property wired to another table that starts and ends where it does once passed every other test), and each moment
+  runs on one clock (`rememberMarkMoment`).
 - Onboarding's motion (the M51 update's 7.2 to 7.5): a screen change's spec lives on its entry, in the entry's
   metadata (`ScreenChanges.metadataFor`: NavDisplay's `TransitionKey`, `PopTransitionKey` and
   `PredictivePopTransitionKey`), never on NavDisplay itself, so the app's other screens keep NavDisplay's own and an
@@ -316,7 +326,8 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   `onInk` at the selection's alpha, never `selection`, which is the ink. Blue is `signal`, Fermix blue, and
   marks only what is unread (a Chats row's count, the unread divider, the scroll-to-latest pill's count); it
   is never text on the canvas, a button, a link, focus, progress, a selection or a caret (the owner,
-  2026-10-05). A link is the ink and underlined, and so is a text action that only the old accent told
+  2026-10-05). Its one other place is the Fermix wordmark's two eye-dots, the file's own blue (the owner,
+  2026-10-10). A link is the ink and underlined, and so is a text action that only the old accent told
   from the words around it; a line a selected message's row draws on its canvas is the ink, as the
   selection's wash takes the grey and the error text under their floor. `ContrastTest` measures the
   update's table, holds each pair of tokens it lists to its WCAG floor, and pins at what it measures each
