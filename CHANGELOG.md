@@ -281,3 +281,9 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   apps show, in place of the name set in type: its letters in the app's ink and its two eye-dots in Fermix blue, in
   light and dark mode alike. It is the apps' own drawing, vendored with its provenance, never redrawn. On Welcome it
   rises in where the name did; TalkBack reads it as "Fermix", as before.
+- **The thinking card names the tool at work, and a picture lands where the card was.** While a tool runs, the
+  card's line names it ("Making an image") in place of the phrase, and it joins the chips under it once it stops;
+  the two dots breathe over a soft halo of the ink, faster while a tool runs. A picture the turn makes appears
+  where the card showed, fading in and settling to its size, never over your message above it, and the card
+  carries on below it; a picture you have seen before is simply there. The debug app's demo draws a picture when
+  asked for one.

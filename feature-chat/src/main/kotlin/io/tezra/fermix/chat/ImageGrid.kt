@@ -169,9 +169,10 @@ private fun GridFour(cell: @Composable (Int, Modifier) -> Unit) {
 
 /**
  * One image of a bubble: its placeholder colour while it streams (the first chunk's, MediaPipeline.dominantColour,
- * or the hairline before any), then the image, cropped to its cell; "No longer on {host}" once the daemon let it
- * go; the ring while it goes up; "+[more]" over the last cell of four. Asked again as a connection comes. [modifier]
- * sizes it; a lone image takes its own aspect once decoded.
+ * or the hairline before any), then the image, cropped to its cell, coming in over the placeholder when the daemon
+ * has just brought it (rememberReveal); "No longer on {host}" once the daemon let it go; the ring while it goes up;
+ * "+[more]" over the last cell of four. Asked again as a connection comes. [modifier] sizes it; a lone image takes
+ * its own aspect once decoded.
  */
 @Composable
 private fun MediaCell(
@@ -193,6 +194,7 @@ private fun MediaCell(
         context.media.ui.colours[media.cacheName]
             ?.let { Color(it) } ?: colors.hairline
     val open = { context.media.onView(spot.messageKey, spot.index) }
+    val reveal = rememberReveal(shown, context.media.revealHeld)
     Box(
         modifier =
             sized
@@ -201,7 +203,7 @@ private fun MediaCell(
                 .clickable(enabled = shown != null, role = Role.Image, onClick = open),
         contentAlignment = Alignment.Center,
     ) {
-        if (shown != null) SharedImage(shown, spot.key, Modifier.fillMaxSize())
+        if (shown != null) SharedImage(shown, spot.key, Modifier.fillMaxSize().reveal(reveal))
         media.sent?.let { Ring(it) }
         if (spot.more > 0) MoreOverlay(spot.more)
     }

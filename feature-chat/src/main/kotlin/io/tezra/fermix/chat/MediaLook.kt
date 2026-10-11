@@ -32,10 +32,14 @@ data class MediaUi(
     val micOff: Boolean = false,
 )
 
-/** An image as a bubble or the viewer draws it: decoded, gone from the daemon, or not to be had now. */
+/**
+ * An image as a bubble or the viewer draws it: decoded, gone from the daemon, or not to be had now. A shown one is
+ * [fresh] when the daemon has just brought it, the phone holding it nowhere before (Blob.Bytes.fetched).
+ */
 sealed interface MediaImage {
     class Shown(
         val bitmap: ImageBitmap,
+        val fresh: Boolean = false,
     ) : MediaImage
 
     data object Gone : MediaImage

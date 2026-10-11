@@ -219,7 +219,7 @@ class ChatMediaTest {
         }
 
     @Test
-    fun `two asks for one blob at once fetch it once, the second finding it cached`() =
+    fun `two asks for one blob at once fetch it once, the second finding it cached and not new to the chat`() =
         runTest {
             val store = FakeChatStore()
             val session = FakeChatSession(store).apply { blobs = mapOf(THUMB to BYTES) }
@@ -233,9 +233,13 @@ class ChatMediaTest {
             val image = ShownMedia(THUMB, THUMB, MediaShape.IMAGE, "image/png", BYTES.size.toLong(), null)
             val first = async { blobs.bytes(image) }
             val second = async { blobs.bytes(image) }
-            assertArrayEquals(BYTES, (first.await() as Blob.Bytes).bytes)
-            assertArrayEquals(BYTES, (second.await() as Blob.Bytes).bytes)
+            val brought = first.await() as Blob.Bytes
+            val found = second.await() as Blob.Bytes
+            assertArrayEquals(BYTES, brought.bytes)
+            assertArrayEquals(BYTES, found.bytes)
             assertEquals(listOf(THUMB), session.fetched.value, "the second ask fetched it again")
+            assertTrue(brought.fetched, "the ask the daemon brought it for")
+            assertFalse(found.fetched, "the ask that found it cached once its turn came")
         }
 
     @Test
@@ -252,6 +256,19 @@ class ChatMediaTest {
             assertEquals(copy, (blobs.file(image, copy) as Blob.InFile).file)
             assertArrayEquals(BYTES, copy.readBytes())
             assertEquals(listOf(THUMB), session.fetched.value)
+        }
+
+    @Test
+    fun `a blob the daemon brought is new to the chat that once, then the cache's, and an outbox item's never is`() =
+        runTest {
+            val store = FakeChatStore()
+            val session = FakeChatSession(store).apply { blobs = mapOf(THUMB to BYTES) }
+            val blobs = blobsOf(session, store, { File.createTempFile("fetch", null, dir) }, FakeLog())
+            val image = ShownMedia(THUMB, THUMB, MediaShape.IMAGE, "image/png", BYTES.size.toLong(), null)
+            assertTrue((blobs.bytes(image) as Blob.Bytes).fetched, "the daemon brought it")
+            assertFalse((blobs.bytes(image) as Blob.Bytes).fetched, "the cache held it")
+            val staged = File(dir, "staged").apply { writeBytes(BYTES) }
+            assertFalse((blobs.bytes(image.copy(local = staged.path)) as Blob.Bytes).fetched, "its own staged file")
         }
 
     @Test

@@ -3,9 +3,11 @@ package io.tezra.fermix.demo
 import android.content.ComponentName
 import android.content.Intent
 import android.os.SystemClock
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
@@ -19,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.tezra.fermix.STEP_MILLIS
 import io.tezra.fermix.attest.DeviceKeys
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.focusedWindow
 import io.tezra.fermix.liveActivities
 import io.tezra.fermix.resumedActivity
@@ -49,6 +52,10 @@ private const val VERIFY_SHOWN_MILLIS = 5_000L
 /** How long a demo reply takes at most, from the card's thinking to its last word, with room for a slow emulator. */
 private const val REPLY_MILLIS = 30_000L
 
+/** generate_image's verb on the card (feature-chat's chat_verb_making_image), and an image's description. */
+private const val MAKING_AN_IMAGE = "Making an image"
+private const val IMAGE = "Image"
+
 /** A distinctive line of each answer a demo reply may give (DemoReplies), one of which the seed picks. */
 private val ANSWERS =
     listOf(
@@ -62,7 +69,8 @@ private val ANSWERS =
 /**
  * The debug app's demo on the device, the owner's diagonal (README, "The demo"): the "Fermix demo" entry copies a demo
  * link, and the app pairs over it as over a real one, Welcome, paste, Connecting, Verify for as long as the owner
- * reads the code, the computer's approval, Paired, the Chats list, the chat, a message sent and its reply streamed in.
+ * reads the code, the computer's approval, Paired, the Chats list, the chat, a message sent and its reply streamed in,
+ * and a picture asked for, standing where its card showed.
  * The pairing is removed again as "Remove this Fermix" removes one, its record, its files and its key; the app must
  * hold no record before.
  */
@@ -95,6 +103,63 @@ class DemoDeviceTest {
 
     @Test
     fun theDemoPairsThroughVerifyAndTheComputersApprovalAndAnswersAMessage() {
+        pairAndOpenTheChat()
+        send("How did the export go?")
+        rule.waitUntil(
+            "the demo's reply",
+            REPLY_MILLIS,
+        ) { ANSWERS.any { answered(it).fetchSemanticsNodes().isNotEmpty() } }
+        assertEquals(1, records().size)
+    }
+
+    /**
+     * A picture asked for (the owner, 2026-10-10): the card's header names generate_image's verb while it runs; its
+     * image lands as a row of the turn under the card's key, and the card opens again below it under the next key,
+     * read as the list holds both, which is for the demo's 800 ms between the picture and its `thought_done`: that
+     * puts the card away, so the answer is a bubble of its own (core-session's TurnMachine), and the picture keeps the
+     * card's key through the turn's end.
+     */
+    @Test
+    fun theDemosPictureTakesItsCardsPlaceAndTheCardOpensAgainBelowIt() {
+        pairAndOpenTheChat()
+        send("Draw me a lighthouse")
+        shows(MAKING_AN_IMAGE, REPLY_MILLIS)
+        val instanceId = records().single().id
+        val turnId =
+            runBlocking {
+                services
+                    .chatParts(instanceId, MAIN_PROFILE)
+                    .live
+                    .first { live -> live.turns.isNotEmpty() }
+                    .turns
+                    .last()
+                    .turnId
+            }
+        val indexOf = { key: String ->
+            rule.onNode(hasScrollToKeyAction()).fetchSemanticsNode().config[SemanticsProperties.IndexForKey](key)
+        }
+        // The two keys read together at each poll, as the card below the picture stands for 800 ms alone.
+        var order: Pair<Int, Int>? = null
+        rule.waitUntil("the card open again below the picture", REPLY_MILLIS) {
+            val below = indexOf("card:$turnId:1.1")
+            if (below >= 0) order = indexOf("card:$turnId:1") to below
+            order != null
+        }
+        val (picture, below) = checkNotNull(order)
+        assertTrue("the picture has the card's key: $picture", picture >= 0)
+        assertTrue("the card is below it: $below under $picture", below in 0 until picture)
+        rule.waitUntil("the picture", REPLY_MILLIS) {
+            rule.onAllNodes(hasContentDescription(IMAGE)).fetchSemanticsNodes().isNotEmpty()
+        }
+        shows("Here it is.", REPLY_MILLIS)
+        val image = rule.onAllNodes(hasContentDescription(IMAGE))[0].fetchSemanticsNode().boundsInRoot
+        val answer = rule.onAllNodesWithText("Here it is.")[0].fetchSemanticsNode().boundsInRoot
+        assertTrue("the answer stands below the picture: $answer, $image", answer.top >= image.bottom)
+        assertTrue("the picture keeps the card's key", indexOf("card:$turnId:1") >= 0)
+    }
+
+    /** Pairs the demo's first Fermix through its link and opens its chat, the composer showing. */
+    private fun pairAndOpenTheChat() {
         app.startActivity(
             Intent().setComponent(ComponentName(app, DemoEntry::class.java)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
@@ -122,14 +187,13 @@ class DemoDeviceTest {
             "the composer",
             STEP_MILLIS,
         ) { rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNode(hasSetTextAction()).performTextInput("How did the export go?")
+    }
+
+    /** Sends [words] from the composer, and waits for them on screen. */
+    private fun send(words: String) {
+        rule.onNode(hasSetTextAction()).performTextInput(words)
         rule.onNodeWithContentDescription("Send").performClick()
-        shows("How did the export go?")
-        rule.waitUntil(
-            "the demo's reply",
-            REPLY_MILLIS,
-        ) { ANSWERS.any { answered(it).fetchSemanticsNodes().isNotEmpty() } }
-        assertEquals(1, records().size)
+        shows(words)
     }
 
     /**

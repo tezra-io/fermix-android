@@ -50,18 +50,20 @@ internal data class Placed(
  * The chat's list, newest first, as a reversed list draws it from the bottom (design section 13.5): the
  * rows by `server_seq`, each followed by what came after it with no row of its own (notices, model lines,
  * a turn's "Stopped" or error card); then the requests `accepted` took whose rows have not come yet; then
- * the turns that run, their bubbles and their card; then the outbox. Day headers, the unread divider placed as
- * the chat opened, and the groups within two minutes are laid over that.
+ * the turns that run, their bubbles and their card; then the outbox. A picture of a turn stands under the key of
+ * the card it came under (TurnMedia). Day headers, the unread divider placed as the chat opened, and the groups
+ * within two minutes are laid over that.
  */
 fun chatItems(inputs: ChatInputs): List<ChatItem> {
     val ascending = inputs.rows.sortedBy { it.serverSeq }
     val times = rowTimes(ascending, inputs.live)
-    val rowItems = ascending.mapNotNull { row -> rowItem(row, times[row.serverSeq], inputs) }
+    val media = turnMedia(ascending, inputs.live)
+    val rowItems = ascending.mapNotNull { row -> rowItem(row, times[row.serverSeq], inputs, media) }
     val rowSeqs = ascending.map { it.serverSeq }.toSet()
     val ordered =
         merged(rowItems, extras(inputs, ascending, rowSeqs)) +
             bridgedItems(inputs, ascending) +
-            liveItems(inputs, rowSeqs, ascending) +
+            liveItems(inputs, rowSeqs, ascending, media) +
             outboxItems(inputs)
     val laidOut = grouped(withDays(withUnread(ordered, inputs.unreadAt), inputs), inputs.nowWall)
     return laidOut.asReversed()

@@ -90,11 +90,13 @@ data class ChatScreenActions(
 
 /**
  * What the timeline's blobs read and do (design section 13.5): the chat's media state, its [actions], and
- * [onView], which opens the viewer at a message's image by the message's key and the image's index.
+ * [onView], which opens the viewer at a message's image by the message's key and the image's index. [revealHeld] is
+ * a preview's (PreviewHeld.reveal).
  */
 data class TimelineMedia(
     val ui: MediaUi = MediaUi(),
     val actions: MediaActions = MediaActions(),
+    val revealHeld: Float? = null,
     val onView: (String, Int) -> Unit = { _, _ -> },
 )
 
@@ -180,14 +182,15 @@ private fun rememberOverlays(selected: Set<String>): Overlays {
 
 /**
  * What a preview holds as it stands, and the running app never holds: the date pill up as a fast scroll shows it
- * ([datePill]), a jumped-to hit's pulse ([pulsing]), and the messages selected as the screen first shows
- * ([selected]).
+ * ([datePill]), a jumped-to hit's pulse ([pulsing]), the messages selected as the screen first shows ([selected]),
+ * and every image held at that share of its way in ([reveal], rememberReveal).
  */
 @Immutable
 data class PreviewHeld(
     val datePill: Boolean = false,
     val pulsing: Jump? = null,
     val selected: Set<String> = emptySet(),
+    val reveal: Float? = null,
 )
 
 /**
@@ -212,7 +215,7 @@ fun ChatScreen(
     val overlays = rememberOverlays(held.selected)
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
     val highlight = jumpHighlight(ui, listState) ?: held.pulsing
-    val media = TimelineMedia(ui.media, actions.media) { key, index -> viewing = cellKey(key, index) }
+    val media = TimelineMedia(ui.media, actions.media, held.reveal) { key, index -> viewing = cellKey(key, index) }
     val context =
         timelineContext(ui.state, actions, overlays)
             .copy(highlight = highlight, marks = inChatMarksOf(ui.search), media = media)

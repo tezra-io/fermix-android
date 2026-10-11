@@ -51,9 +51,13 @@ const val MEDIA_GONE = "media_gone"
 
 /** What the chat has of a blob a bubble shows. */
 sealed interface Blob {
-    /** Its bytes. */
+    /**
+     * Its bytes; [fetched] when the daemon brought them for this ask, the phone holding none before (its cache, or an
+     * outbox item's staged file), which a bubble's image comes in from its placeholder for (rememberReveal).
+     */
     class Bytes(
         val bytes: ByteArray,
+        val fetched: Boolean = false,
     ) : Blob
 
     /** Copied into [file]. */
@@ -108,10 +112,10 @@ class ChatBlobs(
         return cached?.let { Blob.Bytes(it) } ?: cachedBytes(fetched(media.ref, media.cacheName))
     }
 
-    /** What [fetch] came to, as the cache's bytes. */
+    /** What [fetch] came to, as the cache's bytes, fetched when the daemon streamed them for this ask. */
     private suspend fun cachedBytes(fetch: Fetch): Blob =
         when (fetch) {
-            is Fetch.Cached -> parts.store.media(fetch.sha256)?.let { Blob.Bytes(it) } ?: Blob.Missing
+            is Fetch.Cached -> parts.store.media(fetch.sha256)?.let { Blob.Bytes(it, fetch.streamed) } ?: Blob.Missing
             Fetch.Gone -> Blob.Gone
             Fetch.Missing -> Blob.Missing
         }
@@ -146,7 +150,7 @@ class ChatBlobs(
             val cached = isMediaName(name) && parts.store.media(name) != null
             val chat = session.value
             when {
-                cached -> Fetch.Cached(name)
+                cached -> Fetch.Cached(name, streamed = false)
                 chat == null -> Fetch.Missing
                 else -> scratchFetch(chat, ref, name)
             }
@@ -202,7 +206,7 @@ class ChatBlobs(
             return if (outcome == OneShot.Refused(MEDIA_GONE)) Fetch.Gone else Fetch.Missing
         }
         val sha256 = outcome.value.sha256
-        return if (parts.store.keepMedia(into, sha256)) Fetch.Cached(sha256) else Fetch.Missing
+        return if (parts.store.keepMedia(into, sha256)) Fetch.Cached(sha256, streamed = true) else Fetch.Missing
     }
 
     private fun shade(
@@ -220,8 +224,10 @@ class ChatBlobs(
 
 /** What a fetch through the daemon came to. */
 private sealed interface Fetch {
+    /** In the cache as [sha256]: [streamed] by the daemon for this ask, or found there once the ask's turn came. */
     data class Cached(
         val sha256: String,
+        val streamed: Boolean,
     ) : Fetch
 
     data object Gone : Fetch

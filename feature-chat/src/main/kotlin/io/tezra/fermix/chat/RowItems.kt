@@ -45,6 +45,7 @@ internal fun rowItem(
     row: TimelineRow,
     wallMs: Long?,
     inputs: ChatInputs,
+    media: TurnMedia = TurnMedia.NONE,
 ): Placed? {
     val message =
         when (row) {
@@ -53,7 +54,7 @@ internal fun rowItem(
         }
     val empty = message.text.isBlank() && message.media.isEmpty()
     if (empty || isQuietRow(row)) return null
-    return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, inputs.live), message))
+    return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, inputs.live, media), message))
 }
 
 /**
@@ -105,32 +106,41 @@ internal fun replyOf(
 
 /**
  * A row's key: the owner's message keeps its outbox item's, so the bubble stays as `accepted` and then its
- * row replace the item; a reply keeps its live bubble's, so a sealed bubble stays as its row lands.
+ * row replace the item; a reply keeps its live bubble's, so a sealed bubble stays as its row lands; a picture of a
+ * remembered turn takes the card's it came under ([media]).
  */
 internal fun rowKey(
     row: TimelineRow,
     message: ShownMessage,
     live: ChatLive,
+    media: TurnMedia = TurnMedia.NONE,
 ): String {
     val clientMsgId = message.clientMsgId
     if (message.sender == Sender.User && clientMsgId != null) return outboxKey(clientMsgId)
     val sealed =
         live.turns.firstNotNullOfOrNull { turn ->
-            turn.bubbles.firstOrNull { it.sealedSeq == row.serverSeq }?.let { liveBubbleKey(turn.turnId, it) }
+            turn.bubbles.firstOrNull { it.sealedSeq == row.serverSeq }?.let { liveBubbleKey(turn.turnId, it, media) }
         }
-    return sealed ?: "row:${row.serverSeq}"
+    return sealed ?: media.keyOf(row.serverSeq) ?: "row:${row.serverSeq}"
 }
 
 internal fun outboxKey(clientMsgId: String): String = "out:$clientMsgId"
 
 /**
  * A live bubble's key: the card's it came from, so the card's place in the list becomes the bubble's and its
- * bounds morph into it (design section 13.5), or else its own.
+ * bounds morph into it (design section 13.5), counting the pictures that took the card's place before ([media]), or
+ * else its own.
  */
 internal fun liveBubbleKey(
     turnId: String,
     bubble: LiveBubble,
-): String = if (bubble.fromCard) cardKey(turnId, bubble.index) else bubbleKey(turnId, bubble.index)
+    media: TurnMedia = TurnMedia.NONE,
+): String =
+    if (bubble.fromCard) {
+        slotKey(turnId, bubble.index, media.countAt(turnId, bubble.index))
+    } else {
+        bubbleKey(turnId, bubble.index)
+    }
 
 internal fun bubbleKey(
     turnId: String,

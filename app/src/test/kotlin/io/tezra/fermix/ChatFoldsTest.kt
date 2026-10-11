@@ -62,4 +62,21 @@ class ChatFoldsTest {
             assertTrue(folds.chats.value.isEmpty())
             session.close()
         }
+
+    @Test
+    fun `a bubble opens after the newest row the chat kept, so an image that landed before it took the card's place`() =
+        runTest {
+            val folds = ChatFolds(TestClock) { 5uL }
+            val session = idleSession(backgroundScope)
+            folds.take(id, session, SessionEvent.Turn(TurnEffect.BubbleOpened("turn-m1", 1, true), false))
+            val bubble =
+                folds.chats.value
+                    .getValue(id)
+                    .turns
+                    .single()
+                    .bubbles
+                    .single()
+            assertEquals(5uL, bubble.openedAfter)
+            session.close()
+        }
 }

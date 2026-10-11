@@ -55,7 +55,7 @@ internal fun turnAfter(
         }
 
         is TurnEffect.BubbleOpened -> {
-            opened(turn.cardGone(at), effect, turn.card)
+            opened(turn.cardGone(at), effect, turn.card, at.newestSeq)
         }
 
         is TurnEffect.BubbleText -> {
@@ -116,14 +116,19 @@ private fun LiveTurn.cardGone(at: Moment): LiveTurn {
     return copy(card = null, thoughtMs = thoughtMs + (at.monoMs - shown.shownMono).coerceAtLeast(0L))
 }
 
-/** Bubble [effect] opens; one the card became keeps that card, [card], until it has words. */
+/**
+ * Bubble [effect] opens, after the newest row the chat had kept then, [newestSeq]; one the card became keeps that
+ * card, [card], until it has words.
+ */
 private fun opened(
     turn: LiveTurn,
     effect: TurnEffect.BubbleOpened,
     card: LiveCard?,
+    newestSeq: ULong,
 ): LiveTurn {
     val held = card?.takeIf { effect.fromCard }
-    val bubble = LiveBubble(effect.bubble, text = "", resets = 0, fromCard = effect.fromCard, card = held)
+    val bubble =
+        LiveBubble(effect.bubble, "", resets = 0, fromCard = effect.fromCard, card = held, openedAfter = newestSeq)
     return turn.copy(bubbles = turn.bubbles.filter { it.index != effect.bubble } + bubble)
 }
 

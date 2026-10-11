@@ -14,14 +14,17 @@ import io.tezra.fermix.transport.TransportException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.random.Random
 
 // What the demo writes from the owner's words and its own rows, apart from any phone: a quote and the deltas that
 // never part a surrogate pair, a search matched as the engine's index matches and its excerpt cut at words' edges,
-// words that name no time of day, and a socket that says nothing, or nothing a daemon reads, closed as the engine
-// closes it: before its handshake, and after it a frame out of its seq, of another version or under another key.
+// words that name no time of day, words that ask for a picture played as the image turn, and a socket that says
+// nothing, or nothing a daemon reads, closed as the engine closes it: before its handshake, and after it a frame out
+// of its seq, of another version or under another key.
 
 /** The owner's emoji, two UTF-16 units: a cut between them is a lone surrogate, which UTF-8 writes as '?'. */
 private const val GRIN = "😀"
@@ -100,9 +103,28 @@ class DemoAnswersTest {
                     listOfNotNull(script.approval?.text, script.approval?.approved)
             }
         val log = demoBlobs().getValue(DemoBlobName.EXPORT_LOG).bytes().decodeToString()
-        val written = scripted + answers("the owner's words") + log.lines()
+        val drawn = replyPlan(Random(DEMO_SEED), "m1", "Draw me a lighthouse", media = false)
+        val written = scripted + answers("the owner's words") + drawn.headings + drawn.answer + log.lines()
 
         assertEquals(emptyList<String>(), written.filter { TIME_OF_DAY.containsMatchIn(it) })
+    }
+
+    @Test
+    fun `words that ask for a picture play the image turn, unless they ask first or came with a photo`() {
+        val asking = listOf("Draw me a lighthouse", "Can you make a picture of the harbour?", "Sketch it as an image")
+        asking.forEach {
+            val plan = replyPlan(Random(DEMO_SEED), "m1", it, media = false)
+            assertTrue(plan.picture, it)
+            assertEquals("generate_image", plan.tool, it)
+            assertEquals(listOf("Drawing what you asked"), plan.headings, it)
+            assertEquals("Here it is.", plan.answer, it)
+            assertNull(plan.ask, it)
+        }
+        val asks = replyPlan(Random(DEMO_SEED), "m2", "Delete the old picture", media = false)
+        assertFalse(asks.picture, "asking first comes before a picture")
+        assertNotNull(asks.ask)
+        assertFalse(replyPlan(Random(DEMO_SEED), "m3", "A picture of the harbour", media = true).picture)
+        assertFalse(replyPlan(Random(DEMO_SEED), "m4", "How did the imagery export go?", media = false).picture)
     }
 
     @Test

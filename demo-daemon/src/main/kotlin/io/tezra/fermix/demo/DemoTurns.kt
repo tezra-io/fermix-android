@@ -2,6 +2,7 @@ package io.tezra.fermix.demo
 
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.LinkPreviewCard
+import io.tezra.fermix.protocol.MessageKind
 import io.tezra.fermix.protocol.RequestState
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.protocol.ServerEvent
@@ -112,10 +113,11 @@ internal class DemoTurns(
 
 /**
  * How a demo turn plays, on the route it started on. On a route that streams a reply opens with `turn_started`,
- * shows its headings and its tool on the card, takes the card away, streams its words in deltas over
- * [DemoTimes.streaming], seals them as its row with `text_done` and ends with `turn_done`; on one that does not (a
- * model listed `streams: false`) it sends no `turn_started`, no heading, no tool and no delta, only the ending, the
- * phone's card shown from `accepted` (R1; PROTOCOL.md "Streaming a turn").
+ * shows its headings and its tool on the card (the image turn its picture too, as a row of the turn's), takes the
+ * card away, streams its words in deltas over [DemoTimes.streaming], seals them as its row with `text_done` and
+ * ends with `turn_done`; on one that does not (a model listed `streams: false`) it sends no `turn_started`, no
+ * heading, no tool and no delta, only the ending, the phone's card shown from `accepted` (R1; PROTOCOL.md
+ * "Streaming a turn").
  */
 private class TurnPlay(
     private val home: DemoHome,
@@ -136,7 +138,11 @@ private class TurnPlay(
     ) {
         val turn = opened(requestId)
         if (plan.react) react(home, requestId, stamp(parts.wallMs()))
-        think(turn, requestId, plan.headings, listOfNotNull(plan.tool), times.heading)
+        if (plan.picture) {
+            draw(turn, requestId, plan.headings.single())
+        } else {
+            think(turn, requestId, plan.headings, listOfNotNull(plan.tool), times.heading)
+        }
         val ask = plan.ask
         if (ask != null) raise(home, parts, ask, times.askTtl, plan.answer)
         answer(turn, requestId, if (ask != null) ASKED else plan.answer)
@@ -174,6 +180,32 @@ private class TurnPlay(
             tools.getOrNull(index)?.let { run(turn, it) }
             delay(step)
         }
+        if (turn.streams) home.broadcast(ServerEvent.ThoughtDone(turn.turnId))
+    }
+
+    /**
+     * The image turn's card: [DemoTimes.thinking], its [heading], and [IMAGE_TOOL] run for [DemoTimes.image], its
+     * picture written as a row while the tool runs, as the engine writes a turn's picture: an answer to its request
+     * ([requestId] as `in_reply_to`) with no metadata (channels/mobile.ex's persist_media); then the tool's stop and,
+     * a heading's time later, `thought_done`. On a route that does not stream the picture's row still comes, with
+     * nothing of the card.
+     */
+    private suspend fun draw(
+        turn: Running,
+        requestId: String,
+        heading: String,
+    ) {
+        delay(times.thinking)
+        if (turn.streams) home.broadcast(ServerEvent.Thought(turn.turnId, requestId, heading))
+        if (turn.streams) home.broadcast(ServerEvent.ToolEvent(turn.turnId, IMAGE_TOOL, ToolPhase.START))
+        delay(times.image)
+        val picture = parts.blobs.getValue(DemoBlobName.DRAWING).mediaRef()
+        val at = stamp(parts.wallMs())
+        val row =
+            home.write(HistoryMessage(0uL, AGENT, "", at, listOf(picture), MessageKind.MEDIA, inReplyTo = requestId))
+        home.broadcast(rowEvent(row))
+        if (turn.streams) home.broadcast(ServerEvent.ToolEvent(turn.turnId, IMAGE_TOOL, ToolPhase.STOP, status = "ok"))
+        delay(times.heading)
         if (turn.streams) home.broadcast(ServerEvent.ThoughtDone(turn.turnId))
     }
 

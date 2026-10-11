@@ -61,6 +61,8 @@ data class LiveCard(
  * its canonical text, and the wall time it was sealed. [fromCard] is whether the card became it, and [card] is
  * that card as it went, which stands in its place while the bubble has no words yet: a bare `text_done` seals
  * it before its row, which holds them, is kept (design section 13.10, item 2: nothing is visibly deleted).
+ * [openedAfter] is the newest row the chat had kept as it opened: a picture of its turn that landed by then came
+ * while the card it opened from showed, and took that card's place (TurnMedia).
  */
 data class LiveBubble(
     val index: Int,
@@ -70,6 +72,7 @@ data class LiveBubble(
     val sealedSeq: ULong? = null,
     val sealedWall: Long? = null,
     val card: LiveCard? = null,
+    val openedAfter: ULong = 0uL,
 )
 
 /** How a turn ended: its [outcome], when, and the newest row then, after which its error card or notice goes. */

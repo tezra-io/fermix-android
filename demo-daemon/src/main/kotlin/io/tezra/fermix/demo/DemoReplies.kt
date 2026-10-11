@@ -12,6 +12,14 @@ private const val REACTION_ODDS = 3
 /** Words in the owner's message that ask for something only the owner may allow: the reply asks first. */
 private val ASKS_FIRST = Regex("\\b(restart|delete|remove|install|deploy)\\b", RegexOption.IGNORE_CASE)
 
+/** Words in the owner's message that ask for a picture: the reply draws one (the image turn). */
+private val ASKS_FOR_PICTURE = Regex("\\b(draw|sketch|picture|image)s?\\b", RegexOption.IGNORE_CASE)
+
+/** The image turn's tool, its card's heading and its words once the picture is shown. */
+internal const val IMAGE_TOOL = "generate_image"
+private const val DRAWING = "Drawing what you asked"
+private const val DRAWN = "Here it is."
+
 /** The tools a reply's card may run (feature-chat's previews' chips). */
 private val TOOLS = listOf("file_read", "content_search", "shell")
 
@@ -23,8 +31,9 @@ internal const val ASKED = "That needs your OK first, so I've asked for it."
 
 /**
  * How a reply plays (design section 8.2): its card's headings, the tool it runs, the approval it raises before it
- * can go on, its words, and whether the agent reacts to the owner's message. A reply that asks ends with [ASKED],
- * and its [answer] is the words of the turn that runs once the owner grants it.
+ * can go on, its words, whether the agent reacts to the owner's message, and whether it draws a [picture], its
+ * image a row of the turn written while its tool runs. A reply that asks ends with [ASKED], and its [answer] is the
+ * words of the turn that runs once the owner grants it.
  */
 internal class ReplyPlan(
     val headings: List<String>,
@@ -32,12 +41,15 @@ internal class ReplyPlan(
     val ask: AskCard?,
     val answer: String,
     val react: Boolean,
+    val picture: Boolean = false,
 )
 
 /**
  * The reply to the owner's [words], [media] when they sent a photo or a file, chosen by [random], the Fermix's
- * seeded one, so that two runs of the demo answer the same messages alike. The answers show what the chat draws:
- * a list with bold and inline code, a fenced command, a table, a quote of the owner's words and a link.
+ * seeded one, so that two runs of the demo answer the same messages alike; words that ask for a picture, and for
+ * nothing the owner must allow first, are the image turn, which draws the same random numbers as any reply. The
+ * answers show what the chat draws: a list with bold and inline code, a fenced command, a table, a quote of the
+ * owner's words and a link.
  */
 internal fun replyPlan(
     random: Random,
@@ -51,12 +63,16 @@ internal fun replyPlan(
     val tool = if (random.nextInt(TOOL_ODDS) == 0) TOOLS[random.nextInt(TOOLS.size)] else null
     val asks = ASKS_FIRST.find(words)?.value?.lowercase()
     val card = asks?.let { verb -> askCard(requestId, quoted, verb) }
+    val react = random.nextInt(REACTION_ODDS) == 0
+    if (card == null && !media && ASKS_FOR_PICTURE.containsMatchIn(words)) {
+        return ReplyPlan(listOf(DRAWING), IMAGE_TOOL, ask = null, answer = DRAWN, react = react, picture = true)
+    }
     return ReplyPlan(
         headings = listOf("Reading what you asked", "Writing the answer"),
         tool = tool,
         ask = card,
         answer = if (card != null) "Done: “$quoted”." else answer,
-        react = random.nextInt(REACTION_ODDS) == 0,
+        react = react,
     )
 }
 

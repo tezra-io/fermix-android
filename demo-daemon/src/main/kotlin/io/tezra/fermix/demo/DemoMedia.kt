@@ -6,15 +6,17 @@ import java.nio.ByteBuffer
 import java.util.zip.CRC32
 import java.util.zip.DeflaterOutputStream
 
-// The blobs the demo's rows name: two photos, a link preview's thumbnail and a log, each made here as the demo
-// starts, from fixed numbers, so nothing is read from a file or the network and every run has the same bytes.
-// A blob's ref is its SHA-256 in hex, as a daemon's are (PROTOCOL.md "Media downloads").
+// The blobs the demo's rows name: two photos, a link preview's thumbnail, a log and the picture its image turn
+// draws, each made here as the demo starts, from fixed numbers, so nothing is read from a file or the network and
+// every run has the same bytes. A blob's ref is its SHA-256 in hex, as a daemon's are (PROTOCOL.md "Media
+// downloads").
 
 private const val PHOTO_WIDTH = 640
 private const val PHOTO_HEIGHT = 427
 private const val THUMB_WIDTH = 240
 private const val THUMB_HEIGHT = 160
 private const val LOG_LINES = 60
+internal const val DRAWING_SIDE = 512
 
 private const val BYTE = 0xFF
 private const val RED_SHIFT = 16
@@ -39,8 +41,8 @@ private const val WALL = 0x6E7074
 private const val WALL_HEIGHT = 18
 private const val WALL_STEP = 80
 private const val WALL_NOTCH = 4
-private const val SEA_FAR = 0x28608C
-private const val SEA_NEAR = 0x0E3052
+internal const val SEA_FAR = 0x28608C
+internal const val SEA_NEAR = 0x0E3052
 private const val PAPER = 0xF4F4F0
 private const val INK = 0x3C4048
 private const val MARGIN = 24
@@ -51,7 +53,7 @@ private const val LINE_HEIGHT = 8
 private val PNG_SIGNATURE = "89504e470d0a1a0a".hexToByteArray()
 
 /** A blob the demo's rows can name. */
-enum class DemoBlobName { SUNRISE, HARBOUR, PREVIEW, EXPORT_LOG }
+enum class DemoBlobName { SUNRISE, HARBOUR, PREVIEW, EXPORT_LOG, DRAWING }
 
 /** A blob the demo holds: its bytes, which it owns from its making on, and how a row names it. */
 class DemoBlob(
@@ -101,6 +103,13 @@ fun demoBlobs(): Map<DemoBlobName, DemoBlob> =
                 png(THUMB_WIDTH, THUMB_HEIGHT, ::preview),
             ),
         DemoBlobName.EXPORT_LOG to DemoBlob("document", "text/plain", "nightly-export.log", exportLog()),
+        DemoBlobName.DRAWING to
+            DemoBlob(
+                "image",
+                "image/png",
+                "drawing.png",
+                png(DRAWING_SIDE, DRAWING_SIDE, ::lighthouse),
+            ),
     )
 
 /** A sky going from night blue to dawn orange over a dark shore, with the sun on the horizon. */
@@ -142,7 +151,7 @@ private fun preview(
     return if (onLine && inMargins) INK else PAPER
 }
 
-private fun mix(
+internal fun mix(
     from: Int,
     to: Int,
     at: Float,

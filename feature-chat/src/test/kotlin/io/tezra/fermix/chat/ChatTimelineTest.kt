@@ -2,6 +2,8 @@ package io.tezra.fermix.chat
 
 import io.tezra.fermix.design.GroupPosition
 import io.tezra.fermix.design.Sender
+import io.tezra.fermix.protocol.HistoryMessage
+import io.tezra.fermix.protocol.MediaRef
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.RequestFailure
 import io.tezra.fermix.session.TimelineRow
@@ -49,6 +51,34 @@ class ChatTimelineTest {
         bubbles: List<LiveBubble> = emptyList(),
         card: LiveCard? = null,
     ) = LiveTurn(id, startedMono = 0L, startedWall = wallAt(0), card = card, bubbles = bubbles, ending = ending)
+
+    /**
+     * The agent's row [seq] with one image and no words, as the engine writes a turn's picture: answering the request
+     * [inReplyTo] (`in_reply_to`, its `client_msg_id`) with no metadata (channels/mobile.ex's persist_media); or naming
+     * [turnId] in its metadata, as a text row of a turn does.
+     */
+    private fun imageRow(
+        seq: Int,
+        inReplyTo: String? = null,
+        turnId: String? = null,
+    ): TimelineRow {
+        val metadata = turnId?.let { id -> buildJsonObject { put(TURN_ID_KEY, JsonPrimitive(id)) } }
+        val image = MediaRef("ab".repeat(32), "image", "image/png", 10L)
+        return TimelineRow.Message(
+            HistoryMessage(
+                seq.toULong(),
+                "assistant",
+                "",
+                at(1),
+                listOf(image),
+                inReplyTo = inReplyTo,
+                metadata = metadata,
+            ),
+        )
+    }
+
+    private val making =
+        LiveCard(0L, listOf("Reading what you asked"), listOf(LiveChip("generate_image", true, null)), speaking = true)
 
     @Test
     fun `a day header comes first, and one sender's messages within two minutes group`() {
@@ -264,5 +294,62 @@ class ChatTimelineTest {
         assertEquals("nightly-report", shown.single().job)
         assertNull(shown.single().turnId)
         assertTrue(chatItems(inputs()).isEmpty())
+    }
+
+    @Test
+    fun `a live turn's image takes its card's key, and the card opens again below it under the next`() {
+        val live = ChatLive(turns = listOf(liveTurn("turn-m9", card = making)))
+        val asked = userRow(1, "Draw a lighthouse", clientMsgId = "m9")
+        val before = oldestFirst(inputs(rows = listOf(asked), live = live))
+        assertEquals(listOf("day:2026-09-27", "out:m9", "card:turn-m9:1"), before.map { it.key })
+        val rows = listOf(asked, imageRow(2, inReplyTo = "m9"))
+        val items = oldestFirst(inputs(rows = rows, live = live))
+        assertEquals(listOf("day:2026-09-27", "out:m9", "card:turn-m9:1", "card:turn-m9:1.1"), items.map { it.key })
+        assertEquals(1, (items[2] as ChatItem.Message).message.media.size)
+        assertTrue(items[3] is ChatItem.Thinking)
+    }
+
+    @Test
+    fun `an image that names its turn in its metadata, and answers no request, takes the card's key too`() {
+        val live = ChatLive(turns = listOf(liveTurn("turn-m9", card = making)))
+        val rows = listOf(userRow(1, "Draw a lighthouse", clientMsgId = "m9"), imageRow(2, turnId = "turn-m9"))
+        val keys = oldestFirst(inputs(rows = rows, live = live)).map { it.key }
+        assertEquals(listOf("day:2026-09-27", "out:m9", "card:turn-m9:1", "card:turn-m9:1.1"), keys)
+    }
+
+    @Test
+    fun `the bubble the card becomes after the image keeps the card's next key, and the image its own`() {
+        val opened = LiveBubble(1, "Here it is.", 0, fromCard = true, openedAfter = 2uL)
+        val streaming = ChatLive(turns = listOf(liveTurn("turn-m9", bubbles = listOf(opened))))
+        val rows = listOf(userRow(1, "Draw a lighthouse", clientMsgId = "m9"), imageRow(2, inReplyTo = "m9"))
+        val keys = listOf("day:2026-09-27", "out:m9", "card:turn-m9:1", "card:turn-m9:1.1")
+        assertEquals(keys, oldestFirst(inputs(rows = rows, live = streaming)).map { it.key })
+        val sealed = opened.copy(sealedSeq = 3uL, sealedWall = wallAt(2))
+        val ending = TurnEnding(TurnOutcome.Completed, 9L, wallAt(2), 3uL)
+        val done = ChatLive(turns = listOf(liveTurn("turn-m9", ending = ending, bubbles = listOf(sealed))))
+        val landed = oldestFirst(inputs(rows = rows + agentRow(3, "Here it is.", minutes = 2), live = done))
+        assertEquals(keys, landed.map { it.key })
+        assertEquals("Here it is.", messages(landed).last().text)
+    }
+
+    @Test
+    fun `an image of another turn, or of none, is a plain row where it is, and the live card keeps its key`() {
+        val live = ChatLive(turns = listOf(liveTurn("turn-m9", card = making)))
+        val asked = userRow(4, "Draw a lighthouse", clientMsgId = "m9")
+        val rows = listOf(imageRow(1, inReplyTo = "m2"), imageRow(2, turnId = "turn-m2"), imageRow(3), asked)
+        val keys = oldestFirst(inputs(rows = rows, live = live)).map { it.key }
+        assertEquals(listOf("day:2026-09-27", "row:1", "row:2", "row:3", "out:m9", "card:turn-m9:1"), keys)
+    }
+
+    @Test
+    fun `an image that lands while a bubble streams takes no key the bubble had, and the next card counts it`() {
+        val streaming = LiveBubble(1, "Working on it", 0, fromCard = true, openedAfter = 1uL)
+        val turn = liveTurn("turn-m9", bubbles = listOf(streaming))
+        val rows = listOf(userRow(1, "Draw a lighthouse", clientMsgId = "m9"), imageRow(2, inReplyTo = "m9"))
+        val keys = oldestFirst(inputs(rows = rows, live = ChatLive(turns = listOf(turn)))).map { it.key }
+        assertEquals(listOf("day:2026-09-27", "out:m9", "card:turn-m9:2", "card:turn-m9:1"), keys)
+        val again = turn.copy(bubbles = listOf(streaming.copy(sealedSeq = 3uL)), card = making)
+        val next = oldestFirst(inputs(rows = rows, live = ChatLive(turns = listOf(again)))).map { it.key }
+        assertEquals("card:turn-m9:2.1", next.last())
     }
 }

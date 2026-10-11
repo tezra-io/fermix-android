@@ -101,13 +101,15 @@ internal fun liveItems(
     inputs: ChatInputs,
     rowSeqs: Set<ULong>,
     ascending: List<TimelineRow>,
+    media: TurnMedia = TurnMedia.NONE,
 ): List<ChatItem> =
     inputs.live.turns.flatMap { turn ->
         val pending = pendingBubbles(turn, rowSeqs)
+        val bubbles = turnBubbles(turn, rowSeqs, media)
         when {
-            turn.live -> turnBubbles(turn, rowSeqs) + listOfNotNull(cardItem(turn))
+            turn.live -> bubbles + listOfNotNull(cardItem(turn, media))
             pending.isEmpty() -> emptyList()
-            else -> turnBubbles(turn, rowSeqs) + listOfNotNull(endingItem(turn, requestFor(turn, inputs, ascending)))
+            else -> bubbles + listOfNotNull(endingItem(turn, requestFor(turn, inputs, ascending)))
         }
     }
 
@@ -119,12 +121,13 @@ internal fun liveItems(
 internal fun turnBubbles(
     turn: LiveTurn,
     rowSeqs: Set<ULong>,
+    media: TurnMedia = TurnMedia.NONE,
 ): List<ChatItem> =
     turn.bubbles
         .sortedBy { it.index }
         .filter { it.sealedSeq == null || it.sealedSeq !in rowSeqs }
         .mapNotNull { bubble ->
-            val key = liveBubbleKey(turn.turnId, bubble)
+            val key = liveBubbleKey(turn.turnId, bubble, media)
             when {
                 bubble.text.isNotEmpty() || bubble.sealedSeq == null -> ChatItem.Message(key, liveMessage(turn, bubble))
                 bubble.card != null -> ChatItem.Thinking(key, turn.turnId, bubble.card, turn.startedMono, turn.seed)
@@ -148,9 +151,16 @@ private fun liveMessage(
         turnId = turn.turnId,
     )
 
-/** The card of [turn] while it shows, keyed by the bubble it would become (cardKey). */
-internal fun cardItem(turn: LiveTurn): ChatItem? {
+/**
+ * The card of [turn] while it shows, keyed by the bubble it would become (cardKey), counting the pictures that took
+ * its place before ([media]).
+ */
+internal fun cardItem(
+    turn: LiveTurn,
+    media: TurnMedia = TurnMedia.NONE,
+): ChatItem? {
     val card = turn.card ?: return null
-    val next = (turn.bubbles.maxOfOrNull { it.index } ?: 0) + 1
-    return ChatItem.Thinking(cardKey(turn.turnId, next), turn.turnId, card, turn.startedMono, turn.seed)
+    val slot = nextSlot(turn)
+    val key = slotKey(turn.turnId, slot, media.countAt(turn.turnId, slot))
+    return ChatItem.Thinking(key, turn.turnId, card, turn.startedMono, turn.seed)
 }

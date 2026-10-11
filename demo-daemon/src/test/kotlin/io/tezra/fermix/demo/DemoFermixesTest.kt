@@ -88,12 +88,12 @@ class DemoFermixesTest {
     fun `the demo's pictures decode as PNGs of their sizes, and its log is text`() {
         val blobs = demoBlobs()
         val sizes =
-            listOf(DemoBlobName.SUNRISE, DemoBlobName.HARBOUR, DemoBlobName.PREVIEW).map { name ->
+            listOf(DemoBlobName.SUNRISE, DemoBlobName.HARBOUR, DemoBlobName.PREVIEW, DemoBlobName.DRAWING).map { name ->
                 val image = checkNotNull(ImageIO.read(ByteArrayInputStream(blobs.getValue(name).bytes())))
                 image.width to image.height
             }
 
-        assertEquals(listOf(640 to 427, 640 to 427, 240 to 160), sizes)
+        assertEquals(listOf(640 to 427, 640 to 427, 240 to 160, 512 to 512), sizes)
         val log = blobs.getValue(DemoBlobName.EXPORT_LOG)
         assertEquals("text/plain", log.mime)
         assertTrue(

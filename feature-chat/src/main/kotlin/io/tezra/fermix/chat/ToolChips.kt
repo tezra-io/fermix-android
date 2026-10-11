@@ -97,21 +97,20 @@ private val VERB_WORDS: Map<ToolVerb, Int> =
 internal fun verbWords(verb: ToolVerb): String = stringResource(VERB_WORDS.getValue(verb))
 
 /**
- * The card's tool chips (design section 13.5): the latest two, stacked, each 28 dp with its 16 dp glyph and
- * verb, a thin arc of the ink turning while it runs and a check in the secondary text once it stopped; "+n more"
- * for the rest. A chip scales in from 0.92 as it lands (section 13.1), at once under reduce-motion. TalkBack reads
- * each as "{verb}, started" or "{verb}, finished" (section 13.8).
+ * The card's tool chips (design section 13.5), each with the place it started in, the header's running tool not
+ * among them (cardHeader): the latest two, stacked, each 28 dp with its 16 dp glyph and verb, a thin arc of the ink
+ * turning while it runs and a check in the secondary text once it stopped; "+n more" for the rest. A chip scales in
+ * from 0.92 as it lands (section 13.1), the header's tool too as it stops, at once under reduce-motion. TalkBack
+ * reads each as "{verb}, started" or "{verb}, finished" (section 13.8).
  */
 @Composable
 internal fun ToolChips(
-    chips: List<LiveChip>,
+    chips: List<IndexedValue<LiveChip>>,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // Keyed by the place each started in, so a chip that slides up stays itself and only a new one scales in.
         chips
-            .withIndex()
-            .toList()
             .takeLast(SHOWN_CHIPS)
             .forEach { (index, chip) -> key(index) { ToolChip(chip) } }
         val more = chips.size - SHOWN_CHIPS

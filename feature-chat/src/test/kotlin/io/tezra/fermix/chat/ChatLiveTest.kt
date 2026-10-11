@@ -50,7 +50,7 @@ class ChatLiveTest {
         assertEquals(12_000L, shown.thoughtMs)
         assertEquals(listOf(LiveChip("shell", running = false, status = "ok")), shown.tools)
         val went = LiveCard(0L, listOf("Reading the logs", "Checking the limits"), shown.tools, speaking = false)
-        assertEquals(LiveBubble(1, "The worker restarts", 0, true, 7uL, wallAt(0), went), shown.bubbles.single())
+        assertEquals(LiveBubble(1, "The worker restarts", 0, true, 7uL, wallAt(0), went, 1uL), shown.bubbles.single())
         assertEquals(Candidate.Scope.LAN, shown.path)
         assertEquals(TurnOutcome.Completed, shown.ending?.outcome)
         assertEquals("m1", shown.clientMsgId)
@@ -176,4 +176,22 @@ class ChatLiveTest {
     }
 
     private fun agentMessage() = ShownMessage(Sender.Agent, "The worker restarts", null, Delivery.NONE)
+
+    @Test
+    fun `a bubble keeps the newest row the chat had kept as it opened, after which a row of its turn came later`() {
+        val live =
+            listOf(
+                effect(TurnEffect.CardShown(turn)) to moment(0L, newest = 1),
+                effect(TurnEffect.BubbleOpened(turn, 1, fromCard = true)) to moment(1_000L, newest = 4),
+                effect(TurnEffect.BubbleSealed(turn, 1, 6uL)) to moment(2_000L, newest = 5),
+            ).fold(ChatLive()) { folded, (event, at) -> folded.after(event, at) }
+        assertEquals(
+            4uL,
+            live.turns
+                .single()
+                .bubbles
+                .single()
+                .openedAfter,
+        )
+    }
 }

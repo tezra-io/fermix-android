@@ -413,8 +413,19 @@ clock to the moment's end, then the idle until the screen leaves, at most 158 br
 minutes), after which the mark rests. Time out of sight counts for nothing: the first frame back moves the idle on
 100 ms at most, and it breathes on from where it was. Under Remove animations the moment is made at its last frame,
 so the first frame drawn is that one, and nothing breathes. `TwoDotMark` is the thinking card's alone: two dots
-orbiting in the ink. `SpecimenMark` draws the mark's fixed poses: the drop's beats, an idle blink's middle, the
-happy eyes and the hop's top.
+orbiting in the ink over a halo of the ink (the owner, 2026-10-10), a radial gradient 28 dp across from 14 % of the
+ink at its middle in light mode, 12.5 % in dark (`haloPeak`: dark mode's light ink lifts near-black faster, and the
+two steps are alike in CIELAB lightness, 11.9 and 11.8), to nothing at its edge (`haloAlphaAt`), breathing between
+0.92 and 1.08 of its size on b = 0.5 + 0.5·sin(2πt / 3,800 ms), or 1,900 ms while a tool runs. One clock moves the
+dots and the halo (`TwoDotMotion`), on the frames, each moving it on by its time, 100 ms at most, so the breath
+never jumps as a tool starts or stops; it is read as the mark draws, three draws a frame and the halo's image made
+once per size and mode (`drawWithCache`), so a frame recomposes nothing, and it stops at its pose after half an
+hour drawn. The halo's gradient is drawn once, on the CPU, into that image (`haloImage`), which each frame draws
+scaled: the gradient drawn by the GPU each frame faulted the emulator's renderer (`swiftshader_indirect`), all its
+threads reading past a table within seconds of the card, and the emulator died with them. Under Remove animations,
+and in a preview, the mark holds the canon's pose and the halo its middle (`TwoDotMarkAt` draws a pose).
+`SpecimenMark` draws the mark's fixed poses: the drop's beats, an idle blink's middle,
+the happy eyes and the hop's top; `SpecimenTwoDotMark` the halo at the foot, middle and top of a breath.
 
 The rest of onboarding's motion (the M51 update's 7.2 and 7.4) is data beside the mark's, one table a moment, in
 `OnboardingMotion.kt` for the screen changes and the screens before the ceremony and `CeremonyMotion.kt` for the
@@ -1379,10 +1390,34 @@ minutes group with 6 dp inner corners, a message with no time grouped as if it c
 lands rises 12 dp, a tool chip scales in from 0.92, a streaming bubble's lines grow by
 `animateContentSize`, and send ↔ stop turn into each other; all of it at once under reduce-motion. The
 working indicator is core-session's `indicatorLine` on a seed per turn (`cardLine`), "Thinking" while
-core-session says the daemon speaks on the card (`SessionEvent.Turn.daemonSpeaking`),
-cross-faded in 200 ms, beside the orbiting two-dot mark, which moved from onboarding to `design`; under it
-the latest two headings and two tool chips with "+n more", worded by the verb map (`toolVerb`). TalkBack
-hears "Fermix is thinking" once, from one polite live region, and never the phrase. An answer renders with
+core-session says the daemon speaks on the card (`SessionEvent.Turn.daemonSpeaking`), and the newest running
+tool's verb in its place while one runs (`cardHeader`, the owner's of 2026-10-10), cross-faded in 200 ms, beside
+the orbiting two-dot mark, which moved from onboarding to `design`; under it the latest two headings and two
+chips of the other tools with "+n more", worded by the verb map (`toolVerb`), the header's tool landing among them
+in the place it started in, scaled in, once it stops. TalkBack hears "Fermix is thinking" once, from one polite
+live region, which a card opened again below its turn's picture leaves out (`isBelowPicture`), so a picture never
+makes the turn say it again; the verb reads "{verb}, started" when the card is focused, and is never announced. A
+picture of a turn the chat remembers, an agent's row with media that answers the turn's request
+(`in_reply_to`, the request's `client_msg_id`, as the engine writes a tool's picture, with no metadata) or names
+the turn in `metadata.turn_id`, takes the key of the card it came under (`turnMedia`), so the card morphs into it
+and opens again below it under the next key, which the answer's bubble keeps when the card becomes it (a
+`thought_done` before the answer puts the card away instead, as the demo's image turn does, and the answer is a
+bubble of its own); the bubble notes the newest row kept as it opens (`LiveBubble.openedAfter`, which the app's
+fold reads from the database), and a picture kept by then took the place of the card that bubble came from. The
+morph into a picture is cut to its bounds, the picture fading in from the morph's first frame as the card's words
+fade out in its first third, so one or the other is drawn on every frame and the list never goes blank as the
+bounds grow (Task 23's second review). The bounds grow from the card's height to the picture's on the morph's clock
+in the lookahead pass as on screen (`growing`: the chat lies in the media viewer's `SharedTransitionLayout`, by
+whose lookahead the list places its rows), so the rows above follow the picture's top frame by frame instead of
+jumping at once to where the grown picture's top will be, over a blank band the phone showed for a frame; and while
+a picture lands (300 ms, `rememberPictureLanding`) no row slides to its new place, so the picture never draws over
+the request above it; the card that opens again below it fades in with the morph, as any item that lands does
+(`PictureLandingTest` samples every frame of it, in a `SharedTransitionLayout` as the screen lays it out). An image the
+daemon has just brought (`MediaImage.Shown.fresh`) comes in over its placeholder from unseen and 4 % large to whole
+and its own size in 400 ms on the emphasized decelerate (`rememberReveal`), its layer dropped once the image is
+whole; one the phone held already, as the chat opens or a cell scrolls back to it, is drawn plainly, and every one at
+once under reduce-motion. No render effect: a blur, as the loader draws its reveal, crashed the emulator's renderer,
+as the halo's GPU gradient had (Task 23's review). An answer renders with
 mikepenz's multiplatform-markdown-renderer 0.45.0 (`-m3` and `-code`): as it streams, into
 `rememberStreamingMarkdownState`, which a `replace` snapshot starts again, with the beam cursor after the
 last paragraph's last glyph, or after the "code…" chip of a fence still open; sealed, parsed as it composes.
@@ -1705,6 +1740,18 @@ owner to settle:
   queued. Whether protocol v2 ends such a turn on the wire is a question for the owner; a `turn_done` that
   does come after it is late, and ignored.
 - The running tool chip's glyph is 16 dp in a 22 dp ring, as section 13.5 says; the canon draws 11 dp in 20.
+- While a tool runs the card's header names it, the newest running one, in the phrase's place, and it is no chip
+  until it stops (the owner, 2026-10-10): section 13.5 lists every tool as a chip under the line, which would name
+  the tool twice.
+- A picture a turn writes stands where its card showed, under the card's key, and the card opens again below it
+  (the owner, 2026-10-10): sections 8.2 and 13.5 have the card become the turn's answer alone and say nothing of a
+  row the turn writes while its card shows, which the list would otherwise place by its seq above the card. Under
+  TalkBack the card opened below a picture is no live region, so a picture never has "Fermix is thinking" said
+  again (a card opened below a sealed bubble still says it, as before this task), and the picture's arrival is not
+  announced: the turn's final words are, as they come, and section 13.5 names no
+  announcement for media. A reader whose focus was on the card as the picture took its place loses it, as the
+  focused card leaves the list, and TalkBack moves it on by its own rule; which node should take it is the owner's
+  to settle.
 - The scroll pill floats over the list, as the canon's `.sp` does, and covers what scrolls under it; no
   padding is added while it shows, which would move the list as the owner scrolls off the bottom.
 - The unreachable banner is 48 dp tall, section 13.8's least target, where the canon's line is 28 dp; the
@@ -2183,8 +2230,12 @@ next one. A message with "restart", "delete", "remove", "install" or "deploy" in
 (60 s, as the engine gives one) and its turn ends saying so; the owner's answer is a `/confirm` or `/deny`
 command, answered inline in the engine's words ("Sandbox updated. Access granted — resuming your request." or
 "Sandbox change denied — the pending grant was discarded."), and a grant runs the request again as a turn of
-its own (`grant-resume-N`), which streams the answer. suj-mbp's waiting card works the same way. A photo or a
-file is uploaded as to a daemon (4 at once, 8 MiB each, which `hello_ack`'s `max_media_bytes` says, so the app
+its own (`grant-resume-N`), which streams the answer. suj-mbp's waiting card works the same way. A message that
+asks for a picture ("draw", "sketch", "picture" or "image", with no photo sent and nothing to allow first) is the
+image turn: its card's heading "Drawing what you asked", `generate_image` run for 1.5 s, its drawing (a lighthouse,
+512 × 512, made like the demo's other pictures) written as the engine writes one, a row answering the request
+(`in_reply_to`, no metadata), while the tool runs, the tool's stop, and "Here it is." streamed and sealed. A photo
+or a file is uploaded as to a daemon (4 at once, 8 MiB each, which `hello_ack`'s `max_media_bytes` says, so the app
 refuses a larger file itself, and 32 MiB in all, past which an upload is refused `store_quota_exceeded`: the
 demo keeps them in the app's own heap) and acknowledged; a message naming an attachment the demo does not hold
 is accepted, then fails (`attachment_unavailable`). `/stop` ends every turn ("cancelled"), `cancel` the one;
@@ -2863,6 +2914,10 @@ repository does not track, so these files are not on GitHub:
   module, above). It is in the owner's design-docs repository, under `fermix/`, and not yet in an engine
   checkout's `docs/design/`.
 - `MILESTONE_51_ANDROID_APP_PUBLISHING_CHECKLIST.md`: getting to Play.
+
+The thinking card's breathing halo takes its idea from libraries.dev's thinking orbs, and an image's reveal from its
+image loader, a fade and a settling scale here where it blurs (both MIT); the ideas alone, no code or asset of
+theirs.
 
 ## Licence
 

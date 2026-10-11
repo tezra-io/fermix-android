@@ -70,12 +70,30 @@ internal fun indicatorPools(): IndicatorPools {
     return remember(opening, first, second) { IndicatorPools(opening, first.toList(), second.toList()) }
 }
 
+/** What the card's header names, the newest running tool, none while none runs; and its chips, by their places. */
+internal data class CardHeader(
+    val tool: String?,
+    val chips: List<IndexedValue<LiveChip>>,
+)
+
+/**
+ * The card's header and chips (the owner, 2026-10-10): the newest running tool is the header's, named by its verb
+ * in the phrase's place, and is no chip; every other tool is a chip in the place it started in, so the header's
+ * lands among them in its own place as it stops, and the next one still running takes the header.
+ */
+internal fun cardHeader(card: LiveCard): CardHeader {
+    val running = card.chips.indexOfLast { it.running }
+    return CardHeader(card.chips.getOrNull(running)?.tool, card.chips.withIndex().filter { it.index != running })
+}
+
 /**
  * The thinking card (design sections 8.2 and 13.5): flat and borderless where the answer will be; the orbiting
- * mark and one shimmering line, "Thinking" or a phrase by the time since `accepted` (cardLine), cross-faded in
- * 200 ms (at once under reduce-motion); the daemon's latest two headings at 70 %; its tool chips. TalkBack hears
- * "Fermix is thinking" once, as the card appears, and nothing as the phrase changes; the headings are read when
- * the card is focused. [nowMono] is the clock the session's fold read the turn's start on.
+ * mark over its breathing halo and one shimmering line, the newest running tool's verb while one runs, else
+ * "Thinking" or a phrase by the time since `accepted` (cardLine), cross-faded in 200 ms (at once under
+ * reduce-motion); the daemon's latest two headings at 70 %; the other tools' chips (cardHeader). TalkBack hears
+ * "Fermix is thinking" once, as the turn's card appears, and nothing as the line changes, nor as the card opens again
+ * below a picture that took its place (isBelowPicture); the verb reads "{verb}, started" and the headings are read
+ * when the card is focused. [nowMono] is the clock the session's fold read the turn's start on.
  */
 @Composable
 internal fun ThinkingCard(
@@ -92,43 +110,65 @@ internal fun ThinkingCard(
             now = nowMono()
         }
     }
-    val line = cardLine(item.card, item.startedMono, item.seed, now, pools)
+    val header = cardHeader(item.card)
+    val verb = header.tool?.let { verbWords(toolVerb(it)) }
+    val line =
+        if (verb != null) {
+            HeaderLine(verb, stringResource(R.string.chat_chip_started, verb))
+        } else {
+            HeaderLine(cardLine(item.card, item.startedMono, item.seed, now, pools), spoken = null)
+        }
     Column(
         modifier = modifier.padding(horizontal = 12.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        IndicatorHeader(line)
+        IndicatorHeader(line, toolRunning = header.tool != null, announced = !isBelowPicture(item.key))
         Headings(item.card.headings)
-        if (item.card.chips.isNotEmpty()) ToolChips(item.card.chips, Modifier.padding(top = 2.dp))
+        if (header.chips.isNotEmpty()) ToolChips(header.chips, Modifier.padding(top = 2.dp))
     }
 }
 
+/** The header's line, and what TalkBack reads of it: a running tool's "{verb}, started", nothing of a phrase. */
+private data class HeaderLine(
+    val words: String,
+    val spoken: String?,
+)
+
 @Composable
-private fun IndicatorHeader(line: String) {
+private fun IndicatorHeader(
+    line: HeaderLine,
+    toolRunning: Boolean,
+    announced: Boolean,
+) {
     val announcement = stringResource(R.string.chat_thinking_announcement)
     val fade: FiniteAnimationSpec<Float> =
         if (LocalReducedMotion.current) snap() else tween(FermixMotion.INDICATOR_CROSS_FADE_MILLIS)
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        // TalkBack's one line, polite, said as the card appears: it never changes, so it is never said again.
+        // TalkBack's one line, polite, said as the turn's card appears: it never changes, so it is never said again,
+        // and a card opened again below a picture, the same turn's, only reads it when focused.
         Box(
             modifier =
                 Modifier.clearAndSetSemantics {
                     contentDescription = announcement
-                    liveRegion = LiveRegionMode.Polite
+                    if (announced) liveRegion = LiveRegionMode.Polite
                 },
-        ) { TwoDotMark() }
+        ) { TwoDotMark(toolRunning = toolRunning) }
         val colors = LocalFermixColors.current
         val peak = rememberShimmerPeak()
         Crossfade(targetState = line, animationSpec = fade, label = "indicator line") { shown ->
-            // The phrase is for the eye: hidden from TalkBack, so a new one says nothing.
+            // A phrase is for the eye, hidden from TalkBack; a verb is read as its chip's would be, when focused.
+            // Neither is a live region, so a new line says nothing.
             Text(
-                shown,
+                shown.words,
                 style = FermixType.label,
                 color = colors.ink,
                 modifier =
                     Modifier
                         .shimmer(peak, colors.inkTertiary, colors.ink)
-                        .semantics { hideFromAccessibility() },
+                        .semantics {
+                            val spoken = shown.spoken
+                            if (spoken != null) contentDescription = spoken else hideFromAccessibility()
+                        },
             )
         }
     }

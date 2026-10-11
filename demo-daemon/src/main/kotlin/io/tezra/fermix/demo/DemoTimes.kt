@@ -3,11 +3,11 @@ package io.tezra.fermix.demo
 /**
  * Every duration the demo plays, in milliseconds, in one table: the pauses that let each of Connecting's
  * phases show, the computer's approval while Verify shows its code, a pairing window's life, a reply's thinking
- * card, its tools and its words streamed in, the long turn of the chat that is thinking, an approval's life, the
- * latency a pong shows, and the bounds a daemon holds a connection to (PROTOCOL.md "Transport"). A test plays them
- * on a virtual clock; nothing of the demo reads the clock to decide anything else. Two are the demo's own, not the
- * engine's (README, "The demo", departures): the scripted card's [approvalTtl], and the [reach] a dial pauses for
- * while its Fermix has a pairing window open.
+ * card, its tools, the image turn's picture and its words streamed in, the long turn of the chat that is thinking,
+ * an approval's life, the latency a pong shows, and the bounds a daemon holds a connection to (PROTOCOL.md
+ * "Transport"). A test plays them on a virtual clock; nothing of the demo reads the clock to decide anything else.
+ * Two are the demo's own, not the engine's (README, "The demo", departures): the scripted card's [approvalTtl], and
+ * the [reach] a dial pauses for while its Fermix has a pairing window open.
  */
 data class DemoTimes(
     /** A dial's pause before its socket opens, while a pairing window is open: Connecting's "Reaching". */
@@ -28,6 +28,8 @@ data class DemoTimes(
     val heading: Long = 800,
     /** A tool's run, from its chip's start to its stop. */
     val tool: Long = 900,
+    /** The image turn's picture in the making: from generate_image's start to its image's row, then its stop. */
+    val image: Long = 1_500,
     /** A reply's words, streamed in deltas over this long. */
     val streaming: Long = 2_000,
     /** The least time between two deltas: PROTOCOL.md's "at most every 100 ms". */

@@ -59,7 +59,8 @@ private fun gapAbove(
  * The timeline (design section 13.5): [items] newest first, drawn from the bottom, each keyed so a bubble
  * stays itself from the outbox to its row and from live to sealed, and the thinking card and the answer it
  * becomes are one item that morphs (Morph). What lands at the bottom rises in (Rising); what scrolls into view
- * does not. Under reduce-motion nothing moves.
+ * does not; while a picture takes its card's place no item slides (itemSlide), and the card that opens below it
+ * fades in as the picture does. Under reduce-motion nothing moves.
  */
 @Composable
 internal fun Timeline(
@@ -70,6 +71,7 @@ internal fun Timeline(
 ) {
     val reduced = LocalReducedMotion.current
     val fresh = rememberFreshKeys(items)
+    val landing = rememberPictureLanding(items, context.nowMono)
     LazyColumn(
         state = state,
         reverseLayout = true,
@@ -80,7 +82,12 @@ internal fun Timeline(
             index,
             item,
             ->
-            val motion = if (reduced) Modifier else Modifier.animateItem()
+            val motion =
+                if (reduced) {
+                    Modifier
+                } else {
+                    Modifier.animateItem(placementSpec = itemSlide(landing))
+                }
             val gap = Modifier.padding(top = gapAbove(items, index))
             // A focused message's ring lies 2 to 4 dp past its bubble, over the item 2 dp away in its group, which a
             // reversed list draws after it: the item is raised over its neighbours while the ring shows.

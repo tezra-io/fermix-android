@@ -87,9 +87,17 @@ private suspend fun imageOf(
     edge: Int,
 ): MediaImage =
     when (blob) {
-        is Blob.Bytes -> decodeThumbnail(blob.bytes, edge)?.let { MediaImage.Shown(it) } ?: MediaImage.Missing
-        Blob.Gone -> MediaImage.Gone
-        is Blob.InFile, Blob.Missing -> MediaImage.Missing
+        is Blob.Bytes -> {
+            decodeThumbnail(blob.bytes, edge)?.let { MediaImage.Shown(it, blob.fetched) } ?: MediaImage.Missing
+        }
+
+        Blob.Gone -> {
+            MediaImage.Gone
+        }
+
+        is Blob.InFile, Blob.Missing -> {
+            MediaImage.Missing
+        }
     }
 
 /**

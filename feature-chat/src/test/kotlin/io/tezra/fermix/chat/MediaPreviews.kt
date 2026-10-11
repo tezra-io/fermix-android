@@ -149,20 +149,21 @@ private val ACTIONS =
         media = MEDIA_ACTIONS,
     )
 
-/** The screen over [items], newest first, with [media] and [field] in the composer. */
+/** The screen over [items], newest first, with [media] and [field] in the composer, a turn running while [thinking]. */
 private fun ui(
     items: List<ChatItem>,
     media: MediaUi = MediaUi(),
     field: String = "",
+    thinking: Boolean = false,
 ): ChatUi =
     ChatUi(
         state =
             ChatScreenState(
-                header = ChatHeader(sample(), CONNECTED, thinking = false),
+                header = ChatHeader(sample(), CONNECTED, thinking = thinking),
                 banner = null,
                 items = items,
                 name = sample().title,
-                turnRuns = false,
+                turnRuns = thinking,
                 commands = COMMANDS,
                 newestSeq = items.size.toULong(),
                 unseen = 0,
@@ -446,6 +447,39 @@ fun ImagesFivePreview() {
     // The 2 × 2 at 4:3, its last cell "+1".
     val five = said("r2", Sender.Agent, "", 31, (4..8).map { image("nas-$it") })
     FermixPreviewTheme { ChatScreen(ui(listOf(five, ASKED) + EARLIER), ACTIONS) }
+}
+
+@FermixPreviews
+@Composable
+fun ImageRevealPreview() {
+    // A picture as it comes in (the owner, 2026-10-10), held half its way: part seen, a little large still.
+    val one = said("r2", Sender.Agent, "", 31, listOf(image("rack")))
+    FermixPreviewTheme { ChatScreen(ui(listOf(one, ASKED) + EARLIER), ACTIONS, held = PreviewHeld(reveal = 0.5f)) }
+}
+
+/** The card of the turn that drew the rack, under its picture: generate_image done, a phrase in the header. */
+private val DRAWING_CARD =
+    ChatItem.Thinking(
+        key = "card:turn-m4:1.1",
+        turnId = "turn-m4",
+        card =
+            LiveCard(
+                shownMono = CLOCK - 4_000L,
+                headings = listOf("Drawing what you asked"),
+                chips = listOf(LiveChip("generate_image", running = false, status = "ok")),
+                speaking = true,
+            ),
+        startedMono = CLOCK - 4_000L,
+        seed = 7L,
+    )
+
+@FermixPreviews
+@Composable
+fun ImageUnderCardPreview() {
+    // A picture the turn made stands where its card showed, under the card's key, and the card opens again below;
+    // the turn still runs: Stop in the composer, "thinking…" in the bar.
+    val drawn = said("card:turn-m4:1", Sender.Agent, "", 31, listOf(image("rack")))
+    FermixPreviewTheme { ChatScreen(ui(listOf(DRAWING_CARD, drawn, ASKED) + EARLIER, thinking = true), ACTIONS) }
 }
 
 /** The owner's image in the outbox, which has no time yet, sent [sent] of the way, with [line] under it. */

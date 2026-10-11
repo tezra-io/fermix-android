@@ -15,6 +15,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertInstanceOf
@@ -24,11 +25,11 @@ import java.util.Base64
 
 // The debug app's demo (demo-daemon) against core-session's own pairing and session, on a virtual clock: the
 // ceremony to a stored record, a window past its life, each Fermix's script replayed and an older page, a reply as
-// it plays on a route that streams and on one that does not, a reconnect that pulls what was written while the
-// phone was away, a restarted demo keeping the phone's cursors and beginning again only what had not finished, a
-// row's media downloaded whole, an approval granted and one denied as the engine answers them, a stop, the
-// diagnostics line, and a seed that plays two runs alike. A change to protocol or to core-session's surface that
-// the demo no longer answers turns one of these red.
+// it plays on a route that streams and on one that does not, a picture asked for and its image a row of the turn, a
+// reconnect that pulls what was written while the phone was away, a restarted demo keeping the phone's cursors and
+// beginning again only what had not finished, a row's media downloaded whole, an approval granted and one denied
+// as the engine answers them, a stop, the diagnostics line, and a seed that plays two runs alike. A change to
+// protocol or to core-session's surface that the demo no longer answers turns one of these red.
 
 /** DemoTimes' defaults, as the debug app plays them. */
 private const val REACH_MS = 900L
@@ -37,6 +38,7 @@ private const val APPROVE_MS = 7_500L
 private const val THINKING_MS = 1_200L
 private const val DELTA_MS = 120L
 private const val STREAM_MS = 2_000L
+private const val IMAGE_MS = 1_500L
 private const val WINDOW_MS = 120_000L
 
 /** The rows of a fresh profile's first page (core-session's BACKWARD_PAGE_LIMIT). */
@@ -150,6 +152,48 @@ class DemoDaemonTest {
             }
             demo.session.close()
         }
+
+    @Test
+    fun `words that ask for a picture run generate_image, its image a row of the turn's, then the answer streamed`(
+        @TempDir into: File,
+    ) = runTest {
+        val demo = DemoHarness(this)
+        demo.announcer.clock = { demo.now }
+        demo.open(demo.demo.fermixes[2])
+        demo.caughtUp()
+        val before = demo.announcer.rows.size
+        demo.say("m1", "Draw me a lighthouse")
+        assertEquals(TurnOutcome.Completed, demo.ended("turn-m1"))
+
+        val effects = demo.effectsOf("turn-m1")
+        val kinds = effects.map { it.second::class.simpleName }.distinct()
+        val card = listOf("CardShown", "CardText", "ToolChip", "CardRemoved")
+        assertEquals(card + listOf("BubbleOpened", "BubbleText", "BubbleSealed", "TurnEnded"), kinds)
+        val chips = effects.mapNotNull { (at, effect) -> (effect as? TurnEffect.ToolChip)?.let { at to it } }
+        val tools = chips.map { it.second.tool to it.second.phase }
+        assertEquals(listOf("generate_image" to ToolPhase.START, "generate_image" to ToolPhase.STOP), tools)
+        val written = demo.announcer.rows.drop(before)
+        val image =
+            written
+                .filterIsInstance<TimelineRow.Message>()
+                .map { it.message }
+                .single { it.role == "assistant" }
+        assertEquals(listOf("image"), image.mediaRefs.map { it.kind })
+        // As the engine writes a turn's picture (channels/mobile.ex's persist_media): its request, no metadata.
+        assertEquals("m1", image.inReplyTo)
+        assertNull(image.metadata)
+        val shownAt = checkNotNull(demo.announcer.announcedAt[image.serverSeq])
+        val (startedAt, stoppedAt) = chips.map { it.first }
+        assertTrue(shownAt - startedAt in IMAGE_MS..IMAGE_MS + DELTA_MS, "image ${shownAt - startedAt}ms after start")
+        assertTrue(shownAt <= stoppedAt, "the image is shown while its tool runs")
+        assertEquals("Here it is.", wordsOf(written.last()))
+        assertTrue(written.last().serverSeq > image.serverSeq, "the answer is the turn's last row")
+        val ref = image.mediaRefs.single()
+        val file = File(into, ref.ref)
+        val fetched = assertInstanceOf<OneShot.Answered<FetchedMedia>>(demo.session.fetchMedia(ref.ref, file))
+        assertEquals(ref.sha256, fetched.value.sha256)
+        demo.session.close()
+    }
 
     @Test
     fun `a reply on a model that does not stream sends only its ending, and a pick applies from the next turn`() =
