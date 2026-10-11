@@ -134,8 +134,9 @@ class PhoneReadsDeviceTest {
         val uris = outsideFiles() + ownProvider()
         uris.forEachIndexed { at, uri ->
             val into = File(directory, "prepared-$at")
-            assertRefused(uri) { runBlocking { pipeline.prepare(picked(uri), asFile = true, into) } }
-            assertRefused(uri) { runBlocking { pipeline.prepare(picked(uri, PickedKind.IMAGE), asFile = false, into) } }
+            assertRefused(uri) { runBlocking { pipeline.prepare(picked(uri), asFile = true, into, SEND_LIMIT_BYTES) } }
+            val image = picked(uri, PickedKind.IMAGE)
+            assertRefused(uri) { runBlocking { pipeline.prepare(image, asFile = false, into, SEND_LIMIT_BYTES) } }
             assertRefused(uri) { runBlocking { pipeline.copyAtMost(picked(uri), into, LANDING_MAX_BYTES) } }
             assertFalse("$uri was copied", into.exists())
         }
@@ -162,7 +163,7 @@ class PhoneReadsDeviceTest {
         val described = checkNotNull(runBlocking { pipeline.describe(uri, PickedFrom.CAMERA) }) { "$uri was not read" }
         assertEquals("capture.png" to photo.length(), described.name to described.sizeBytes)
         val into = File(directory, "prepared")
-        runBlocking { pipeline.prepare(described, asFile = true, into) }
+        runBlocking { pipeline.prepare(described, asFile = true, into, SEND_LIMIT_BYTES) }
         assertArrayEquals(photo.readBytes(), into.readBytes())
         // A landing copy reads it too, the whole of it within the limit, and a byte past a limit it is over.
         val landed = File(directory, "landed")

@@ -188,6 +188,14 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **A picture whose few bytes say it is huge is not decoded.** One another app shares, pastes or types in, or
   one picked, that says it is past a quarter of a gigapixel, draws no thumbnail in the tray and is not sent, refused
   before a pixel is decoded, so it holds no thread for the minutes its pixels would take.
+- **A file that goes on past the limit does not fill the phone.** A document, a video or a photo sent as a file is
+  copied for Send no further than a byte past the computer's size limit, once the computer has said it, so one whose
+  app says it is small, or says nothing of its size, and then hands over more is refused as too big, with nothing of
+  it sent and nothing of it kept on the phone; one at the limit or under it still goes, its size said or not. A send
+  that waits on an app that stopped handing its file over is let go when the chat closes, though an app that ignores
+  that can keep the copy's thread waiting until it answers. A file whose app hands it over in fits, with nothing to
+  read for a moment, is waited for, a minute at most between its bytes, as it is sent and as it lands from a paste,
+  the keyboard or a share.
 - **A device test that hangs fails by its name.** Every instrumented test has three minutes, and the wait for the
   screen to settle after a rotation or a fold has fifteen seconds, so a run that would hang fails the test instead.
 - **Who is paired and whether the app is locked are read as written.** Anything that reads the paired Fermix

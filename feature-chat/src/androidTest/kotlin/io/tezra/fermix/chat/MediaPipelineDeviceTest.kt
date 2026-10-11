@@ -96,7 +96,7 @@ class MediaPipelineDeviceTest {
         assertTrue("the photo holds its GPS", before.getLatLong(FloatArray(2)))
         assertEquals(MAKE, before.getAttribute(ExifInterface.TAG_MAKE))
         val into = File(directory, "prepared")
-        val prepared = runBlocking { pipeline.prepare(picked(photo), asFile = false, into) }
+        val prepared = runBlocking { pipeline.prepare(picked(photo), asFile = false, into, SEND_LIMIT_BYTES) }
         assertEquals(Prepared("image/jpeg", "IMG_2041.jpg"), prepared)
         val after = ExifInterface(into.path)
         assertFalse("no GPS", after.getLatLong(FloatArray(2)))
@@ -111,7 +111,7 @@ class MediaPipelineDeviceTest {
     fun an_image_past_the_long_edge_cap_goes_at_it_with_its_aspect_kept() {
         val photo = photoWithExif(LARGE_WIDTH, LARGE_HEIGHT)
         val into = File(directory, "prepared")
-        runBlocking { pipeline.prepare(picked(photo), asFile = false, into) }
+        runBlocking { pipeline.prepare(picked(photo), asFile = false, into, SEND_LIMIT_BYTES) }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(into.path, bounds)
         assertEquals(LONG_EDGE_PX to CAPPED_HEIGHT, bounds.outWidth to bounds.outHeight)
@@ -121,7 +121,7 @@ class MediaPipelineDeviceTest {
     fun sent_as_a_file_an_image_goes_as_its_own_bytes() {
         val photo = photoWithExif()
         val into = File(directory, "prepared")
-        val prepared = runBlocking { pipeline.prepare(picked(photo), asFile = true, into) }
+        val prepared = runBlocking { pipeline.prepare(picked(photo), asFile = true, into, SEND_LIMIT_BYTES) }
         assertEquals(Prepared("image/jpeg", "IMG_2041.jpg"), prepared)
         assertArrayEquals(photo.readBytes(), into.readBytes())
     }

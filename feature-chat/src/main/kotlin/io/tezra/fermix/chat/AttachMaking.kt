@@ -27,22 +27,22 @@ sealed interface Made {
     data object Failed : Made
 }
 
-/** One picked item made ready in its scratch [file]: what it goes as, its size and its digest. */
+/** One picked item made ready in its scratch [file]: what it goes as and its size. */
 private class Ready(
     val picked: Picked,
     val file: File,
     val kind: AttachKind,
     val prepared: Prepared,
     val sizeBytes: Long,
-    val sha256: String,
 )
 
 /**
  * Makes a send's attachments (design section 8.5, "Images"): each picked item made ready in a scratch file
  * (MediaPipeline.prepare: an image a JPEG at most its long-edge cap, without its EXIF; anything else its own
- * bytes), hashed, held to the daemon's [maxBytes], then staged by a new `attach_id`, an image's JPEG kept in the
- * media cache first, so its row draws without a fetch. Every scratch file is deleted when the send stops short, and
- * every file staged for it let go.
+ * bytes, at most the daemon's [maxBytes] as the send began and a byte more), held as it is made to the smaller of that
+ * and the daemon's limit then, then hashed and staged by a new `attach_id`, an image's JPEG kept in the media cache
+ * first, so its row draws without a fetch. Every scratch file is deleted when the send stops short, and every file
+ * staged for it let go.
  */
 internal class AttachMaker(
     private val parts: ChatParts,
@@ -57,11 +57,11 @@ internal class AttachMaker(
         chosen: List<Picked>,
         asFiles: Boolean,
     ): Made {
+        val limit = maxBytes()
         val ready = mutableListOf<Ready>()
         var made: Made = Made.Failed
         try {
-            chosen.forEach { ready += readyOf(it, asFiles) }
-            made = madeOf(ready)
+            made = madeOf(chosen, asFiles, limit, ready)
         } catch (unreadable: IOException) {
             parts.log("An attachment could not be made ready or staged", unreadable)
         } catch (refused: SecurityException) {
@@ -72,24 +72,39 @@ internal class AttachMaker(
         return made
     }
 
-    /** [ready] held to the daemon's limit, then staged. */
-    private suspend fun madeOf(ready: List<Ready>): Made {
-        val limit = maxBytes()
-        val big = ready.firstOrNull { it.sizeBytes > limit }
-        return if (big != null) Made.TooBigMade(TooBig(big.picked.name, big.sizeBytes, limit)) else staged(ready)
+    /**
+     * [chosen] made ready one after another into [ready], each copied at most the [limit] the send began with and held
+     * as it is made to the smaller of that and the daemon's limit then ([maxBytes]), so caps that arrive as the send
+     * goes apply and a limit that rises never lets a cut copy through; then staged. The first past it stops the send
+     * before it is hashed, its line saying the bytes made of it, and those after it are never made.
+     */
+    private suspend fun madeOf(
+        chosen: List<Picked>,
+        asFiles: Boolean,
+        limit: Long,
+        ready: MutableList<Ready>,
+    ): Made {
+        for (picked in chosen) {
+            val item = readyOf(picked, asFiles, limit)
+            ready += item
+            val held = minOf(limit, maxBytes())
+            if (item.sizeBytes > held) return Made.TooBigMade(TooBig(picked.name, item.sizeBytes, held))
+        }
+        return staged(ready)
     }
 
-    /** [picked] made ready in a scratch file, which is deleted when it cannot be. */
+    /** [picked] made ready in a scratch file, its own bytes at most [limit] and one more; deleted when it cannot be. */
     private suspend fun readyOf(
         picked: Picked,
         asFiles: Boolean,
+        limit: Long,
     ): Ready {
         val into = withContext(io) { parts.scratch() }
         var ready: Ready? = null
         try {
-            val prepared = parts.media.prepare(picked, goesAsItself(picked, asFiles), into)
-            val (size, digest) = withContext(io) { into.length() to sha256Of(into) }
-            ready = Ready(picked, into, attachKindOf(picked, asFiles), prepared, size, digest)
+            val prepared = parts.media.prepare(picked, goesAsItself(picked, asFiles), into, limit)
+            val size = withContext(io) { into.length() }
+            ready = Ready(picked, into, attachKindOf(picked, asFiles), prepared, size)
         } finally {
             if (ready == null) withContext(NonCancellable + io) { into.delete() }
         }
@@ -117,8 +132,9 @@ internal class AttachMaker(
         attachments: MutableList<OutboxAttachment>,
     ) {
         for (item in ready) {
-            if (item.kind == AttachKind.IMAGE) parts.store.keepMedia(item.file, item.sha256)
-            attachments += stageAttachment(parts, item.file, item.kind, item.prepared, item.sha256) ?: return
+            val sha256 = withContext(io) { sha256Of(item.file) }
+            if (item.kind == AttachKind.IMAGE) parts.store.keepMedia(item.file, sha256)
+            attachments += stageAttachment(parts, item.file, item.kind, item.prepared, sha256) ?: return
         }
     }
 }

@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.security.MessageDigest
 
@@ -412,6 +413,35 @@ class ChatAttachTest {
                     .isEmpty(),
             )
             assertEquals(TooBig("big.png", 2_000L, 1_000L), rig.ui.tooBig)
+        }
+
+    @Test
+    fun `a file its provider gives no size, streaming past a small limit, stops the send with its line and stays`() =
+        runTest(main) {
+            val rig = Rig(this)
+            val uri = "content://docs/report.pdf"
+            rig.pipeline.streams = mapOf(uri to { ByteArrayInputStream(ByteArray(50_000)) })
+            rig.pipeline.describe =
+                { picked, from -> Picked(picked, picked, PickedKind.FILE, "application/pdf", "report.pdf", 0L, from) }
+            rig.records.value = listOf(sample().let { it.copy(caps = it.caps?.copy(maxMediaBytes = 1_000L)) })
+            runCurrent()
+            rig.model.attach.add(listOf(uri), PickedFrom.FILES)
+            runCurrent()
+            assertNull(rig.ui.tooBig)
+            rig.model.attach.send {}
+            runCurrent()
+            assertTrue(
+                rig.session.sent.value
+                    .isEmpty(),
+            )
+            assertEquals(TooBig("report.pdf", 1_001L, 1_000L), rig.ui.tooBig)
+            assertEquals(listOf(uri), rig.ui.picked.map { it.uri })
+            assertTrue(
+                rig.files.staged.value
+                    .isEmpty(),
+            )
+            assertEquals(1, rig.scratches.size)
+            assertTrue(rig.scratches.none { it.exists() }, "a scratch file was left")
         }
 
     @Test

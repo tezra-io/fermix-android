@@ -1631,7 +1631,8 @@ foreground and going on through a rotation, its length and bars, the player's on
 cannot open or read, the outbox's ring and lines, "Retry sending"'s new ids, the layouts and the viewer's
 pages, a shared copy's directory and name and where they may lie, a copy refused before any is evicted, and the
 oldest copies evicted without following a link (`SharedFileTest`), a landing copy stopped a byte past its limit
-however long its stream, and whole with no limit (`BoundedCopyTest`), a share's items landing past the ten,
+however long its stream, and whole with no limit, a stream that hands over nothing for a while copied whole and
+one that never does given up once its idle time passes (`BoundedCopyTest`), a share's items landing past the ten,
 past the limit as their provider says it or as their stream shows it, an image past it landing whole and going as
 the smaller JPEG while one past its own bound never lands, a share before the chat's record waiting for its limit
 and dropped once the wait ends, a refusal logged by its class alone, words that do not fit leaving the draft as it
@@ -1811,17 +1812,24 @@ owner to settle:
   or the process ends, and every other app's paste, keyboard commit or share is then left out once its minute
   passes; the owner's own picks are not held by it (they are described on `io`). A thread per provider authority
   would keep one app from holding the rest, at the cost of more threads; which is the owner's call.
-- Paths outside the landing that another app or the wire sizes, swept in Task 14c and not yet bounded by the app:
-  at Send, a Photo Picker or Files pick is copied whole into its staged file (`PhoneMedia.copyInto`) with no byte or
-  time bound of the app's own, the daemon's limit checked after the copy, none before its first `hello_ack`, and a
-  Files provider that stalls holds the one send a chat runs at a time; a fetched blob is held to its own
-  `media_begin.size_bytes`, chunk by chunk, but that size has no bound of the app's own, and a bubble reads the
-  cached blob whole into memory to decode it, with no bound on its pixels (`decodeThumbnail`); a picked item's
-  thumbnail from another app's provider is the platform's decode (`ContentResolver.loadThumbnail`), with no bound
-  on its pixels either; the ids from the wire the Chat screen saves across a rotation (a selection's keys, the
-  viewer's, the turns an arrival played) are held to no length of the app's own; and a landing copy a process death cuts off stays in the cache as a
-  `fetch*.tmp` file until the system or the owner clears the cache, as a sweep at start cannot yet tell it from a
-  restored tray's file.
+- Paths outside the landing that another app or the wire sizes, swept in Task 14c and not yet bounded by the app: at
+  Send, a Photo Picker or Files pick that goes as its own bytes is copied into its staged file no further than the
+  daemon's limit and a byte more, and one past it is refused before it is hashed or staged (`PhoneMedia.prepare`,
+  M65's security review, F-03), but that limit is the daemon's alone, with no bound of the app's own, and there is
+  none at all while the chat's record is unread or its daemon has sent no caps, before its first `hello_ack`
+  (`sendLimitOf` then says `Long.MAX_VALUE`); a provider that stalls holds the one send a chat runs at a time, with no
+  time bound of the app's own, until the chat closes, which lets the send go, cancels the open and closes the stream,
+  though a provider that heeds neither holds the copy's thread on `io` until it answers, as a landing's does, while an
+  image that goes as a JPEG is decoded from its provider's stream with no time bound either, and a stall there holds
+  the send and its thread past the chat's close; a stream that hands over nothing without blocking, as a non-blocking
+  pipe does, is read again every 10 ms and given up once a minute passes with no byte, at Send as in a landing
+  (`COPY_IDLE_MILLIS`); a fetched blob is held to its own `media_begin.size_bytes`, chunk by chunk, but that size has
+  no bound of the app's own, and a bubble reads the cached blob whole into memory to decode it, with no bound on its
+  pixels (`decodeThumbnail`); a picked item's thumbnail from another app's provider is the platform's decode
+  (`ContentResolver.loadThumbnail`), with no bound on its pixels either; the ids from the wire the Chat screen saves
+  across a rotation (a selection's keys, the viewer's, the turns an arrival played) are held to no length of the app's
+  own; and a landing copy a process death cuts off stays in the cache as a `fetch*.tmp` file until the system or the
+  owner clears the cache, as a sweep at start cannot yet tell it from a restored tray's file.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the

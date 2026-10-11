@@ -19,6 +19,9 @@ import java.util.concurrent.TimeoutException
 /** How long a step of a test may take on an emulator: a recreation, a window's focus. */
 internal const val STEP_MILLIS = 15_000L
 
+/** The limit a send's own bytes are held to in a test of something else: the engine's own default, 20 MiB. */
+internal const val SEND_LIMIT_BYTES = 20L * 1024 * 1024
+
 /**
  * The runner argument CI's folding profile sets (`-Pandroid.testInstrumentationRunnerArguments.requireFold=true`),
  * under which a device that cannot fold fails the fold tests rather than skip them.

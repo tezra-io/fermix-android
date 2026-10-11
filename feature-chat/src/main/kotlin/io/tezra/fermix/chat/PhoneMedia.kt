@@ -48,6 +48,20 @@ private const val SHADE_EDGE_PX = 32
 private const val COPY_BUFFER_BYTES = 64 * 1024
 
 /**
+ * How long a copy waits before it reads again a stream that handed over no bytes and did not end: short beside a
+ * writer's pace and any person's wait, and no more than a hundred reads a second of a thread that would else block.
+ */
+private const val EMPTY_READ_WAIT_MILLIS = 10L
+
+/**
+ * How long a copy reads again, [EMPTY_READ_WAIT_MILLIS] apart, a stream that hands over no bytes and does not end, as a
+ * non-blocking pipe's reading end does while its writer is silent (EAGAIN reads as no bytes), before it gives up: as
+ * long as a landing is given in all (LANDING_WAIT_MILLIS), so no landing gives such a stream up sooner than it would a
+ * blocking one, and Send, which has no time of its own, waits a minute for it. Each byte it hands over starts it again.
+ */
+private const val COPY_IDLE_MILLIS = LANDING_WAIT_MILLIS
+
+/**
  * The threads the app gives another app's providers as a paste's, the keyboard's or a share's items land, for every
  * chat at once (AppServices): a provider that stalls, describing an item or handing over its bytes, holds no more of
  * them however many items and shares come, and the landings behind it are left out once their time passes
@@ -75,11 +89,11 @@ private val FILE_TYPES =
  * the ContentResolver; an image decoded by ImageDecoder at most [LONG_EDGE_PX] on its long edge (HEIF too,
  * natively, and turned upright by its EXIF orientation) and compressed to a JPEG by Bitmap.compress, which writes
  * no EXIF, so the photo's GPS and camera tags stay on the phone; any other item, and an image sent as a file,
- * copied as its own bytes. Its file work runs on [io], and what asks another app's provider as a paste's, the
- * keyboard's or a share's item lands, its description and its landing copy, on [landing], the app's few threads for it
- * ([LANDING_THREADS]; the app passes the ones every chat shares, a test its own); an owner's pick is described on [io].
- * Each call is given up as its caller is cancelled ([onLandingThreads]); a first chunk that decodes to no placeholder
- * is told to [log].
+ * copied as its own bytes, at most the send's limit and a byte more. Its file work runs on [io], and what asks another
+ * app's provider as a paste's, the keyboard's or a share's item lands, its description and its landing copy, on
+ * [landing], the app's few threads for it ([LANDING_THREADS]; the app passes the ones every chat shares, a test its
+ * own); an owner's pick is described, and Send's copy made, on [io]. A description and a copy are given up as their
+ * caller is cancelled ([onLandingThreads]); a first chunk that decodes to no placeholder is told to [log].
  */
 class PhoneMedia(
     private val context: Context,
@@ -107,52 +121,37 @@ class PhoneMedia(
         }
     }
 
-    /**
-     * [picked]'s own bytes into [into], at most [maxBytes] and one more, once the chat may read it as the tray holds it
-     * (readableUri): a SecurityException if not. As its caller is cancelled, the provider's open is cancelled and the
-     * stream closed, which ends a read that waits on it.
-     */
+    /** [picked]'s own bytes into [into] as it lands, on [landing] ([copyInto]): at most [maxBytes] and one more. */
     override suspend fun copyAtMost(
         picked: Picked,
         into: File,
         maxBytes: Long,
     ): Long {
         require(maxBytes in 0..LANDING_MAX_BYTES) { "a landing copy of at most $maxBytes bytes" }
-        val signal = CancellationSignal()
-        val reading = AtomicReference<InputStream?>()
-        val stop: () -> Unit = {
-            signal.cancel()
-            reading.get()?.close()
-        }
-        return onLandingThreads(landing, stop) {
-            val parsed = readableUri(context, picked.uri, landing = null)
-            val input =
-                context.contentResolver.openAssetFileDescriptor(parsed, "r", signal)?.createInputStream()
-                    ?: throw IOException("a ${outsideOf(parsed)} could not be opened")
-            input.use { from ->
-                reading.set(from)
-                if (signal.isCanceled) throw IOException("the landing's time ran out as its stream opened")
-                into.outputStream().use { copyAtMost(from, it, maxBytes) }
-            }
-        }
+        return copyInto(picked, into, maxBytes, landing)
     }
 
-    /** [picked] made ready once the chat may read it as the tray holds it (readableUri): a SecurityException if not. */
+    /**
+     * [picked] made ready once the chat may read it as the tray holds it (readableUri): a SecurityException if not. Its
+     * own bytes are copied on [io] ([copyInto]), at most [maxBytes] and one more; an image's JPEG is capped by its
+     * edge.
+     */
     override suspend fun prepare(
         picked: Picked,
         asFile: Boolean,
         into: File,
-    ): Prepared =
-        withContext(io) {
-            val parsed = readableUri(context, picked.uri, landing = null)
-            if (asFile || picked.kind != PickedKind.IMAGE) {
-                copyInto(parsed, into)
-                Prepared(picked.mime, picked.name)
-            } else {
-                jpegInto(parsed, into)
-                Prepared("image/jpeg", "${picked.name.substringBeforeLast('.')}.jpg")
-            }
+        maxBytes: Long,
+    ): Prepared {
+        require(maxBytes >= 0) { "a send's copy of at most $maxBytes bytes" }
+        if (asFile || picked.kind != PickedKind.IMAGE) {
+            copyInto(picked, into, maxBytes, io)
+            return Prepared(picked.mime, picked.name)
         }
+        return withContext(io) {
+            jpegInto(readableUri(context, picked.uri, landing = null), into)
+            Prepared("image/jpeg", "${picked.name.substringBeforeLast('.')}.jpg")
+        }
+    }
 
     /**
      * The average colour of what [bytes], a blob's first chunk, decode to: ImageDecoder takes the part of the image
@@ -203,13 +202,55 @@ class PhoneMedia(
         }
     }
 
-    /** [uri]'s own bytes into [into]. */
-    private fun copyInto(
-        uri: Uri,
+    /**
+     * [picked]'s own bytes into [into], at most [maxBytes] and one more, once the chat may read it as the tray holds it
+     * (readableUri): a SecurityException if not; how many it wrote. It runs on one of [threads] as its caller waits
+     * ([onLandingThreads]): as the caller is cancelled, the provider's open is cancelled and the stream closed, which
+     * ends a read that waits on a pipe, and the copy deletes [into] as it ends, since it may have made the file again
+     * after its caller deleted it; a provider that heeds neither, an open that ignores its signal or a read the
+     * platform serves for it, holds the thread until it answers.
+     */
+    private suspend fun copyInto(
+        picked: Picked,
         into: File,
-    ) {
-        val input = context.contentResolver.openInputStream(uri) ?: throw IOException("$uri cannot be opened")
-        input.use { from -> into.outputStream().use { from.copyTo(it) } }
+        maxBytes: Long,
+        threads: CoroutineDispatcher,
+    ): Long {
+        val signal = CancellationSignal()
+        val reading = AtomicReference<InputStream?>()
+        val stop: () -> Unit = {
+            signal.cancel()
+            reading.get()?.close()
+        }
+        return onLandingThreads(threads, stop) {
+            try {
+                copyOpened(picked, into, maxBytes, signal, reading)
+            } finally {
+                if (signal.isCanceled) into.delete()
+            }
+        }
+    }
+
+    /**
+     * [copyInto]'s work on its thread: [picked] opened under [signal], its stream set in [reading] for the caller's
+     * stop to close, and copied into [into], at most [maxBytes] and one more.
+     */
+    private fun copyOpened(
+        picked: Picked,
+        into: File,
+        maxBytes: Long,
+        signal: CancellationSignal,
+        reading: AtomicReference<InputStream?>,
+    ): Long {
+        val parsed = readableUri(context, picked.uri, landing = null)
+        val input =
+            context.contentResolver.openAssetFileDescriptor(parsed, "r", signal)?.createInputStream()
+                ?: throw IOException("a ${outsideOf(parsed)} could not be opened")
+        return input.use { from ->
+            reading.set(from)
+            if (signal.isCanceled) throw IOException("the copy was given up as its stream opened")
+            into.outputStream().use { copyAtMost(from, it, maxBytes) }
+        }
     }
 
     /**
@@ -336,23 +377,30 @@ internal fun cappedSize(
 
 /**
  * [from]'s bytes into [into], at most [max] and one more, which tells a stream past [max]: how many it wrote. Each read
- * asks for no more than that bound leaves and must take a byte or end the stream (a read of none and no end is an
- * IOException), so the loop ends within [max] + 1 reads, however much another app's provider would hand over.
+ * asks for no more than that bound leaves; a read of no bytes is waited out, [EMPTY_READ_WAIT_MILLIS], and read again,
+ * and one once such waits in a row reach [idleMillis] is an IOException, so each byte or the end comes within
+ * [idleMillis] / [EMPTY_READ_WAIT_MILLIS], rounded up, + 1 reads and the loop ends within [max] + 2 such runs of reads,
+ * however much another app's provider would hand over; a stream closed under it ends it at its next read.
  */
 internal fun copyAtMost(
     from: InputStream,
     into: OutputStream,
     max: Long,
+    idleMillis: Long = COPY_IDLE_MILLIS,
 ): Long {
     require(max >= 0) { "a copy of at most $max bytes" }
+    require(idleMillis >= 0) { "a copy idle at most $idleMillis ms" }
     val buffer = ByteArray(COPY_BUFFER_BYTES)
     var copied = 0L
+    var idle = 0L
     while (copied <= max) {
         // What the bound leaves, and one more, counted without overflow when the limit is Long.MAX_VALUE (no caps).
         val left = max - copied
         val read = from.read(buffer, 0, if (left < buffer.size) left.toInt() + 1 else buffer.size)
         if (read < 0) break
-        if (read == 0) throw IOException("a stream handed over no bytes and did not end")
+        if (read == 0 && idle >= idleMillis) throw IOException("a stream handed over no bytes and did not end")
+        if (read == 0) Thread.sleep(EMPTY_READ_WAIT_MILLIS)
+        idle = if (read == 0) idle + EMPTY_READ_WAIT_MILLIS else 0L
         into.write(buffer, 0, read)
         copied += read
     }

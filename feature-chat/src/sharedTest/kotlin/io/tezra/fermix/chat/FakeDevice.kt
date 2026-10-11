@@ -72,9 +72,12 @@ class FakeChatFiles(
  * an IOException, one in [refused] a SecurityException, as a read grant that ended does, its words the platform's,
  * which name the URI whole, and one in [faulty] an IllegalStateException, as another app's provider that fails does
  * across the binder. A URI in [stallsDescribing] or [stallsCopying] is a provider that stalls as it is described, or
- * as its bytes are read: the call waits until the caller is cancelled, as PhoneMedia's do on its landing threads; one
- * in [streams] is copied from the stream it makes, which may never end. Every prepare is recorded, with whether it
- * went as a file, and every landing copy ([copied]) with the bytes it wrote, which the app's own bounded copy writes.
+ * as its own bytes are read, as they land or at Send: the call waits until the caller is cancelled, as PhoneMedia's
+ * do on their threads (an image's JPEG is made at once); one in [streams] is copied from the stream it makes, which
+ * may never end. An item's own bytes, a landing copy's and a send's alike, are written by the app's own bounded
+ * copy, at most the bound it is given and one byte more, as PhoneMedia writes them; an image's JPEG is written
+ * whole, as the phone's is capped by its edge. Every prepare is recorded, with whether it went as a file, and every
+ * landing copy ([copied]) with the bytes it wrote.
  */
 class FakePipeline : MediaPipeline {
     var describe: (String, PickedFrom) -> Picked? = { uri, from ->
@@ -111,8 +114,7 @@ class FakePipeline : MediaPipeline {
     ): Long {
         readable(picked)
         if (picked.uri in stallsCopying) awaitCancellation()
-        val source = streams[picked.uri]?.invoke() ?: ByteArrayInputStream(bytesOf(picked))
-        val written = source.use { from -> into.outputStream().use { copyAtMost(from, it, maxBytes) } }
+        val written = copyOf(picked, into, maxBytes)
         copied.update { it + (picked.uri to written) }
         return written
     }
@@ -121,19 +123,18 @@ class FakePipeline : MediaPipeline {
         picked: Picked,
         asFile: Boolean,
         into: File,
+        maxBytes: Long,
     ): Prepared {
         readable(picked)
         prepared.update { it + (picked.uri to asFile) }
         val asJpeg = picked.kind == PickedKind.IMAGE && !asFile
-        into.writeBytes(if (asJpeg) jpeg(bytesOf(picked)) else bytesOf(picked))
-        return if (asJpeg) {
-            Prepared(
-                "image/jpeg",
-                picked.name.substringBeforeLast('.') + ".jpg",
-            )
-        } else {
-            Prepared(picked.mime, picked.name)
+        if (asJpeg) {
+            into.writeBytes(jpeg(bytesOf(picked)))
+            return Prepared("image/jpeg", picked.name.substringBeforeLast('.') + ".jpg")
         }
+        if (picked.uri in stallsCopying) awaitCancellation()
+        copyOf(picked, into, maxBytes)
+        return Prepared(picked.mime, picked.name)
     }
 
     override fun dominantColour(bytes: ByteArray): Int? {
@@ -148,6 +149,19 @@ class FakePipeline : MediaPipeline {
             throw SecurityException("Permission Denial: reading uri ${picked.uri} requires a grant")
         }
         check(picked.uri !in faulty) { "the provider of ${picked.uri} failed" }
+    }
+
+    /**
+     * [picked]'s stream, the one [streams] makes for its URI or else its bytes ([bytesOf]), into [into] by the app's
+     * own bounded copy: at most [maxBytes] and one more, how many it wrote.
+     */
+    private fun copyOf(
+        picked: Picked,
+        into: File,
+        maxBytes: Long,
+    ): Long {
+        val source = streams[picked.uri]?.invoke() ?: ByteArrayInputStream(bytesOf(picked))
+        return source.use { from -> into.outputStream().use { copyAtMost(from, it, maxBytes) } }
     }
 
     /** [picked]'s bytes: [bytes]' for its URI, a file's own for a file's URI, or its URI's own. */

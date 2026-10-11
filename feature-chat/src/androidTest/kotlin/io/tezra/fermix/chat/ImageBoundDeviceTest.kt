@@ -53,7 +53,8 @@ class ImageBoundDeviceTest {
             assertNull("the tray drew a thumbnail of the bomb", thumbnail)
             assertWithin("the tray's refusal", drawing)
             val making = SystemClock.elapsedRealtime()
-            val made = runCatching { runBlocking { PhoneMedia(context, { _, _ -> }).prepare(picked, false, jpeg) } }
+            val pipeline = PhoneMedia(context, { _, _ -> })
+            val made = runCatching { runBlocking { pipeline.prepare(picked, false, jpeg, SEND_LIMIT_BYTES) } }
             assertTrue("Send made a JPEG of the bomb: $made", made.exceptionOrNull() is IOException)
             assertWithin("Send's refusal", making)
         } finally {

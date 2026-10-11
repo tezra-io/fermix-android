@@ -21,20 +21,23 @@ interface MediaPipeline {
     /**
      * [picked]'s bytes as they go up, written to [into]: an image as a JPEG at most LONG_EDGE_PX on its long
      * edge, its EXIF and GPS left behind, unless [asFile], which, like anything not an image, sends its own
-     * bytes. Throws an IOException when the item cannot be read, and a SecurityException when the chat may not read
-     * it as the tray holds it (mayRead).
+     * bytes, at most [maxBytes], the send's limit, and one byte more, which tells an item past it however much its
+     * provider would hand over. Throws an IOException when the item cannot be read, and a SecurityException when the
+     * chat may not read it as the tray holds it (mayRead). A copy of its own bytes lets its caller go as soon as the
+     * caller is cancelled, its open cancelled and its stream closed, which ends a read that waits on a pipe; a provider
+     * that heeds neither holds the copy's thread until it answers.
      */
     suspend fun prepare(
         picked: Picked,
         asFile: Boolean,
         into: File,
+        maxBytes: Long,
     ): Prepared
 
     /**
      * [picked]'s own bytes written to [into] as it lands, at most [maxBytes] and one byte more, which tells an item
      * past them, however much its provider would hand over: how many it wrote. [maxBytes] is a landing's, at most
-     * LANDING_MAX_BYTES. Throws as [prepare] does. It returns as soon as its caller is cancelled, its stream closed, so
-     * the copy stops.
+     * LANDING_MAX_BYTES. Throws as [prepare] does, and lets its caller go as [prepare]'s copy does.
      */
     suspend fun copyAtMost(
         picked: Picked,

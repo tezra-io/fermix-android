@@ -29,7 +29,7 @@ private class EndlessStream : InputStream() {
     }
 }
 
-/** A stream that answers a read with no bytes and no end, which InputStream's contract does not allow. */
+/** A stream that answers every read with no bytes and no end, as a non-blocking pipe does once its writer is silent. */
 private class StuckStream : InputStream() {
     override fun read(): Int = 0
 
@@ -41,8 +41,37 @@ private class StuckStream : InputStream() {
 }
 
 /**
- * The copy an item lands as, from a share, a paste or the keyboard (copyAtMost): at most the daemon's limit and a
- * byte more, which tells an item past it, however much its provider would hand over.
+ * A stream that hands over nothing [empties] times, as a non-blocking pipe's empty read does (EAGAIN reads as no
+ * bytes), then a byte of 7, [rounds] times, then ends.
+ */
+private class HaltingStream(
+    private val empties: Int,
+    private val rounds: Int,
+) : InputStream() {
+    private var round = 0
+    private var empty = 0
+
+    override fun read(): Int = if (read(ByteArray(1), 0, 1) < 0) -1 else 7
+
+    override fun read(
+        into: ByteArray,
+        offset: Int,
+        length: Int,
+    ): Int {
+        if (round == rounds) return -1
+        val handing = empty == empties
+        empty = if (handing) 0 else empty + 1
+        if (handing) round++
+        if (handing) into[offset] = 7
+        return if (handing) 1 else 0
+    }
+}
+
+/**
+ * The copy an item lands as, from a share, a paste or the keyboard, and the one Send makes of an item's own bytes
+ * (copyAtMost): at most the daemon's limit and a byte more, which tells an item past it, however much its provider
+ * would hand over; a stream that hands over nothing for a while, a non-blocking pipe's, is read again until its idle
+ * time passes.
  */
 class BoundedCopyTest {
     @Test
@@ -83,8 +112,21 @@ class BoundedCopyTest {
     }
 
     @Test
-    fun `a stream that hands over nothing and never ends is an IOException, never a loop`() {
-        assertThrows<IOException> { copyAtMost(StuckStream(), ByteArrayOutputStream(), 1_000L) }
+    fun `a stream that hands over nothing a few times and then its bytes is copied whole`() {
+        val into = ByteArrayOutputStream()
+        assertEquals(3L, copyAtMost(HaltingStream(empties = 3, rounds = 3), into, 1_000L))
+        assertArrayEquals(byteArrayOf(7, 7, 7), into.toByteArray())
+    }
+
+    @Test
+    fun `each byte a stream hands over starts its idle time again`() {
+        val into = ByteArrayOutputStream()
+        assertEquals(20L, copyAtMost(HaltingStream(empties = 4, rounds = 20), into, 1_000L, idleMillis = 50L))
+    }
+
+    @Test
+    fun `a stream that hands over nothing and never ends is an IOException once its idle time passes, never a loop`() {
+        assertThrows<IOException> { copyAtMost(StuckStream(), ByteArrayOutputStream(), 1_000L, idleMillis = 50L) }
     }
 
     @Test

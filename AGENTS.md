@@ -432,12 +432,13 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   the same change, with a test that feeds it the other side's worst: a stream that never ends, many at once, a call
   that never answers, a string past one frame. On the device the other app is the test APK's own provider
   (`EndlessProvider`), written in Java: the platform runs it in the test APK's own process, which has no Kotlin
-  runtime, as the build leaves it out of the test APK. The paths this rule does not yet hold are listed for the
-  owner in README (Task 14c): Send's copy of a Photo Picker or Files pick (`PhoneMedia.copyInto`), a fetched blob's
-  size past its `media_begin`'s own word, a bubble's image read whole into memory and decoded with no bound on its
-  pixels, a provider's thumbnail of a pick (`ContentResolver.loadThumbnail`), the field's and the draft's length, the
-  ids from the wire a screen saves across a rotation (a selection's, the viewer's, the turns an arrival played), and
-  another app's provider that ignores its cancel holding the landing threads for other apps' shares.
+  runtime, as the build leaves it out of the test APK. The paths this rule does not yet hold are listed for the owner
+  in README (Task 14c): Send's copy of a Photo Picker or Files pick, held to the daemon's limit alone
+  (`PhoneMedia.prepare`), a fetched blob's size past its `media_begin`'s own word, a bubble's image read whole into
+  memory and decoded with no bound on its pixels, a provider's thumbnail of a pick (`ContentResolver.loadThumbnail`),
+  the field's and the draft's length, the ids from the wire a screen saves across a rotation (a selection's, the
+  viewer's, the turns an arrival played), and another app's provider that ignores its cancel holding the landing
+  threads for other apps' shares.
 - The app's exported components are these four, as the merged release manifest has them, and no other: the
   activity, `MainActivity`, for the launcher (`MAIN`/`LAUNCHER`), which acts only on a chat's
   `fermix://chat/{instance}/{profile}` link naming a paired Fermix and on "Add Fermix", and never on an intent

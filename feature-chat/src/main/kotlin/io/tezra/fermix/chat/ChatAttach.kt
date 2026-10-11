@@ -30,12 +30,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the sheet shows; whether images go as files; and Send, which makes and stages each item (AttachMaker) and sends
  * one `msg` with the composer's words as its caption. An item past the daemon's `caps.max_media_bytes` ([limit],
  * none until the chat's record is read) stays in the tray with its line and never goes; one made past it, a JPEG over
- * a small limit, stops the send with that line; and one a paste, the keyboard or a share brings past what its landing
- * copy may hold (Landings' landingBound) is never copied whole, and shows as that line alone. Another app's landings
- * run one at a time ([landings]), so the tray's room is counted once those before have landed, each waiting its turn
- * and then landing within [LANDING_WAIT_MILLIS]; the owner's own picks wait behind none of them. The items whose files
- * the chat made are kept in the chat's [saved] state as the tray changes, so a process death keeps them, and come back
- * as the chat opens again while their files are there.
+ * a small limit or a file whose provider hands over more than it said, copied no further than a byte past the limit,
+ * stops the send with that line; and one a paste, the keyboard or a share brings past what its landing copy may hold
+ * (Landings' landingBound) is never copied whole, and shows as that line alone. Another app's landings run one at a
+ * time ([landings]), so the tray's room is counted once those before have landed, each waiting its turn and then
+ * landing within [LANDING_WAIT_MILLIS]; the owner's own picks wait behind none of them. The items whose files the chat
+ * made are kept in the chat's [saved] state as the tray changes, so a process death keeps them, and come back as the
+ * chat opens again while their files are there.
  */
 class ChatAttach(
     private val parts: ChatParts,
