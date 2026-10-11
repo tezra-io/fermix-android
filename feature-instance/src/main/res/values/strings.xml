@@ -27,12 +27,18 @@
     <!-- The header. -->
     <string name="instance_on_host">Fermix on %1$s</string>
     <string name="instance_reset_name">Reset to gateway name</string>
-    <!-- Labels the design does not give (section 13.8): the back button and the name's rename action. -->
+    <!-- Not the design's: the header's one status line, the state and then the path (the owner, 2026-10-10). -->
+    <string name="instance_status_line">%1$s · %2$s</string>
+    <!-- Not the design's: the row that opens the page's details, and what TalkBack says of it (the owner,
+         2026-10-10). -->
+    <string name="instance_advanced">Advanced</string>
+    <string name="instance_advanced_expanded">Expanded</string>
+    <string name="instance_advanced_collapsed">Collapsed</string>
+    <!-- A label the design does not give (section 13.8): the back button's. -->
     <string name="instance_back">Back</string>
 
     <!-- Connection. Row labels and the value "Connected" are the visual canon's, which it lists as its own. -->
     <string name="instance_section_connection">Connection</string>
-    <string name="instance_state">State</string>
     <string name="instance_state_connected">Connected</string>
     <string name="instance_path">Path</string>
     <string name="instance_protocol">Protocol</string>

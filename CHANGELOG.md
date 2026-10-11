@@ -287,3 +287,9 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   where the card showed, fading in and settling to its size, never over your message above it, and the card
   carries on below it; a picture you have seen before is simply there. The debug app's demo draws a picture when
   asked for one.
+- **The Instance screen leads with what you use.** Under the avatar and the name, one line says how the Fermix
+  is connected ("Connected · Wi-Fi · 9 ms"), with Rename and Test connection as buttons beside each other, which
+  stack when the text is large, and TalkBack reads the test's outcome as it comes. The notification switches sit
+  in a card of their own, and the connection's details, with the path it takes, this phone, storage, diagnostics
+  and "Reset to gateway name" wait under "Advanced", closed until you open it, each in a card. "Clear media cache"
+  and "Reset to gateway name" are buttons now, not underlined words, and "Unpair" is an outlined button.

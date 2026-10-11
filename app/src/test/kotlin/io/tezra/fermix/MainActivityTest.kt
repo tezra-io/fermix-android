@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
@@ -104,8 +105,12 @@ class MainActivityTest {
         rule.waitUntil(SETTLE_MILLIS) { !secured() }
         rule.onNodeWithText(HOST).performTouchInput { longClick() }
         rule.onNodeWithText("Details").performClick()
-        rule.waitUntil(SETTLE_MILLIS) { rule.onAllNodesWithText("Key").fetchSemanticsNodes().isNotEmpty() }
+        // The key is under "Advanced" (the owner, 2026-10-10): the window is kept out from the screen's first frame.
+        rule.waitUntil(SETTLE_MILLIS) { rule.onAllNodesWithText("Advanced").fetchSemanticsNodes().isNotEmpty() }
         rule.waitUntil(SETTLE_MILLIS) { secured() }
+        rule.onNodeWithText("Advanced").performScrollTo().performClick()
+        rule.waitUntil(SETTLE_MILLIS) { rule.onAllNodesWithText("Key").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("the key shows in a secured window", secured())
         rule.onNodeWithContentDescription("Back").performClick()
         rule.waitUntil(SETTLE_MILLIS) { rule.onAllNodesWithText("Key").fetchSemanticsNodes().isEmpty() }
         rule.waitUntil(SETTLE_MILLIS) { !secured() }

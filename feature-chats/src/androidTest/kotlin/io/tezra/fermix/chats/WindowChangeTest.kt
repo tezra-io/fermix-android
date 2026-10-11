@@ -93,10 +93,10 @@ class WindowChangeTest {
         rule.onNode(hasSetTextAction()).performTextReplacement(HALF_NAMED)
     }
 
-    /** The Instance screen's rename dialog, opened from the name, a name half typed in it. */
+    /** The Instance screen's rename dialog, opened from its Rename button, a name half typed in it. */
     private fun renamingOnTheInstanceScreen() {
         rule.activity.rig.shown.value = Shown.INSTANCE
-        rule.onNodeWithText(HOST).performClick()
+        rule.onNodeWithText("Rename").performClick()
         rule.onNode(hasSetTextAction()).performTextReplacement(HALF_NAMED)
     }
 

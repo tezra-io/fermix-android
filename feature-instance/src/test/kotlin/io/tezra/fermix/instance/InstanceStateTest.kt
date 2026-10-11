@@ -118,4 +118,17 @@ class InstanceStateTest {
         assertEquals(emptySet<Candidate>(), alone?.reachable)
         assertNull(instanceUiOf(listOf(other), record.id, unwatched, offline, releaseBuild = false))
     }
+
+    @Test
+    fun `the header's one status line says Connected and the path once caught up, else the link's words, or none`() {
+        val up = Link.Up(Candidate.Scope.LAN, latencyMs = 9, caughtUp = true)
+        assertEquals(StatusLine.Connected(Candidate.Scope.LAN, 9), statusLineOf(up))
+        val updating = up.copy(caughtUp = false)
+        assertEquals(StatusLine.Words(updating), statusLineOf(updating))
+        for (link in listOf(Link.Connecting, Link.CannotReach, Link.Revoked, Link.IdentityChanged, Link.Failed)) {
+            assertEquals(StatusLine.Words(link), statusLineOf(link), "$link")
+        }
+        assertEquals(StatusLine.None, statusLineOf(Link.NotOpen))
+        assertEquals(StatusLine.None, statusLineOf(Link.Closed))
+    }
 }

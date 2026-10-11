@@ -612,8 +612,8 @@ reads it where it is silent, for the owner to settle:
 - A text action that the accent alone told from the words around it is underlined, as the reference
   player draws a text button, since in the ink nothing else marks it: an error card's "Run again", "Reset
   to default" and "Retry sending", under a title in the same ink; search's "Try again" and the
-  microphone's "Open settings", beside a grey line; and the Instance screen's "Test connection", "Clear
-  media cache" and "Reset to gateway name", among facts in the same ink and size. A text action that
+  microphone's "Open settings", beside a grey line. The Instance screen's actions are buttons with shapes of
+  their own, so none of them is underlined (below, among the departures from 13.7). A text action that
   opens a web page is a link, so it is underlined too: Welcome's "Don't have Fermix yet?" and a failure
   screen's "Troubleshooting" (`pageOf`); "Learn more" and "Open release page" open one as a screen's
   primary pill. A secondary that opens no web page stays plain, as the player's `.text-btn.plain`,
@@ -659,8 +659,8 @@ reads it where it is silent, for the owner to settle:
   than at its sides (the attach sheet's Send, 40 dp; an approval's answers, 44 dp; Name's chips, 36 dp),
   and the scroll-to-latest pill and an attachment's remove badge are ringed at their 48 dp targets, the
   pill's lined with `onInk`, as it floats over the owner's ink bubbles; an outlined field with a label has
-  the label inside its ring; a name or a line that is its own button, with no shape of its own (Instance's
-  name, "Reset to gateway name", the voice hint's "Open settings"), is ringed in a chip's corners round its
+  the label inside its ring; a name or a line that is its own button, with no shape of its own (the voice
+  hint's "Open settings"), is ringed in a chip's corners round its
   48 dp target, as a pill round its words would cut their first and last letters; within a group,
   messages lie 2 dp apart, so a focused message's ring lies on its neighbour, over it, and between two of
   the owner's bubbles its top or bottom is the ink on the ink and does not show, its sides and corners do; a link
@@ -1272,25 +1272,44 @@ connecting and for a changed identity, err for a revoked phone, the tertiary ink
 with that dot at the canon's three sizes, and `StillTwoDotMark` the large two-dot mark the empty list and the
 lock still show: the update names no mark for them, and `TwoDotMark`, the orbiting one, is the thinking card's
 alone; which mark they show is the owner's to settle. `InstanceScreen(ui, actions)` is the
-canon's page: the header (the name to tap and rename, "Fermix on {host}", "Reset to gateway name" under a
-nickname); Connection (the state, the live path, each candidate with its scope, the protocol, and "Test
-connection" with its result in place, one race over the record's candidates whose socket closes at once;
-a candidate's dot is lit only by what answered for it: the live connection went over it, or the last
-test reached it, a candidate the winner cancelled lit by neither; section 5.2's network facts never light
-a dot, as only a handshake confirms a tailnet, and only put out a test's word that no longer holds, every
-candidate's with no network and a tailnet one's while Tailscale is off or kept from the app:
-`reachableCandidates`); This phone (the name it paired as, since when, the gateway key's fingerprint, and
-the hardware and build); Notifications (the two switches, or "Notifications aren't set up on {host} yet"
-when the daemon has no FCM); Storage (the media cache's size and "Clear media cache"); Diagnostics (the
-session's log, `+h:mm:ss  kind  detail`, panning sideways inside the card's inset); "Unpair from {host}…" with its dialog; and the
-footer. The name and "Reset to gateway name" are 48 dp targets. The rename dialog says which of data's
+canon's page as the owner laid it out on 2026-10-10. The header is the avatar at 72 dp, the name as a
+headline, "Fermix on {host}" and one status line: "Connected · Wi-Fi · 9 ms" once the session is up and
+caught up, the link's own words while it is anything else, and no line while no session is open
+(`statusLineOf`, pure); TalkBack reads that line once, and the name is not a button. Under it, Rename and
+Test connection are tonal buttons side by side, which stack when either label, measured in the button's
+own style at the owner's font size, would not fit its half (`ButtonPair`), with the test's outcome under
+them, a polite live region TalkBack reads as it comes: one race over the record's candidates whose socket closes
+at once. Then the Notifications card, the
+two switches 16 dp inside an agent-bubble card with 16 dp corners and a hairline between them (`RowsCard`), or
+"Notifications aren't set up on {host} yet" when the daemon has no FCM. Then "Advanced", a row with a
+chevron that TalkBack reads as a button, "Expanded" or "Collapsed" (the row's state description, which says what a
+description of the chevron alone would; the chevron itself is unlabelled), closed on each visit and kept through a
+rotation, which opens and closes with Material's standard spatial and effects springs and at once under
+reduce-motion. It holds, each section's rows in a card of its own as Notifications' are, Connection (the Path
+while the session is up, "Wi-Fi · 9 ms" or "Tailscale · 38 ms", each candidate with its scope, and the protocol; a
+candidate's dot is
+lit only by what answered for it: the live connection went over it, or the last test reached it, a
+candidate the winner cancelled lit by neither; section 5.2's network facts never light a dot, as only a
+handshake confirms a tailnet, and only put out a test's word that no longer holds, every candidate's with
+no network and a tailnet one's while Tailscale is off or kept from the app: `reachableCandidates`); This
+phone (the name it paired as, since when, the gateway key's fingerprint, and the hardware and build);
+Storage (the media cache's size, with a "Clear media cache" button under its card); Diagnostics (the session's log,
+`+h:mm:ss  kind  detail`, panning sideways inside the card's inset); and, under a nickname, a "Reset to
+gateway name" button. Last come "Unpair from {host}…", an outlined button in the ink, with its dialog, and
+the footer. No action on the page is underlined text; each is a button with its own shape at a 48 dp
+target. The rename dialog says which of data's
 rules refuses a name, and it and the unpair dialog survive a rotation and a fold. `InstanceViewModel`
 reads one instance's record, session (its state, diagnostics and live candidate), chat settings, cache
 and the network facts into `instanceUiOf`, pure, and does what the controls ask; each visit (`entered`)
 drops the last visit's test and measures the cache again. Its JVM tests cover the link over every
 session state and diagnostic, a session put aside reading "Connecting…" unless it ran out of races, the
-dot, the fingerprint, "Paired since" in a given zone, the candidates' dots and the screen's state; the screen
-is a preview at the twelve windows, at its head and at its foot, drawn by a record into
+dot, the fingerprint, "Paired since" in a given zone, the candidates' dots, the status line and the screen's
+state. `InstanceScreenTest` (Robolectric with native graphics, so text is measured as on a phone) holds the
+status line read once, "Advanced" closed at first and kept through a recreation, its sections each in a card and the
+Path only while the session is up, the test's outcome a polite live region, each button's label and what it calls,
+no underlined text, and the buttons stacked at font scale 2 with no label cut. The screen is a preview at
+the twelve windows, at its head, its "Advanced" open alone in the page's column, and at the foot of one that cannot
+be reached, drawn by a record into
 `feature-instance/src/test/screenshots`.
 
 `feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
@@ -1353,6 +1372,13 @@ owner to settle:
   "Remove".
 - The Notifications switch sets the record's flag and hands it to `NotificationsPolicy`, which does
   nothing yet; its channel and `push_register` come with the notifications change.
+- The Instance page is the owner's of 2026-10-10 where section 13.7 and the canon list rows and text actions:
+  the name is a headline, not the button that renames, and Rename and Test connection are tonal buttons under
+  the header; State and Path are one status line under "Fermix on {host}", the Path a row of Connection's too
+  while the session is up; Connection, This phone, Storage, Diagnostics and "Reset to gateway name" wait under a
+  closed "Advanced", each section's rows in a card as the Notifications switches are; "Clear media cache" and "Reset
+  to gateway name" are tonal buttons and "Unpair from {host}…" an outlined one in the ink. "Advanced",
+  "Expanded" and "Collapsed" are not the design's words.
 - A refused nickname says why in one line ("A name needs at least one character.", "A name has at most
   40 characters.", "Another Fermix on this phone has this name."); the design gives no words.
 - The lock uses the platform's `BiometricPrompt`, a strong biometric or the screen lock, not

@@ -2,7 +2,6 @@ package io.tezra.fermix.instance
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -38,7 +39,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -76,11 +76,12 @@ private val LOG_INK = Color(0xFFC9CCD4)
 private val BAR_HEIGHT = 64.dp
 private val BAR_SIDES = 4.dp
 
+// A card of rows (the owner, 2026-10-10): 24 dp in from the page's sides, 16 dp corners, its rows 16 dp inside.
+private val CARD_CORNER = 16.dp
+internal val CARD_ROW_SIDES = 16.dp
+
 /** The canon's candidate line, mono 13/20. */
 private val CANDIDATE_STYLE = FermixType.mono.copy(fontSize = 13.sp, lineHeight = 20.sp)
-
-/** An action's label in a row (KvRow): the body, underlined. */
-internal val ACTION_LABEL = FermixType.body.copy(textDecoration = TextDecoration.Underline)
 
 /** The canon's log, mono 12/18. */
 private val LOG_STYLE = FermixType.mono.copy(fontSize = 12.sp, lineHeight = 18.sp)
@@ -120,10 +121,31 @@ internal fun SectionHeader(text: String) {
 }
 
 /**
+ * Rows on a card of the agent bubble's grey (the owner, 2026-10-10), a hairline between each two: content lies flat
+ * on it (design section 13.1). Each row is laid [CARD_ROW_SIDES] in from the card's edges.
+ */
+@Composable
+internal fun RowsCard(rows: List<@Composable () -> Unit>) {
+    val colors = LocalFermixColors.current
+    Column(
+        modifier =
+            Modifier
+                .padding(horizontal = SIDES)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(CARD_CORNER))
+                .background(colors.agentBubble),
+    ) {
+        rows.forEachIndexed { index, row ->
+            if (index > 0) HorizontalDivider(thickness = FermixSpacing.hairline, color = colors.hairline)
+            row()
+        }
+    }
+}
+
+/**
  * A row: [label] in [labelStyle], the body in the ink unless the style names a colour, and its [value] on the right
- * in the secondary text's grey, mono where the value is an id; tappable when [onClick] is given. An action the canon
- * drew in the accent ("Test connection", "Clear media cache") is in [ACTION_LABEL]: in the ink, as a fact's words
- * are, it is told from the facts by its underline, as the M51 update's reference player draws a text button.
+ * in the secondary text's grey, mono where the value is an id; [sides] in from the page's or a card's edges. A row
+ * says a fact: what the page does is a button's (the owner, 2026-10-10).
  */
 @Composable
 internal fun KvRow(
@@ -131,7 +153,7 @@ internal fun KvRow(
     value: String? = null,
     mono: Boolean = false,
     labelStyle: TextStyle = FermixType.body,
-    onClick: (() -> Unit)? = null,
+    sides: Dp = SIDES,
 ) {
     val colors = LocalFermixColors.current
     val valueStyle = if (mono) CANDIDATE_STYLE else FermixType.bodyMedium
@@ -139,9 +161,8 @@ internal fun KvRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .then(if (onClick != null) Modifier.rowFocusRing().clickable(onClick = onClick) else Modifier)
                 .heightIn(min = FermixSpacing.minTarget)
-                .padding(horizontal = SIDES, vertical = ROW_ENDS),
+                .padding(horizontal = sides, vertical = ROW_ENDS),
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -160,12 +181,13 @@ internal fun KvRow(
     }
 }
 
-/** A row with a switch; the whole row toggles it, as one control. */
+/** A row with a switch, [sides] in from its card's edges; the whole row toggles it, as one control. */
 @Composable
 internal fun SwitchRow(
     label: String,
     on: Boolean,
     onChange: (Boolean) -> Unit,
+    sides: Dp = SIDES,
 ) {
     Row(
         modifier =
@@ -174,7 +196,7 @@ internal fun SwitchRow(
                 .rowFocusRing()
                 .toggleable(value = on, role = Role.Switch, onValueChange = onChange)
                 .heightIn(min = FermixSpacing.minTarget)
-                .padding(horizontal = SIDES, vertical = ROW_ENDS),
+                .padding(horizontal = sides, vertical = ROW_ENDS),
         horizontalArrangement = Arrangement.spacedBy(ROW_GAP),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -188,15 +210,19 @@ internal fun SwitchRow(
     }
 }
 
-/** The record's candidates, each with its port, its scope and whether it is [reached] (reachableCandidates). */
+/**
+ * The record's candidates, each with its port, its scope and whether it is [reached] (reachableCandidates), [sides]
+ * in from the page's or a card's edges.
+ */
 @Composable
 internal fun Candidates(
     candidates: List<Candidate>,
     port: Int,
+    sides: Dp = SIDES,
     reached: (Candidate) -> Boolean,
 ) {
     Column(
-        modifier = Modifier.padding(start = SIDES, end = SIDES, top = CANDIDATE_TOP, bottom = CANDIDATE_BOTTOM),
+        modifier = Modifier.padding(start = sides, end = sides, top = CANDIDATE_TOP, bottom = CANDIDATE_BOTTOM),
         verticalArrangement = Arrangement.spacedBy(CANDIDATE_GAP),
     ) {
         for (candidate in candidates) CandidateLine(candidate, port, reached(candidate))
