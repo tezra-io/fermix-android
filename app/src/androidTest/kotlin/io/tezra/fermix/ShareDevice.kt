@@ -82,15 +82,16 @@ internal fun liveActivities(): List<MainActivity> {
 }
 
 /**
- * An image the app saved itself, as the tests make one: a small PNG named [name] in the phone's media store, in
- * Pictures itself, so no directory of its own is left behind; its URI, the caller's to delete. The media store is
- * another package's provider: the share's URI is a `content:` URI of the `media` authority, which the app reads by its
- * ownership of the row, the instrumentation running as the app, with no grant (shellImage is another app's). An entry
- * that could not be written is deleted again.
+ * An image the app saved itself, as the tests make one: a PNG named [name] in the phone's media store, in Pictures
+ * itself, so no directory of its own is left behind, its [bytes] the PNG's, a small one unless given; its URI, the
+ * caller's to delete. The media store is another package's provider: the share's URI is a `content:` URI of the
+ * `media` authority, which the app reads by its ownership of the row, the instrumentation running as the app, with no
+ * grant (shellImage is another app's). An entry that could not be written is deleted again.
  */
 internal fun galleryImage(
     resolver: ContentResolver,
     name: String,
+    bytes: ByteArray = png(),
 ): Uri {
     val values =
         ContentValues().apply {
@@ -103,7 +104,7 @@ internal fun galleryImage(
     val entry = checkNotNull(resolver.insert(collection, values)) { "the media store took no image" }
     var written = false
     try {
-        pngInto(resolver, entry)
+        pngInto(resolver, entry, bytes)
         written = true
     } finally {
         if (!written) resolver.delete(entry, null, null)
@@ -111,12 +112,13 @@ internal fun galleryImage(
     return entry
 }
 
-/** A small PNG written into the media store's [entry], which then stops being pending. */
+/** A PNG's [bytes] written into the media store's [entry], which then stops being pending. */
 private fun pngInto(
     resolver: ContentResolver,
     entry: Uri,
+    bytes: ByteArray,
 ) {
-    checkNotNull(resolver.openOutputStream(entry)) { "$entry took no bytes" }.use { it.write(png()) }
+    checkNotNull(resolver.openOutputStream(entry)) { "$entry took no bytes" }.use { it.write(bytes) }
     val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
     check(resolver.update(entry, done, null, null) == 1) { "$entry stayed pending" }
 }

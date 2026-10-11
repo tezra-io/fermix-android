@@ -63,7 +63,10 @@ private val FOOTER_TOP = 16.dp
 /** The canon's `.pfoot`, 400 12/16. */
 private val FOOTER_STYLE = FermixType.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp)
 
-/** What the Instance screen's controls do, each the ViewModel's. */
+/**
+ * What the Instance screen's controls do, each the ViewModel's; [onChoosePhoto] opens the system's Photo Picker for
+ * an image, whose pick the route hands the ViewModel.
+ */
 data class InstanceActions(
     val onBack: () -> Unit,
     val onRename: (String?) -> Unit,
@@ -72,14 +75,18 @@ data class InstanceActions(
     val onPreviews: (Boolean) -> Unit,
     val onClearCache: () -> Unit,
     val onUnpair: () -> Unit,
+    val onTint: (String) -> Unit,
+    val onChoosePhoto: () -> Unit,
+    val onRemovePhoto: () -> Unit,
 )
 
 /**
  * The Instance screen (design section 13.7, laid out anew by the owner, 2026-10-10), not a settings screen: who
  * the Fermix is and how it is reached, in one line; Rename and Test connection; its notifications; "Advanced",
  * closed until opened, with its connection, this phone, its cache, its diagnostics and the name's reset; and the
- * way out at the foot. What the page does is a button, never underlined words. The page is scrolled by [scroll],
- * and the pairing's day read in [zone], the phone's own. The rename and unpair dialogs survive a rotation or a fold.
+ * way out at the foot. What the page does is a button, never underlined words; the avatar is the one that opens its
+ * Picture sheet. The page is scrolled by [scroll], and the pairing's day read in [zone], the phone's own. The rename
+ * and unpair dialogs and the sheet survive a rotation or a fold.
  */
 @Composable
 fun InstanceScreen(
@@ -91,12 +98,13 @@ fun InstanceScreen(
 ) {
     var renaming by rememberSaveable { mutableStateOf(false) }
     var unpairing by rememberSaveable { mutableStateOf(false) }
+    var picturing by rememberSaveable { mutableStateOf(false) }
     val host = ui.record.host
     Column(modifier = modifier.fillMaxSize().safeDrawingPadding()) {
         BackBar(onBack = actions.onBack)
         FermixColumn(ColumnWidth.Narrow) {
             Column(modifier = Modifier.verticalScroll(scroll).padding(bottom = PAGE_FOOT)) {
-                Header(ui)
+                Header(ui, onPicture = { picturing = true })
                 Controls(ui.test, host, onRename = { renaming = true }, onTest = actions.onTest)
                 NotificationsCard(ui, actions)
                 Advanced(ui, zone, actions, startsOpen = false)
@@ -119,11 +127,20 @@ fun InstanceScreen(
             actions.onUnpair()
         }, onDismiss = done)
     }
+    if (picturing) {
+        PictureSheet(ui.record.tint, ui.record.pictureAt != null, actions, onDismiss = { picturing = false })
+    }
 }
 
-/** The avatar, the name, "Fermix on {host}", and the one status line, none while no session is open. */
+/**
+ * The avatar, the button that opens the Picture sheet ([onPicture]), the name, "Fermix on {host}", the one status
+ * line, none while no session is open, and, after a photo that could not be used, the line that says so.
+ */
 @Composable
-private fun Header(ui: InstanceUi) {
+private fun Header(
+    ui: InstanceUi,
+    onPicture: () -> Unit,
+) {
     val colors = LocalFermixColors.current
     val record = ui.record
     Column(
@@ -137,7 +154,7 @@ private fun Header(ui: InstanceUi) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(HEADER_GAP),
     ) {
-        InstanceAvatar(tint = record.tint, dot = ui.link.dot, size = AvatarSize.LARGE)
+        HeaderAvatar(record, ui.link.dot, onPicture)
         Text(text = record.title, style = FermixType.headline, color = colors.ink, textAlign = TextAlign.Center)
         Text(
             text = stringResource(R.string.instance_on_host, record.host),
@@ -151,6 +168,15 @@ private fun Header(ui: InstanceUi) {
                 style = FermixType.bodyMedium,
                 color = colors.textSecondary,
                 textAlign = TextAlign.Center,
+            )
+        }
+        if (ui.pictureFailed) {
+            Text(
+                text = stringResource(R.string.instance_picture_failed),
+                style = FermixType.bodyMedium,
+                color = colors.errText,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
     }

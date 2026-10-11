@@ -85,7 +85,7 @@ class InstanceStateTest {
     }
 
     @Test
-    fun `the screen reads the record, the session, the chat, the test and the cache, and none once the record goes`() {
+    fun `the screen reads the record, session, chat, test, cache and a photo's failure, and none once it goes`() {
         val record = sample(nickname = "Studio")
         val other = sample(gateway = 2)
         val connected = SessionState.Connected(Candidate.Scope.LAN, latencyMs = 9, caughtUp = true)
@@ -110,6 +110,10 @@ class InstanceStateTest {
         assertEquals(4_096L, ui.cacheBytes)
         assertEquals(TestState.Running, ui.test)
         assertEquals(true, ui.releaseBuild)
+        assertEquals(false, ui.pictureFailed)
+        val failed = PhoneFacts(CHAT, facts.copy(pictureFailed = true), TAILSCALE_UP)
+        val unread = instanceUiOf(listOf(record), record.id, Watched(null, emptyList(), null), failed, true)
+        assertEquals(true, unread?.pictureFailed)
 
         val unwatched = Watched(null, emptyList(), null)
         val offline = PhoneFacts(CHAT, facts, TAILSCALE_OFF)

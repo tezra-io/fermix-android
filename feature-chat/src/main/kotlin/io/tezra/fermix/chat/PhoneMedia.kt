@@ -2,19 +2,22 @@ package io.tezra.fermix.chat
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.CancellationSignal
 import android.provider.OpenableColumns
-import android.util.Size
 import androidx.core.net.toUri
+import io.tezra.fermix.data.JPEG_QUALITY
+import io.tezra.fermix.data.LANDING_WAIT_MILLIS
+import io.tezra.fermix.data.MAX_IMAGE_PIXELS
+import io.tezra.fermix.data.onLandingThreads
+import io.tezra.fermix.data.outsideOf
+import io.tezra.fermix.data.ownsProvider
+import io.tezra.fermix.data.refusePastPixels
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asExecutor
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -29,17 +32,6 @@ import java.util.concurrent.atomic.AtomicReference
  * 4:3, so a ten-image send never holds a 48 MP frame (192 MB) in memory, and its JPEG is a few hundred KB.
  */
 const val LONG_EDGE_PX = 2_048
-
-/** The JPEG quality an image is compressed at: no visible loss for photos and screenshots at a third the bytes. */
-const val JPEG_QUALITY = 85
-
-/**
- * The most pixels an image the chat decodes for the tray or for Send may have, by its header, the app's own bound: a
- * decode reads every pixel whatever size it is drawn at, so its time is the image's, which another app chooses (a PNG
- * of a few MB may say 65,535 × 65,535), and it holds its thread while it runs. A quarter of a gigapixel takes in a
- * 200 MP phone camera's photo; the design names no bound, and the number is the owner's to settle.
- */
-const val MAX_IMAGE_PIXELS = 250_000_000L
 
 /** The longest edge a first chunk decodes at for its placeholder colour: enough pixels to average. */
 private const val SHADE_EDGE_PX = 32
@@ -338,32 +330,6 @@ internal fun readableUri(
 /** A URI as a refusal names it: its scheme and its authority, never its path (outsideOf). */
 internal fun outsideOf(uri: Uri): String = outsideOf(uri.scheme, uri.authority)
 
-/**
- * Whether [authority] names a provider of the app's own package, which the app reads with its own rights: one its
- * manifest declares, each provider's authorities split as the manifest lists them.
- */
-fun ownsProvider(
-    context: Context,
-    authority: String,
-): Boolean {
-    val flags = PackageManager.PackageInfoFlags.of(PackageManager.GET_PROVIDERS.toLong())
-    val providers =
-        context.packageManager
-            .getPackageInfo(context.packageName, flags)
-            .providers
-            .orEmpty()
-    return providers.any { provider -> authority in provider.authority.orEmpty().split(';') }
-}
-
-/**
- * An image whose header says it is past [MAX_IMAGE_PIXELS], refused from its decoder's header listener, before a pixel
- * is decoded: an IOException, which the decoder's caller hears as an image that could not be read.
- */
-internal fun refusePastPixels(size: Size) {
-    val pixels = size.width.toLong() * size.height
-    if (pixels > MAX_IMAGE_PIXELS) throw IOException("an image of $pixels pixels, past the $MAX_IMAGE_PIXELS decoded")
-}
-
 /** [width] × [height] scaled down to at most [edge] on the long edge, never up; at least a pixel each way. */
 internal fun cappedSize(
     width: Int,
@@ -406,38 +372,6 @@ internal fun copyAtMost(
     }
     return copied
 }
-
-/**
- * [call], which asks another app's provider and may block on it, run on one of [threads], its caller waiting while it
- * is active. As the caller is cancelled (a landing's time passed), [stop] runs, which ends what [call] waits on,
- * closing its stream or cancelling its signal, and the caller goes on at once, never waiting for the thread: a
- * provider that heeds neither holds that thread, one of the few [threads] has, until it answers, and a [call] not yet
- * begun then never begins. What [call] returns or throws after that has no one to hear it: a stream [stop] closed
- * throws so.
- */
-internal suspend fun <T> onLandingThreads(
-    threads: CoroutineDispatcher,
-    stop: () -> Unit,
-    call: () -> T,
-): T =
-    suspendCancellableCoroutine { waiting ->
-        waiting.invokeOnCancellation { stop() }
-        threads.asExecutor().execute {
-            if (waiting.isActive) waiting.resumeWith(resultOf(call))
-        }
-    }
-
-/**
- * What [call] returned or threw, for its caller to hear: whatever a provider's call throws, the binder's own
- * exceptions among them, is the caller's to handle, as a call on its own thread would throw it to it; an Error goes on,
- * on the landing thread.
- */
-private fun <T> resultOf(call: () -> T): Result<T> =
-    try {
-        Result.success(call())
-    } catch (expected: Exception) {
-        Result.failure(expected)
-    }
 
 /** The type [name]'s extension says among [FILE_TYPES], or bytes. */
 private fun mimeOf(name: String): String = FILE_TYPES[name.substringAfterLast('.', "").lowercase()] ?: UNKNOWN_MIME

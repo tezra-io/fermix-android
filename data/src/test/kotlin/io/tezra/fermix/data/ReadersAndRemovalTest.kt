@@ -64,7 +64,8 @@ class ReadersAndRemovalTest {
     private fun TestScope.open(): Pair<InstanceStore, ProfileDatabases> {
         val databases = ProfileDatabases(TestContext, root, queries)
         val records = atomicDataStore(File(directory, "instances.json"), InstancesSerializer, backgroundScope)
-        return InstanceStore(records, databases, StandardTestDispatcher(testScheduler)) to databases
+        val pictures = AvatarPictures(File(directory, "avatars"))
+        return InstanceStore(records, databases, pictures, StandardTestDispatcher(testScheduler)) to databases
     }
 
     /** Reads [id]'s chat as the Chats list and the Instance screen do, each value into [values]. */

@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import io.tezra.fermix.data.outsideOf
 import io.tezra.fermix.protocol.MAX_HEADER_BYTES
 import io.tezra.fermix.session.MAX_ATTACHMENTS
 
@@ -89,9 +90,3 @@ internal fun cutAtCharacter(
     val end = if (text[max - 1].isHighSurrogate()) max - 1 else max
     return text.substring(0, end)
 }
-
-/** A URI as a refusal names it: its scheme and its authority, never its path, which can say what the phone holds. */
-internal fun outsideOf(
-    scheme: String?,
-    authority: String?,
-): String = "$scheme URI of ${authority.orEmpty().ifEmpty { "no authority" }}"

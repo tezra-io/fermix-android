@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.data.LANDING_WAIT_MILLIS
 import io.tezra.fermix.session.MAX_ATTACHMENTS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

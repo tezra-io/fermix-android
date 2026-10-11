@@ -3,6 +3,9 @@ package io.tezra.fermix.chats
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
+/** When the owner set a photo as a row's avatar. */
+private const val PICTURED_AT = 1_790_000_000_000L
+
 /** Conversation shortcuts and channels follow the rows (design section 9.1). */
 class ConversationSyncTest {
     /** The system's shortcuts and channels, as one set of ids, and every call made to it. */
@@ -74,6 +77,24 @@ class ConversationSyncTest {
         assertEquals("Studio", surface.published.last().title)
         sync.sync(listOf(second.copy(nickname = "Studio")), emptyMap())
         assertEquals(3, surface.published.size)
+    }
+
+    @Test
+    fun `a conversation carries its row's picture, and is published again only as the picture or the tint changes`() {
+        val surface = FakeSurface()
+        val sync = ConversationSync(surface)
+        val pictured = first.copy(pictureAt = PICTURED_AT)
+        sync.sync(listOf(first), emptyMap())
+        sync.sync(listOf(pictured), emptyMap())
+        val expected = Conversation(first.id, "main", HOST, null, dev = false, "Slate", pictureAt = PICTURED_AT)
+        assertEquals(expected, surface.published.last())
+        sync.sync(listOf(pictured), emptyMap())
+        assertEquals(2, surface.published.size)
+        sync.sync(listOf(pictured.copy(tint = "Sand")), emptyMap())
+        assertEquals("Sand", surface.published.last().tint)
+        sync.sync(listOf(pictured.copy(tint = "Sand", pictureAt = null)), emptyMap())
+        assertEquals(null, surface.published.last().pictureAt)
+        assertEquals(4, surface.published.size)
     }
 
     @Test

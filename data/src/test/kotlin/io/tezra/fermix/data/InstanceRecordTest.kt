@@ -72,6 +72,7 @@ class InstanceRecordTest {
                 "device_name",
                 "paired_at",
                 "last_candidate",
+                "picture_at",
             )
         assertEquals(expected, names)
         val secretName = Regex("secret|psk|private|token|password", RegexOption.IGNORE_CASE)
@@ -98,7 +99,7 @@ class InstanceRecordTest {
         }
 
     @Test
-    fun `a record reads back as it was written, caps, candidates, nickname and last candidate included`() =
+    fun `a record reads back as it was written, caps, candidates, nickname, last candidate and picture included`() =
         runTest {
             val named =
                 paired.copy(
@@ -106,6 +107,7 @@ class InstanceRecordTest {
                     deviceName = "Pixel 9 Pro",
                     pairedAt = 1_790_000_000_000L,
                     lastCandidate = paired.candidates.last(),
+                    pictureAt = 1_790_000_100_000L,
                 )
             val records = Instances(listOf(named, instance(gateway = 3)))
             val text = written(records)

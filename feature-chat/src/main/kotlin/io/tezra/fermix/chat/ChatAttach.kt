@@ -1,6 +1,7 @@
 package io.tezra.fermix.chat
 
 import androidx.lifecycle.SavedStateHandle
+import io.tezra.fermix.data.LANDING_WAIT_MILLIS
 import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.session.MAX_ATTACHMENTS

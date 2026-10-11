@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -12,10 +13,10 @@ import java.io.File
 
 /**
  * This phone's paired daemons (design section 9.1), in the Chats list's order, with each one's files in
- * [databases]. Every change is one DataStore write; the files of a record that left go after it, on [io],
- * once [databases] has ended every reader of them (ProfileDatabases.delete), so a removal cut short leaves
- * files no record names, which [launchCheck] deletes. A pairing's write lets its daemon's files be opened
- * again first (ProfileDatabases.admit), as an earlier removal of the same daemon in this process refuses them.
+ * [databases] and its avatar's photo in [pictures]. Every change is one DataStore write; the files of a record that
+ * left go after it, on [io], once [databases] has ended every reader of them (ProfileDatabases.delete), so a removal
+ * cut short leaves files no record names, which [launchCheck] deletes. A pairing's write lets its daemon's files be
+ * opened again first (ProfileDatabases.admit), as an earlier removal of the same daemon in this process refuses them.
  * Every read, once or following, is taken under the write lock ([lockedReads]), so none started during a write
  * keeps the records from before it once the write has ended, and every write runs on the store's own thread
  * ([locked]), so none waits for its caller's. The DataStore is the store's alone, made by it, so no code outside it
@@ -24,16 +25,17 @@ import java.io.File
 class InstanceStore internal constructor(
     private val records: DataStore<Instances>,
     private val databases: ProfileDatabases,
+    val pictures: AvatarPictures,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
     /**
-     * The records in [file], their writes run in [scope], each replacing the file in one rename (atomicDataStore).
-     * DataStore allows one per file in a process, so the app makes the store once; the file belongs in
-     * credential-encrypted storage that no backup or device transfer carries (design section 6.6), such as
-     * `Context.noBackupFilesDir`.
+     * The records in [file], their writes run in [scope], each replacing the file in one rename (atomicDataStore),
+     * and the avatars' photos in `avatars` beside it. DataStore allows one per file in a process, so the app makes the
+     * store once; the file belongs in credential-encrypted storage that no backup or device transfer carries (design
+     * section 6.6), such as `Context.noBackupFilesDir`.
      */
     constructor(file: File, scope: CoroutineScope, databases: ProfileDatabases) :
-        this(atomicDataStore(file, InstancesSerializer, scope), databases)
+        this(atomicDataStore(file, InstancesSerializer, scope), databases, AvatarPictures(avatarsBeside(file)))
 
     private val kept: Flow<Instances> = lockedReads(records)
 
@@ -89,25 +91,32 @@ class InstanceStore internal constructor(
 
     /**
      * "Pair again" on the row [oldId] of a daemon that was reinstalled (design section 9.2): [paired], of the
-     * row's profile, takes the row's place, nickname and tint, and the old daemon's databases and media are
-     * deleted. Returns the old record, whose key alias the caller then deletes, so [paired] under that alias
-     * is refused, as is a nickname it brings for a row that had none when another row is titled with it; a
-     * refusal writes and deletes nothing. A "Re-pair this Fermix" notice of [paired]'s daemon goes in the same
-     * write.
+     * row's profile, takes the row's place, nickname, tint and picture, and the old daemon's databases and media are
+     * deleted. The picture's file is moved to [paired]'s id before the record that names it is written, so whatever
+     * reads that record, the conversation's icon among them, finds it (Task 23's review); a merge the records refuse
+     * moves nothing, asked of them first, and one refused as it is written, the records changed meanwhile, moves the
+     * picture back. Returns the old record, whose key alias the caller then deletes, so [paired] under that alias is
+     * refused, as is a nickname it brings for a row that had none when another row is titled with it; a refusal
+     * writes and deletes nothing. A "Re-pair this Fermix" notice of [paired]'s daemon goes in the same write.
      */
     suspend fun merge(
         oldId: String,
         paired: Instance,
     ): Instance {
         databases.admit(paired.id)
-        var replaced: Instance? = null
-        records.locked { current ->
-            val plan = planMerge(current.instances, oldId, paired)
-            replaced = plan.replaced
-            current.copy(instances = plan.instances, repairNotices = current.repairNotices.without(paired.id))
+        val moving = oldId != paired.id
+        if (moving) {
+            planMerge(kept.first().instances, oldId, paired)
+            withContext(io) { pictures.move(oldId, paired.id) }
         }
-        val old = checkNotNull(replaced) { "the merge replaced no record" }
-        if (old.id != paired.id) deleteFiles(old.id)
+        val old =
+            try {
+                records.writeMerge(oldId, paired)
+            } catch (refused: IllegalArgumentException) {
+                if (moving) withContext(NonCancellable + io) { pictures.move(paired.id, oldId) }
+                throw refused
+            }
+        if (moving) deleteFilesOf(old.id, databases, pictures, io)
         return old
     }
 
@@ -129,13 +138,39 @@ class InstanceStore internal constructor(
         return refusal
     }
 
-    /** Removes [id]'s record, then its databases and media. */
+    /**
+     * The owner's [tint] for [id]'s avatar, one of [TINT_NAMES] (design section 13.1), any other refused before the
+     * write. False, and nothing written, once no record is [id].
+     */
+    suspend fun setTint(
+        id: String,
+        tint: String,
+    ): Boolean {
+        require(tint in TINT_NAMES) { "tint '$tint' is not one of $TINT_NAMES" }
+        return records.changeOwned(id) { it.copy(tint = tint) }
+    }
+
+    /**
+     * When the owner set [id]'s photo, its file already written by [pictures], or none once the photo is removed, whose
+     * file then goes. False, and nothing written, once no record is [id]: a removal took it, and its files with it,
+     * and a photo whose write ended after that goes too, here, rather than wait for the launch check's sweep.
+     */
+    suspend fun setPicture(
+        id: String,
+        at: Long?,
+    ): Boolean {
+        val present = records.changeOwned(id) { it.copy(pictureAt = at) }
+        if (!present || at == null) withContext(io) { pictures.delete(id) }
+        return present
+    }
+
+    /** Removes [id]'s record, then its databases, media and picture. */
     suspend fun remove(id: String) {
         records.locked { current ->
             require(current.instances.any { it.id == id }) { "no record is $id" }
             current.copy(instances = current.instances.filter { it.id != id })
         }
-        deleteFiles(id)
+        deleteFilesOf(id, databases, pictures, io)
     }
 
     /** Moves [id]'s row to [toIndex]: "Move to top" is 0, and the Chats list's manual order (section 9.4). */
@@ -160,10 +195,12 @@ class InstanceStore internal constructor(
     }
 
     /**
-     * Removes every record whose key alias is in [missingAliases] and notes each one, by its id and its title,
-     * among the repair notices, in one write; then deletes their files, and returns them.
+     * The launch check's write ([launchCheck]): removes every record whose key alias is in [missingAliases] and notes
+     * each one, by its id and its title, among the repair notices, in one write, and deletes their files; then deletes
+     * the files and the picture of every instance no record names, and each recorded one's staged uploads its outbox no
+     * longer names (StagedUploads). Returns the records dropped.
      */
-    internal suspend fun dropForRepair(missingAliases: Set<String>): List<Instance> {
+    internal suspend fun dropAndSweep(missingAliases: Set<String>): List<Instance> {
         var dropped = emptyList<Instance>()
         records.locked { current ->
             val (gone, kept) = current.instances.partition { it.keyAlias in missingAliases }
@@ -171,15 +208,7 @@ class InstanceStore internal constructor(
             val noticed = gone.map { RepairNotice(it.id, it.title) }
             current.copy(instances = kept, repairNotices = current.repairNotices + noticed)
         }
-        dropped.forEach { deleteFiles(it.id) }
-        return dropped
-    }
-
-    /**
-     * Deletes the files of every instance no record names, and each recorded one's staged uploads its outbox no
-     * longer names (StagedUploads).
-     */
-    internal suspend fun deleteUnrecordedFiles() {
+        dropped.forEach { deleteFilesOf(it.id, databases, pictures, io) }
         val ids =
             instances
                 .first()
@@ -187,11 +216,59 @@ class InstanceStore internal constructor(
                 .toSet()
         withContext(io) {
             databases.deleteAllExcept(ids)
+            pictures.deleteAllExcept(ids)
             ids.forEach { databases.sweepStagedUploads(it, MAIN_PROFILE) }
         }
+        return dropped
     }
+}
 
-    private suspend fun deleteFiles(id: String) = withContext(io) { databases.delete(id) }
+/** A merge's one write: [paired] in [oldId]'s row, refused as [planMerge] says. Returns the old record. */
+private suspend fun DataStore<Instances>.writeMerge(
+    oldId: String,
+    paired: Instance,
+): Instance {
+    var replaced: Instance? = null
+    locked { current ->
+        val plan = planMerge(current.instances, oldId, paired)
+        replaced = plan.replaced
+        current.copy(instances = plan.instances, repairNotices = current.repairNotices.without(paired.id))
+    }
+    return checkNotNull(replaced) { "the merge replaced no record" }
+}
+
+/** Deletes [id]'s databases and media, once [databases] has ended every reader of them, then its picture, on [io]. */
+private suspend fun deleteFilesOf(
+    id: String,
+    databases: ProfileDatabases,
+    pictures: AvatarPictures,
+    io: CoroutineDispatcher,
+) = withContext(io) {
+    databases.delete(id)
+    pictures.delete(id)
+}
+
+/**
+ * [id]'s record changed by [change], what only the owner sets, in one write of these records; false, and nothing
+ * written, once no record is [id].
+ */
+private suspend fun DataStore<Instances>.changeOwned(
+    id: String,
+    change: (Instance) -> Instance,
+): Boolean {
+    var present = false
+    locked { current ->
+        present = current.instances.any { it.id == id }
+        val changed = current.instances.map { if (it.id == id) change(it) else it }
+        if (present) current.copy(instances = changed) else current
+    }
+    return present
+}
+
+/** The avatars' directory beside [records], the records file: credential-encrypted as it is, and never backed up. */
+private fun avatarsBeside(records: File): File {
+    val parent = requireNotNull(records.absoluteFile.parentFile) { "$records has no directory" }
+    return File(parent, AVATARS_DIRECTORY)
 }
 
 /** The notices without [id]'s. */

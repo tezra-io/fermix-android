@@ -45,7 +45,10 @@ val TINT_NAMES: List<String> = listOf("Slate", "Sage", "Clay", "Plum", "Ocean", 
  * reconciled.
  * [deviceName] and [pairedAt] are the Instance screen's "This phone" (section 13.7): the name `pair_request`
  * carried, and when the pairing was approved, in Unix milliseconds. Section 9.1 does not list them; the
- * screen needs them, and only the pairing knows them.
+ * screen needs them, and only the pairing knows them. [pictureAt] is when the owner last set a photo as the avatar
+ * (the owner, 2026-10-10), in Unix milliseconds, none while the avatar is the tint: the photo itself is a file of
+ * AvatarPictures, beside the records, and the time is its version, so a screen holding the last one draws the new
+ * one. Like the nickname and the tint, only the owner sets it; a pairing keeps it.
  *
  * Protocol v2 (design section 7) supplies fields this record requires, so a version-1 pairing cannot make
  * one, and the app refuses a version-1 link at scan (D1). [pushSalt] is the `pair_approved.push_salt` row's,
@@ -80,6 +83,7 @@ data class Instance(
     @SerialName("paired_at") val pairedAt: Long? = null,
     @Serializable(with = CandidateSerializer::class)
     @SerialName("last_candidate") val lastCandidate: Candidate? = null,
+    @SerialName("picture_at") val pictureAt: Long? = null,
 ) {
     init {
         keyBytes("gateway_pk", gatewayPk)
@@ -99,6 +103,7 @@ data class Instance(
         require(fcmRegisteredAt == null || fcmRegisteredAt >= 0L) { "fcm_registered_at is $fcmRegisteredAt" }
         require(deviceName == null || deviceName.isNotBlank()) { "device_name is blank" }
         require(pairedAt == null || pairedAt >= 0L) { "paired_at is $pairedAt" }
+        require(pictureAt == null || pictureAt >= 0L) { "picture_at is $pictureAt" }
     }
 
     /** `sha256(gateway_pk)` in lowercase hex: the key of everything this phone keeps for the daemon. */

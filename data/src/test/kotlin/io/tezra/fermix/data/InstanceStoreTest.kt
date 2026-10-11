@@ -1,12 +1,14 @@
 package io.tezra.fermix.data
 
 import androidx.datastore.core.CorruptionException
+import androidx.datastore.core.okio.OkioSerializer
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.session.TimelineRow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import okio.Buffer
+import okio.BufferedSink
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -18,9 +20,24 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
+/** [inner], telling [seen] each set of records as it is written to the file, before any reader can find it there. */
+private class WatchedWrites(
+    private val inner: OkioSerializer<Instances>,
+    private val seen: (Instances) -> Unit,
+) : OkioSerializer<Instances> by inner {
+    override suspend fun writeTo(
+        t: Instances,
+        sink: BufferedSink,
+    ) {
+        seen(t)
+        inner.writeTo(t, sink)
+    }
+}
+
 /**
  * The instance records in their DataStore, with each instance's files beside them (design sections 9.1
- * and 9.2): what an upsert merges, a rename and a reorder keep, and a remove or a merge deletes.
+ * and 9.2): what an upsert merges, a rename and a reorder keep, and a remove or a merge deletes; and the owner's
+ * tint and picture (the owner, 2026-10-10), the picture's file in `avatars` beside the records.
  */
 class InstanceStoreTest {
     @TempDir
@@ -31,6 +48,16 @@ class InstanceStoreTest {
     private fun TestScope.open(): Pair<InstanceStore, ProfileDatabases> {
         val databases = ProfileDatabases(TestContext, root)
         return InstanceStore(File(directory, "instances.json"), backgroundScope, databases) to databases
+    }
+
+    /** [id]'s picture where the store keeps it: in `avatars`, beside the records file (AvatarPictures). */
+    private fun pictureOf(id: String): File = File(directory, "avatars/$id.jpg")
+
+    /** A picture file for [id], as AvatarPictures writes one, its bytes [PICTURE]. */
+    private fun planted(id: String) {
+        val file = pictureOf(id)
+        assertTrue(file.parentFile?.mkdirs() == true || file.parentFile?.isDirectory == true)
+        file.writeBytes(PICTURE)
     }
 
     /** Gives [instance] a cached row and a cached blob, so that its files exist. */
@@ -97,10 +124,14 @@ class InstanceStoreTest {
             store.upsert(linux)
             fill(databases, linux)
             assertThrows<IllegalArgumentException> { store.upsert(instance(gateway = 5, nickname = "studio")) }
+            assertTrue(store.setPicture(linux.id, PICTURED_AT))
+            planted(linux.id)
             val reinstalled = instance(gateway = 7, host = "linux-box", nickname = "Studio")
             assertThrows<IllegalArgumentException> { store.merge(linux.id, reinstalled) }
-            assertEquals(listOf(mac, linux), store.instances.first())
+            assertEquals(listOf(mac, linux.copy(pictureAt = PICTURED_AT)), store.instances.first())
             assertTrue(File(databases.mediaDirectory(linux.id, PROFILE), BLOB_SHA256).isFile)
+            assertArrayEquals(PICTURE, pictureOf(linux.id).readBytes())
+            assertFalse(pictureOf(reinstalled.id).exists(), "a refused merge moved the picture")
         }
 
     @Test
@@ -188,6 +219,114 @@ class InstanceStoreTest {
         }
 
     @Test
+    fun `the owner's tint is one of the design's six, any other is refused, and none is written once removed`() =
+        runTest {
+            val (store, _) = open()
+            val mac = instance(gateway = 1)
+            store.upsert(mac)
+            assertTrue(store.setTint(mac.id, "Ocean"))
+            assertEquals(listOf(mac.copy(tint = "Ocean")), store.instances.first())
+            listOf("Purple", "ocean", "").forEach { name ->
+                assertThrows<IllegalArgumentException> { store.setTint(mac.id, name) }
+            }
+            assertEquals(listOf(mac.copy(tint = "Ocean")), store.instances.first())
+            store.remove(mac.id)
+            assertFalse(store.setTint(mac.id, "Sand"))
+        }
+
+    @Test
+    fun `a picture's time is set on its record alone, cleared with its file, and nothing is written once removed`() =
+        runTest {
+            val (store, _) = open()
+            val mac = instance(gateway = 1)
+            val linux = instance(gateway = 3, host = "linux-box")
+            store.upsert(mac)
+            store.upsert(linux)
+            planted(linux.id)
+            assertTrue(store.setPicture(mac.id, PICTURED_AT))
+            assertEquals(listOf(mac.copy(pictureAt = PICTURED_AT), linux), store.instances.first())
+            planted(mac.id)
+            assertTrue(store.setPicture(mac.id, null))
+            assertEquals(listOf(mac, linux), store.instances.first())
+            assertFalse(pictureOf(mac.id).exists(), "the removed photo's file is still there")
+            assertTrue(pictureOf(linux.id).isFile, "another Fermix's picture went too")
+            store.remove(mac.id)
+            assertFalse(store.setPicture(mac.id, PICTURED_AT))
+            assertEquals(listOf(linux), store.instances.first())
+        }
+
+    @Test
+    fun `a picture written for a record a removal took meanwhile goes with it, and no other instance's`() =
+        runTest {
+            val (store, _) = open()
+            val removed = instance(gateway = 1)
+            val kept = instance(gateway = 3, host = "linux-box")
+            store.upsert(removed)
+            store.upsert(kept)
+            planted(kept.id)
+            store.remove(removed.id)
+            // The photo's write ends after the removal: its file is there, and its record is not.
+            planted(removed.id)
+            assertFalse(store.setPicture(removed.id, PICTURED_AT))
+            assertFalse(pictureOf(removed.id).exists(), "the photo of a record that is gone is still there")
+            assertArrayEquals(PICTURE, pictureOf(kept.id).readBytes())
+            assertEquals(listOf(kept), store.instances.first())
+        }
+
+    @Test
+    fun `a remove deletes the record's picture with its other files, and no other instance's`() =
+        runTest {
+            val (store, _) = open()
+            val removed = instance(gateway = 1)
+            val kept = instance(gateway = 3, host = "linux-box")
+            store.upsert(removed)
+            store.upsert(kept)
+            planted(removed.id)
+            planted(kept.id)
+            store.remove(removed.id)
+            assertFalse(pictureOf(removed.id).exists(), "the removed instance's picture is still there")
+            assertArrayEquals(PICTURE, pictureOf(kept.id).readBytes())
+        }
+
+    @Test
+    fun `a merge moves the old row's picture to the daemon that took its place, and leaves no copy behind`() =
+        runTest {
+            val (store, _) = open()
+            val old = instance(gateway = 1, nickname = "Studio")
+            store.upsert(old)
+            assertTrue(store.setPicture(old.id, PICTURED_AT))
+            planted(old.id)
+            val reinstalled = instance(gateway = 7)
+            store.merge(old.id, reinstalled)
+            assertEquals(
+                listOf(reinstalled.copy(nickname = "Studio", pictureAt = PICTURED_AT)),
+                store.instances.first(),
+            )
+            assertFalse(pictureOf(old.id).exists(), "the old row's picture is still under its id")
+            assertArrayEquals(PICTURE, pictureOf(reinstalled.id).readBytes())
+        }
+
+    @Test
+    fun `a merge moves the picture before it writes the record that names it, so the record's first reader finds it`() =
+        runTest {
+            val reinstalled = instance(gateway = 7)
+            val found = mutableListOf<Boolean>()
+            val serializer =
+                WatchedWrites(InstancesSerializer) { written ->
+                    if (written.instances.any { it.id == reinstalled.id }) found += pictureOf(reinstalled.id).isFile
+                }
+            val records = atomicDataStore(File(directory, "instances.json"), serializer, backgroundScope)
+            val pictures = AvatarPictures(File(directory, "avatars"))
+            val store = InstanceStore(records, ProfileDatabases(TestContext, root), pictures)
+            val old = instance(gateway = 1)
+            store.upsert(old)
+            assertTrue(store.setPicture(old.id, PICTURED_AT))
+            planted(old.id)
+            store.merge(old.id, reinstalled)
+            assertEquals(listOf(true), found)
+        }
+
+    @Test
     fun `move to top keeps the new order`() =
         runTest {
             val (store, _) = open()
@@ -203,5 +342,7 @@ class InstanceStoreTest {
         const val PROFILE = "main"
         val BLOB = "a cached image".encodeToByteArray()
         val BLOB_SHA256 = idOf(BLOB)
+        val PICTURE = "a picture's JPEG".encodeToByteArray()
+        const val PICTURED_AT = 1_790_000_000_000L
     }
 }

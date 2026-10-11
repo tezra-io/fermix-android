@@ -10,7 +10,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Process
 import androidx.core.net.toUri
-import io.tezra.fermix.chat.ownsProvider
+import io.tezra.fermix.data.ownsProvider
 
 /**
  * The share entry (design section 13.6, "Share into Fermix"), the one exported way into the app that takes another

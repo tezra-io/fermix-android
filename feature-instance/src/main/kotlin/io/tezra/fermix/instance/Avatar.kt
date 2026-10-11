@@ -1,11 +1,18 @@
 package io.tezra.fermix.instance
 
+import android.graphics.Matrix
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -31,8 +38,10 @@ enum class AvatarSize(
 
 /**
  * A Fermix's avatar (design section 9.2): its [tint], one of data's TINT_NAMES, as a disc with nothing on it, as the
- * M51 update's reference player draws its Chats row (the two-dot mark it carried is retired, 7.3), and the connection
- * [dot], none where the canon draws none.
+ * M51 update's reference player draws its Chats row (the two-dot mark it carried is retired, 7.3), or the owner's
+ * [picture] in the round in its place (the owner, 2026-10-10), read for it by [rememberAvatarPicture]; and the
+ * connection [dot], none where the canon draws none. The picture's brush is made once per picture and size, so a
+ * frame draws two or three circles and makes nothing.
  */
 @Composable
 fun InstanceAvatar(
@@ -40,13 +49,31 @@ fun InstanceAvatar(
     dot: Dot?,
     size: AvatarSize,
     modifier: Modifier = Modifier,
+    picture: ImageBitmap? = null,
 ) {
     val colors = LocalFermixColors.current
     val fill = tintColor(tint)
-    Canvas(modifier = modifier.size(size.disc)) {
-        drawCircle(color = fill)
-        if (dot != null) drawConnectionDot(size.connectionDot.toPx(), dotColor(dot, colors), colors.canvas)
-    }
+    Spacer(
+        modifier =
+            modifier.size(size.disc).drawWithCache {
+                val brush = picture?.let { pictureBrush(it, this.size) }
+                val dotAcross = size.connectionDot.toPx()
+                onDrawBehind {
+                    if (brush == null) drawCircle(color = fill) else drawCircle(brush = brush)
+                    if (dot != null) drawConnectionDot(dotAcross, dotColor(dot, colors), colors.canvas)
+                }
+            },
+    )
+}
+
+/** [picture] as a brush that fills [area], scaled to it on each edge: it was decoded square, at about that size. */
+private fun pictureBrush(
+    picture: ImageBitmap,
+    area: Size,
+): ShaderBrush {
+    val shader = ImageShader(picture)
+    shader.setLocalMatrix(Matrix().apply { setScale(area.width / picture.width, area.height / picture.height) })
+    return ShaderBrush(shader)
 }
 
 /**

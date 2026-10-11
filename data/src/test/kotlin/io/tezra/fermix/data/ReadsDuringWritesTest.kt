@@ -93,6 +93,9 @@ class ReadsDuringWritesTest {
     @TempDir
     lateinit var directory: File
 
+    /** The pictures of a store whose test sets none, in the test's `avatars`. */
+    private fun pictures(): AvatarPictures = AvatarPictures(File(directory, "avatars"))
+
     private val first = instance(gateway = 1)
     private val second = instance(gateway = 3, host = "linux-box")
     private val third = instance(gateway = 5, host = "nas")
@@ -124,7 +127,7 @@ class ReadsDuringWritesTest {
         runTest {
             val serializer = HeldWrites(InstancesSerializer)
             val records = atomicDataStore(File(directory, "i.json"), serializer, backgroundScope)
-            val store = InstanceStore(records, ProfileDatabases(TestContext, File(directory, "instances")))
+            val store = InstanceStore(records, ProfileDatabases(TestContext, File(directory, "instances")), pictures())
             store.upsert(first)
             serializer.holding = true
             val writing = launch { store.upsert(second) }
@@ -161,7 +164,7 @@ class ReadsDuringWritesTest {
     fun `a reader whose own thread is held keeps no other reader waiting`() =
         runTest {
             val records = atomicDataStore(File(directory, "i.json"), InstancesSerializer, backgroundScope)
-            val store = InstanceStore(records, ProfileDatabases(TestContext, File(directory, "instances")))
+            val store = InstanceStore(records, ProfileDatabases(TestContext, File(directory, "instances")), pictures())
             store.upsert(first)
             val thread = HeldThread()
             val held = async(thread) { store.instances.first() }
@@ -183,7 +186,7 @@ class ReadsDuringWritesTest {
     fun `a writer whose own thread is held keeps no reader waiting`() =
         runTest {
             val records = atomicDataStore(File(directory, "i.json"), InstancesSerializer, backgroundScope)
-            val store = InstanceStore(records, ProfileDatabases(TestContext, File(directory, "instances")))
+            val store = InstanceStore(records, ProfileDatabases(TestContext, File(directory, "instances")), pictures())
             store.upsert(first)
             val quiet = first.copy(notificationsEnabled = false)
             val thread = HeldThread()

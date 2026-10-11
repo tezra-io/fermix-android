@@ -65,6 +65,9 @@ class InstanceScreenTest {
             onPreviews = { calls += "previews:$it" },
             onClearCache = { calls += "clear" },
             onUnpair = { calls += "unpair" },
+            onTint = { calls += "tint:$it" },
+            onChoosePhoto = { calls += "choose" },
+            onRemovePhoto = { calls += "remove" },
         )
 
     private fun string(

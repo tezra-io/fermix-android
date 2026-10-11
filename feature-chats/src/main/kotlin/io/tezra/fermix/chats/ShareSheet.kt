@@ -21,6 +21,7 @@ import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.instance.AvatarSize
 import io.tezra.fermix.instance.InstanceAvatar
 import io.tezra.fermix.instance.dot
+import io.tezra.fermix.instance.rememberAvatarPicture
 
 // The visual canon's share sheet: its `h5` 24 dp in from the sides and 4 dp under the grab bar, its rows 8 dp under
 // it, and the sheet's 36 dp at the foot.
@@ -67,7 +68,14 @@ fun ShareSheetContent(
         )
         rows.forEach { row ->
             RowLayout(
-                avatar = { InstanceAvatar(tint = row.record.tint, dot = row.link.dot, size = AvatarSize.ROW) },
+                avatar = {
+                    InstanceAvatar(
+                        tint = row.record.tint,
+                        dot = row.link.dot,
+                        size = AvatarSize.ROW,
+                        picture = rememberAvatarPicture(row.record.id, row.record.pictureAt, AvatarSize.ROW),
+                    )
+                },
                 modifier = Modifier.rowFocusRing().clickable { onPick(row) },
                 meta = {},
             ) { Title(row) }

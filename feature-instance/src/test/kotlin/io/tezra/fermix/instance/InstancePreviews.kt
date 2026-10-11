@@ -1,9 +1,16 @@
 package io.tezra.fermix.instance
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
@@ -13,13 +20,16 @@ import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.DiagnosticKind
 import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.Reachability
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import java.time.ZoneOffset
 
-// The Instance screen at the twelve windows of @FermixPreviews: a Fermix the owner named, connected over
-// the LAN with Tailscale likely up, after a test whose race its tailnet address won, so that both its
+// The Instance screen at the twelve windows of @FermixPreviews: a Fermix the owner named and gave a photo,
+// connected over the LAN with Tailscale likely up, after a test whose race its tailnet address won, so that both its
 // candidates are lit as the canon draws them, each by its own handshake, with a few lines in its log, its page's
 // top, and its foot with "Advanced" open; and the foot of the page of one that cannot be reached, without FCM, on a
-// debug build. The pairing's day is read in UTC, so the images are the same in every zone.
+// debug build. The pairing's day is read in UTC, so the images are the same in every zone. The photo is drawn as the
+// preview composes, a fixed pose: a dusk over the sea, read through the app's picture cache as a screen reads one.
 
 private val LOG =
     listOf(
@@ -36,30 +46,72 @@ private val NO_ACTIONS =
         onPreviews = {},
         onClearCache = {},
         onUnpair = {},
+        onTint = {},
+        onChoosePhoto = {},
+        onRemovePhoto = {},
     )
+
+/** A photo for a preview's avatar, [side] pixels across: a dusk sky, its sun, and the sea under it. */
+private fun duskPhoto(side: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val edge = side.toFloat()
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.shader = LinearGradient(0f, 0f, 0f, edge, 0xFFF2B880.toInt(), 0xFF7A6BC4.toInt(), Shader.TileMode.CLAMP)
+    canvas.drawRect(0f, 0f, edge, edge, paint)
+    paint.shader = null
+    paint.color = 0xFFFFE9A8.toInt()
+    canvas.drawCircle(edge * 0.5f, edge * 0.64f, edge * 0.2f, paint)
+    paint.color = 0xFF27407A.toInt()
+    canvas.drawRect(0f, edge * 0.66f, edge, edge, paint)
+    return bitmap
+}
+
+/**
+ * [content] with the app's picture cache over [duskPhoto], read at once on [io], so a pictured avatar shows in the
+ * image.
+ */
+@Composable
+private fun WithPhotos(
+    io: CoroutineDispatcher = Dispatchers.Unconfined,
+    content: @Composable () -> Unit,
+) {
+    val pictures =
+        remember {
+            AvatarPictureCache(read = {
+                _,
+                side,
+                ->
+                duskPhoto(side)
+            }, log = { _, _ -> }, io)
+        }
+    CompositionLocalProvider(LocalAvatarPictures provides pictures, content = content)
+}
 
 @FermixPreviews
 @Composable
 fun InstanceScreenPreview() {
-    val record = sample(nickname = "Studio")
+    val record = sample(nickname = "Studio").copy(pictureAt = PAIRED_AT)
     val test = TestState.Done(TestOutcome.Reached(TAILNET, millis = 38))
     FermixPreviewTheme {
-        InstanceScreen(
-            ui =
-                InstanceUi(
-                    record = record,
-                    others = emptyList(),
-                    link = Link.Up(Candidate.Scope.LAN, latencyMs = 9, caughtUp = true),
-                    diagnostics = LOG,
-                    reachable = reachableCandidates(record.candidates, LAN, test, Reachability.TAILNET_LIKELY),
-                    previews = true,
-                    cacheBytes = 184_000_000,
-                    test = test,
-                    releaseBuild = true,
-                ),
-            actions = NO_ACTIONS,
-            zone = ZoneOffset.UTC,
-        )
+        WithPhotos {
+            InstanceScreen(
+                ui =
+                    InstanceUi(
+                        record = record,
+                        others = emptyList(),
+                        link = Link.Up(Candidate.Scope.LAN, latencyMs = 9, caughtUp = true),
+                        diagnostics = LOG,
+                        reachable = reachableCandidates(record.candidates, LAN, test, Reachability.TAILNET_LIKELY),
+                        previews = true,
+                        cacheBytes = 184_000_000,
+                        test = test,
+                        releaseBuild = true,
+                    ),
+                actions = NO_ACTIONS,
+                zone = ZoneOffset.UTC,
+            )
+        }
     }
 }
 

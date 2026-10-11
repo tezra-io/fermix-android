@@ -293,3 +293,9 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   in a card of their own, and the connection's details, with the path it takes, this phone, storage, diagnostics
   and "Reset to gateway name" wait under "Advanced", closed until you open it, each in a card. "Clear media cache"
   and "Reset to gateway name" are buttons now, not underlined words, and "Unpair" is an outlined button.
+- **A Fermix can wear your photo.** Tap the avatar on its screen for "Picture": pick one of the six colours, or
+  choose a photo from your phone, which shows round wherever the Fermix does, in the Chats list, the chat's bar,
+  the share sheet and its shortcut. The photo is cut square from its middle and kept small on this phone, without
+  its location or camera details, and goes when the Fermix does. "Remove photo" brings the colour back, and the
+  last photo you choose, or its removal, is what stays, even while an earlier one is still loading. Only a photo
+  another app hands over, as the photo picker does, is read; the sheet opens whole, even on a phone on its side.

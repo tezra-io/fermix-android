@@ -34,6 +34,20 @@
     <string name="instance_advanced">Advanced</string>
     <string name="instance_advanced_expanded">Expanded</string>
     <string name="instance_advanced_collapsed">Collapsed</string>
+    <!-- Not the design's: the avatar's photo and tint (the owner, 2026-10-10). The avatar's button, its sheet, its
+         two actions, and the line under the header when a photo could not be used. -->
+    <string name="instance_picture_change">Change picture</string>
+    <string name="instance_picture_title">Picture</string>
+    <string name="instance_picture_choose">Choose a photo</string>
+    <string name="instance_picture_remove">Remove photo</string>
+    <string name="instance_picture_failed">Couldn\'t use that photo</string>
+    <!-- The six tints as TalkBack names them on the Picture sheet: the design's names (section 13.1). -->
+    <string name="instance_tint_slate">Slate</string>
+    <string name="instance_tint_sage">Sage</string>
+    <string name="instance_tint_clay">Clay</string>
+    <string name="instance_tint_plum">Plum</string>
+    <string name="instance_tint_ocean">Ocean</string>
+    <string name="instance_tint_sand">Sand</string>
     <!-- A label the design does not give (section 13.8): the back button's. -->
     <string name="instance_back">Back</string>
 

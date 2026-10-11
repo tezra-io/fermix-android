@@ -149,6 +149,25 @@ class LaunchCheckTest {
         }
 
     @Test
+    fun `a dropped Fermix's picture goes with it, and a picture or a write's part no record names is deleted`() =
+        runTest {
+            val (store, _) = open()
+            val lost = instance(gateway = 1, keyAlias = "fermix.device.1.lost")
+            val kept = instance(gateway = 3, host = "linux-box", keyAlias = "fermix.device.3.kept")
+            store.upsert(lost)
+            store.upsert(kept)
+            val avatars = File(directory, "avatars")
+            assertTrue(avatars.mkdirs())
+            val orphan = instance(gateway = 5)
+            listOf(lost.id, kept.id, orphan.id).forEach { File(avatars, "$it.jpg").writeText("a picture") }
+            File(avatars, "${kept.id}4021.jpg.part").writeText("a write cut short")
+            File(avatars, "notes.txt").writeText("not a picture")
+
+            launchCheck(store) { it == kept.keyAlias }
+            assertEquals(setOf("${kept.id}.jpg", "notes.txt"), avatars.list().orEmpty().toSet())
+        }
+
+    @Test
     fun `a staged upload its outbox no longer names is swept, and one an item names stays`() =
         runTest {
             val (store, databases) = open()

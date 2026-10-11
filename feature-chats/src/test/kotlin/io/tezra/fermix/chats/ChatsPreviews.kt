@@ -1,5 +1,10 @@
 package io.tezra.fermix.chats
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +14,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import io.tezra.fermix.data.Instance
@@ -18,15 +25,21 @@ import io.tezra.fermix.design.FermixPreviewTheme
 import io.tezra.fermix.design.FermixPreviews
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.instance.AvatarPictureCache
 import io.tezra.fermix.instance.Link
+import io.tezra.fermix.instance.LocalAvatarPictures
 import io.tezra.fermix.transport.Candidate
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 
 // The Chats list, its trust states and the app lock at the twelve windows of @FermixPreviews.
 // The list holds three Fermixes: production on suj-mbp over Tailscale with two unread, the dev daemon on
 // the same Mac connecting with a draft and its DEV tag, and a Linux box that unpaired this phone. The rows'
 // other states are a list of their own, as the canon's trust-state frame: the dev daemon thinking, a
-// daemon reinstalled, a connection taken over, a protocol error, and a Fermix a restore dropped. "Send to which
-// Fermix?" lists the canon's three: suj-mbp and its dev daemon, both up, and suj-linux with no link.
+// daemon reinstalled, a connection taken over, a protocol error on the one the owner named Studio and gave a photo,
+// and a Fermix a restore dropped. "Send to which Fermix?" lists the canon's three: suj-mbp and its dev daemon, both
+// up, and suj-linux with no link. The photo is drawn as the preview composes, a fixed pose (a hill under a morning
+// sky), and read through the app's picture cache as a row reads one.
 
 private val NO_ACTIONS =
     ChatsActions(
@@ -79,6 +92,46 @@ private val THREE =
         repairs = emptyList(),
     )
 
+/** When the owner gave Studio its photo. */
+private const val PICTURED_AT = 1_790_502_060_000L
+
+/** A photo for a preview's avatar, [side] pixels across: a green hill under a morning sky. */
+private fun hillPhoto(side: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val edge = side.toFloat()
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    paint.shader = LinearGradient(0f, 0f, 0f, edge, 0xFF9CC9EE.toInt(), 0xFFE8F1F8.toInt(), Shader.TileMode.CLAMP)
+    canvas.drawRect(0f, 0f, edge, edge, paint)
+    paint.shader = null
+    paint.color = 0xFF5E9A4F.toInt()
+    canvas.drawCircle(edge * 0.3f, edge * 1.25f, edge * 0.75f, paint)
+    paint.color = 0xFF3F7A3A.toInt()
+    canvas.drawCircle(edge * 0.95f, edge * 1.35f, edge * 0.7f, paint)
+    return bitmap
+}
+
+/**
+ * [content] with the app's picture cache over [hillPhoto], read at once on [io], so a pictured row shows in the
+ * image.
+ */
+@Composable
+private fun WithPhotos(
+    io: CoroutineDispatcher = Dispatchers.Unconfined,
+    content: @Composable () -> Unit,
+) {
+    val pictures =
+        remember {
+            AvatarPictureCache(read = {
+                _,
+                side,
+                ->
+                hillPhoto(side)
+            }, log = { _, _ -> }, io)
+        }
+    CompositionLocalProvider(LocalAvatarPictures provides pictures, content = content)
+}
+
 /** A row of [record] whose link and second line are [link] and [line], at [time], nothing unread. */
 private fun stateRow(
     record: Instance,
@@ -115,7 +168,7 @@ private val STATES =
                     "Tue",
                 ),
                 stateRow(
-                    sample(5, nickname = "Studio", tint = "Plum"),
+                    sample(5, nickname = "Studio", tint = "Plum").copy(pictureAt = PICTURED_AT),
                     Link.ProtocolError,
                     RowLine.Speaks(Link.ProtocolError),
                     "Wed",
@@ -133,7 +186,7 @@ fun ChatsListPreview() {
 @FermixPreviews
 @Composable
 fun ChatsRowStatesPreview() {
-    FermixPreviewTheme { ChatsScreen(ui = STATES, actions = NO_ACTIONS) }
+    FermixPreviewTheme { WithPhotos { ChatsScreen(ui = STATES, actions = NO_ACTIONS) } }
 }
 
 @FermixPreviews

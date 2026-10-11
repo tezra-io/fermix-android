@@ -5,9 +5,9 @@ A hand-picked few, for a reader of the repository who wants to see the app: each
 `scripts/app_shots.sh` writes from a green `./gradlew recordRoborazziDebug` and which git does not track. The
 whole set, every preview, is CI's `app-shots` artifact on each run. These were copied from the record at
 `aca4c1c`, whose screens `7f995e8` left unchanged, all but the thinking card's and the Instance screen's, which
-Task 23 moved and copied from the record of the part that moved each: the card's verb and halo, and the Instance
-screen's new layout. When a change moves one of these previews, the change copies the new image here by the same
-name, so the few stay the screens as they are (AGENTS.md, Screenshots).
+Task 23 moved and copied from the record of the part that moved each last: the card's verb and halo, and the
+avatar's photo on the Instance screen. When a change moves one of these previews, the change copies the new image
+here by the same name, so the few stay the screens as they are (AGENTS.md, Screenshots).
 
 | Screen | Preview | Light | Dark |
 |---|---|---|---|

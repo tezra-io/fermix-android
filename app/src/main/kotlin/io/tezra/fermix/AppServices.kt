@@ -29,7 +29,10 @@ import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
+import io.tezra.fermix.data.avatarSource
 import io.tezra.fermix.data.launchCheck
+import io.tezra.fermix.data.ownsProvider
+import io.tezra.fermix.instance.AvatarPictureCache
 import io.tezra.fermix.instance.InstanceParts
 import io.tezra.fermix.onboarding.OnboardingParts
 import io.tezra.fermix.onboarding.PairingWait
@@ -206,7 +209,17 @@ class AppServices(
         )
     val lockGate = LockGate(canLock = { canLock(context) })
     private val conversations =
-        ConversationSync(PlatformConversations(context) { chatIntent(context, it.instanceId, it.profileId) })
+        ConversationSync(
+            PlatformConversations(context, instances.pictures, ::logFault) {
+                chatIntent(context, it.instanceId, it.profileId)
+            },
+        )
+
+    /**
+     * The avatars' photos as the screens draw them (the owner, 2026-10-10): read from the records' AvatarPictures on
+     * [io], once per instance, version and size, the last few kept for every screen of the process.
+     */
+    val avatars = AvatarPictureCache(read = instances.pictures::read, log = ::logFault, io = io)
     private val checkedState = MutableStateFlow(false)
 
     /** Whether the launch check has run: nothing shows, and no session opens, before it has (section 6.6). */
@@ -333,6 +346,9 @@ class AppServices(
             notifications = registrations,
             unpair = { supervisor.remove(it, unpair = true, removal = ::forget) },
             releaseBuild = !debuggable(context),
+            photo = { uri -> avatarSource(context.contentResolver, uri) { ownsProvider(context, it) } },
+            now = System::currentTimeMillis,
+            log = ::logFault,
         )
 
     /**

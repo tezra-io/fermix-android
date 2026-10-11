@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +21,7 @@ import androidx.lifecycle.withResumed
 import androidx.navigation3.runtime.NavKey
 import io.tezra.fermix.chats.ChatsViewModel
 import io.tezra.fermix.design.FermixTheme
+import io.tezra.fermix.instance.LocalAvatarPictures
 import io.tezra.fermix.onboarding.OnboardingViewModel
 import io.tezra.fermix.onboarding.darkUnderBars
 import io.tezra.fermix.onboarding.securesWindow
@@ -86,7 +88,9 @@ class MainActivity : ComponentActivity() {
                 leave = { moveTaskToBack(true) },
             )
         setContent {
-            FermixTheme { FermixApp(services, hooks) }
+            FermixTheme {
+                CompositionLocalProvider(LocalAvatarPictures provides services.avatars) { FermixApp(services, hooks) }
+            }
         }
         lifecycleScope.launch { repeatOnLifecycle(Lifecycle.State.STARTED) { promptWhenLocked() } }
     }

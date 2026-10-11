@@ -26,7 +26,5 @@ suspend fun launchCheck(
             .map { it.keyAlias }
             .filterNot(aliasExists)
             .toSet()
-    val dropped = store.dropForRepair(missing)
-    store.deleteUnrecordedFiles()
-    return dropped
+    return store.dropAndSweep(missing)
 }

@@ -20,6 +20,9 @@ dependencies {
     api(project(":data"))
     api(libs.androidx.lifecycle.viewmodel.compose)
     api(project(":design"))
+    // The avatar's "Choose a photo" opens the system's Photo Picker through activity-compose's result launcher, the
+    // library the app and the chat already take, so no new artifact comes with it.
+    implementation(libs.androidx.activity.compose)
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

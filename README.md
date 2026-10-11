@@ -30,7 +30,7 @@ core-transport/         the pinned TLS WebSocket, the candidate race and the net
 attest/                 the device key: the hardware gate, the Keystore key and its attestation chain's shape (io.tezra.fermix.attest)
 core-session/           the pairing ceremony, and one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
 design/                 the design language as code, its fonts and its previews (io.tezra.fermix.design)
-data/                   the instance records, each profile's database and media cache, the launch check (io.tezra.fermix.data)
+data/                   the instance records, each profile's database and media cache, the avatars' photos, the launch check (io.tezra.fermix.data)
 push/                   a push's envelope, keys, trial decryption and plaintext, and its diagnostics lines (io.tezra.fermix.push)
 gradle/                 the version catalog, the dependency checksums and the wrapper
 policy/                 permissions.txt and exported.txt, the permissions the release APK requests and the components it exports, exactly
@@ -762,29 +762,50 @@ the file only after that sync. The settings (`AppSettingsStore`) are kept, read 
 store makes its DataStore from its file and holds it alone (the constructor handed one is the module's, for its
 tests), and DataStore is the module's dependency, not its API, so no other module can read around the lock.
 `upsert` records a pairing on `pair_approved`: the same daemon paired again replaces its record in
-place, with the owner's nickname and tint, and the record it replaced is handed back so the caller
+place, with the owner's nickname, tint and photo, and the record it replaced is handed back so the caller
 deletes the old key alias (design section 6.1); a pairing always brings a new alias, so one under the
 alias the record holds is refused and the live key is never handed back, and no two records may share
 an alias. A nickname a pairing brings, from the Paired screen, is held to the rename rule below in the
 same write, and a refused one writes nothing. `update` is every later change
 in one write, what `hello_ack` reports (host, label, profile, candidates, caps, push platforms) and this
 phone's settings (notifications, the last `push_register`), and it refuses a change to what a pairing
-set (gateway key, TLS pin, device id, key alias, push salt) or to the owner's nickname and tint.
-`merge` is "Pair again" on the row of a daemon that was reinstalled: the new gateway key, of the row's
-profile, takes that row's place, nickname and tint, and the old row's databases and media are deleted
-(section 9.2); a pairing under that row's alias is refused there too, since the caller deletes it. The
-owner names the row; the store never merges by host and profile, which two daemons
-on one computer can share, and it does not compare hosts, since a pairing knows only the link's name
-until the first `hello_ack`. `rename` takes 1 to 40 characters (code points), trimmed, refused when
+set (gateway key, TLS pin, device id, key alias, push salt) or to the owner's nickname, tint and photo's
+time (`picture_at`). `merge` is "Pair again" on the row of a daemon that was reinstalled: the new gateway key,
+of the row's profile, takes that row's place, nickname, tint and photo, the photo's file moved to the new id in
+one rename, and the old row's databases and media are deleted (section 9.2); a pairing under that row's alias is
+refused there too, since the caller deletes it. The owner names the row; the store never merges by host and profile,
+which two daemons on one computer can share, and it does not compare hosts, since a pairing knows only the link's
+name until the first `hello_ack`. `rename` takes 1 to 40 characters (code points), trimmed, refused when
 another row is titled the same in any case, and null resets the name to the daemon's; `remove` deletes
-a record with its files; `reorder` is "Move to top" and the list's manual order. `launchCheck` runs at
+a record with its files and photo; `reorder` is "Move to top" and the list's manual order. `setTint` is the
+owner's tint, one of `TINT_NAMES`, any other refused before the write, and `setPicture` the time the owner set
+a photo, or none, which deletes the photo's file (the owner, 2026-10-10); each writes nothing once the record is
+gone. `launchCheck` runs at
 launch: an instance whose key alias the injected `aliasExists` does not find, as on an app restored
 without its Keystore keys, is dropped with its files (design sections 6.4 and 6.6), and it is kept
 among `repairNotices` by its id, with its title, in the same write, so the app shows "Re-pair this
 Fermix" with its name even after a process death, until a pairing brings that daemon back (`upsert` and
 `merge` take its notice in their own write) or the owner removes the notice (`dismissRepairNotice`); a
 notice is keyed by the id, never by the title, which two daemons on one computer share, and never names a
-record that is there. The Keystore is asked before that write, never inside it. Files no record names, left by a removal cut short, are deleted. `ProfileDatabases` opens one Room
+record that is there. The Keystore is asked before that write, never inside it. Files and photos no record
+names, left by a removal cut short, are deleted, and so is the part of a photo a process died writing.
+`AvatarPictures` keeps the owner's photo of each Fermix (the owner, 2026-10-10) in `avatars`, beside the
+records file and credential-encrypted as it is, as `<instance id>.jpg`: the photo, read through the
+platform's ContentResolver as the Photo Picker hands it and only if it is another app's `content:` URI
+(`avatarSource`, over `isOtherAppsContent` in `OtherApps.kt`, which the chat's `mayRead` holds to too), is decoded
+by `ImageDecoder` at the size it needs, upright by its EXIF orientation, scaled until its short edge is 256 px and
+cut to the 256 square at its centre in the one decode (`avatarCrop`; a photo more than 16 times as long as it is
+wide is refused, as the decoder would hold it at up to 4,096 px on each edge), and compressed to a JPEG at quality
+85 by `Bitmap.compress`, which writes no EXIF, so the photo's place and camera stay behind (`JPEG_QUALITY`, the
+chat's own, in data's `ImageBounds.kt`). A photo whose header names more than `MAX_IMAGE_PIXELS` is refused before a
+pixel is decoded, and one not made within `LANDING_WAIT_MILLIS` is given up through `onLandingThreads`, the wall's
+time kept on `io`: the chat's landing bounds, which live in data's `ImageBounds.kt` so that both reach the one copy.
+The square is decoded first and then written to a part, which the writer hands over to the waiting caller in one
+compare-and-set that the caller's giving up races, so a part is either handed over and renamed over the picture
+by the caller or deleted by a writer that came too late, never both; a reader finds the old photo or the new one;
+`read`
+decodes it at the size a screen draws, blocking, for callers off the main thread. The record's `picture_at`
+is the photo's version, which a screen reads it by. `ProfileDatabases` opens one Room
 database per (instance, profile), keyed by both from day one, at
 `<root>/<instance id>/<sha256 of the profile id>/profile.db` beside its `media/` directory; the root
 belongs under `noBackupFilesDir`. `ProfileDatabases` orders its readers against a removal; a session,
@@ -1269,17 +1290,25 @@ error while it was the last, cleared by a connection or a later ending, and neve
 `Link.dot` is section 13.5's dot, never optimistic: ok only for a completed handshake, warn while
 connecting and for a changed identity, err for a revoked phone, the tertiary ink otherwise.
 `InstanceAvatar` draws a row's tint as a plain disc, as the M51 update's reference player draws its Chats row,
-with that dot at the canon's three sizes, and `StillTwoDotMark` the large two-dot mark the empty list and the
+or the owner's photo in the round in its place (the owner, 2026-10-10), with that dot at the canon's three sizes:
+the Chats row's and the share sheet's 48 dp, the chat bar's 32 and the Instance header's 72. The photo's brush is
+made once per photo and size (`drawWithCache`), so a frame draws two or three circles and makes nothing. Every
+avatar reads its photo through `rememberAvatarPicture(id, pictureAt, size)`, the one reader: the app's
+`AvatarPictureCache` (`LocalAvatarPictures`, provided at the activity's root) decodes data's 256 square at the
+size drawn on `io`, one read at a time, once per (instance, version, size), and keeps the last 16 for every
+screen, so a picture read before draws at once and one not yet read draws as the tint until it comes; one that
+cannot be read is logged and stays the tint. A preview provides a cache over a photo it draws as it composes.
+`StillTwoDotMark` the large two-dot mark the empty list and the
 lock still show: the update names no mark for them, and `TwoDotMark`, the orbiting one, is the thinking card's
 alone; which mark they show is the owner's to settle. `InstanceScreen(ui, actions)` is the
-canon's page as the owner laid it out on 2026-10-10. The header is the avatar at 72 dp, the name as a
-headline, "Fermix on {host}" and one status line: "Connected · Wi-Fi · 9 ms" once the session is up and
-caught up, the link's own words while it is anything else, and no line while no session is open
-(`statusLineOf`, pure); TalkBack reads that line once, and the name is not a button. Under it, Rename and
-Test connection are tonal buttons side by side, which stack when either label, measured in the button's
-own style at the owner's font size, would not fit its half (`ButtonPair`), with the test's outcome under
-them, a polite live region TalkBack reads as it comes: one race over the record's candidates whose socket closes
-at once. Then the Notifications card, the
+canon's page as the owner laid it out on 2026-10-10. The header is the avatar at 72 dp, a button TalkBack
+calls "Change picture" that opens the Picture sheet, the name as a headline, "Fermix on {host}" and one status line:
+"Connected · Wi-Fi · 9 ms" once the session is up and caught up, the link's own words while it is anything else, and
+no line while no session is open (`statusLineOf`, pure); TalkBack reads that line once, and the name is not a
+button. Under it, Rename and Test connection are tonal buttons side by side, which stack when either label, measured
+in the button's own style at the owner's font size, would not fit its half (`ButtonPair`), with the test's outcome
+under them, a polite live region TalkBack reads as it comes: one race over the record's candidates whose socket
+closes at once. Then the Notifications card, the
 two switches 16 dp inside an agent-bubble card with 16 dp corners and a hairline between them (`RowsCard`), or
 "Notifications aren't set up on {host} yet" when the daemon has no FCM. Then "Advanced", a row with a
 chevron that TalkBack reads as a button, "Expanded" or "Collapsed" (the row's state description, which says what a
@@ -1308,9 +1337,31 @@ state. `InstanceScreenTest` (Robolectric with native graphics, so text is measur
 status line read once, "Advanced" closed at first and kept through a recreation, its sections each in a card and the
 Path only while the session is up, the test's outcome a polite live region, each button's label and what it calls,
 no underlined text, and the buttons stacked at font scale 2 with no label cut. The screen is a preview at
-the twelve windows, at its head, its "Advanced" open alone in the page's column, and at the foot of one that cannot
-be reached, drawn by a record into
+the twelve windows, at its head with the owner's photo, its "Advanced" open alone in the page's column, and at the
+foot of one that cannot be reached, drawn by a record into
 `feature-instance/src/test/screenshots`.
+
+"Picture" (the owner, 2026-10-10) is a sheet over the Instance screen, the tonal surface as the share sheet's,
+opened whole as the attach sheet is, so on a phone on its side nothing waits under the edge: its title, the six
+tints as one choice, each a 40 dp disc in its 48 dp target, a radio button TalkBack names by the tint's own words
+in strings.xml (the design's names), the record's ringed in the ink and every one taking the focus ring; "Choose a
+photo", which opens the system's Photo Picker for one image (`PickVisualMedia`, images only, so the app holds no
+storage permission); and "Remove photo" while there is one. A tint is set at once and the sheet stays; choosing or
+removing a photo closes it, and the sheet survives a rotation. `InstanceViewModel` owns the writes: `setTint`,
+`setPicture(uri)`, which has data's `AvatarPictures` write the square from the picked URI, and then sets the
+record's `picture_at` to the wall clock's time, and `removePicture`. The URI is read only as another app's
+(`InstanceParts.photo`, data's `avatarSource`): a `content:` URI whose authority, its `user@` prefix stripped,
+names no provider of the app's own, read through the ContentResolver; a `file:` URI, the app's own FileProvider
+and any other scheme are refused, the chat's landings' rule (data's `isOtherAppsContent`, which `mayRead` holds
+to as well). A photo that cannot be read, is past the pixel bound, takes past the landing's time, is refused or
+can no longer be read, or whose provider fails, leaves the record as it was, is logged by the exception's class
+alone, and the header says "Couldn't use that photo", politely to TalkBack, until the next visit; one whose write
+ends after a removal took its record goes with the record (`InstanceStore.setPicture`). `PictureSheetTest` holds
+the avatar a button that opens the sheet, the tints' roles, selection, 48 dp and spoken names, a tap's tint,
+"Choose a photo", "Remove photo" only with a photo and in the window on a phone on its side, and the failure's
+line; `AvatarTest` the photo drawn in the round and the tint without one, and the cache's one read per key, its 16
+kept and an unreadable photo logged; `AvatarSourceTest` and `AvatarWiringTest` the refusals, over the app's own
+manifest, and `AvatarDeviceTest` them on a phone.
 
 `feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
 screens, section 13.7's app lock screens and the phone's conversations. `ChatsScreen(ui, actions)` is the
@@ -1337,9 +1388,11 @@ removes. `ConversationSync` keeps one long-lived conversation shortcut, in the s
 (`SHARE_CATEGORY`) so the share sheet offers it as a Direct Share target, and one notification channel per
 (instance, profile), id `{instance}:{profile}`, named as its row reads (`conversationName`: the title,
 the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row, its icon the avatar, the
-tint alone to the icon's edges (`conversationAvatar`), through
+tint alone to the icon's edges, or the owner's photo across the 72 dp at the icon's centre that a launcher's mask
+shows, over the tint (`conversationAvatar`; a photo that cannot be read is logged and the icon is the tint), through
 `ConversationSurface`: `PlatformConversations` on the phone, a fake in the JVM tests. Each row's
-conversation is made with it, published again when it is renamed or its agent is, and removed with it, and
+conversation is made with it, published again when it is renamed or its agent is, or its tint or photo
+changes, and only then, and removed with it, and
 the first sync after a start removes what a removal cut short. The JVM tests cover the row rules, a row's
 time in the locale it is handed, a last message's plain words, the sync, and on Robolectric a conversation's name, a
 `1002` row reading "Protocol error" and nothing of being unpaired, a revoked row naming who unpaired it,
@@ -1379,6 +1432,14 @@ owner to settle:
   closed "Advanced", each section's rows in a card as the Notifications switches are; "Clear media cache" and "Reset
   to gateway name" are tonal buttons and "Unpair from {host}…" an outlined one in the ink. "Advanced",
   "Expanded" and "Collapsed" are not the design's words.
+- An avatar can be the owner's photo (the owner, 2026-10-10), where section 9.2 and D11 give the owner a nickname
+  and a colour alone: the Instance header's avatar is the button that opens "Picture", which sets the tint as
+  well, and the photo shows wherever the avatar does, the conversation shortcut's icon included. The Name step's
+  disc and a link preview's Custom Tab keep the tint. "Change picture", "Picture", "Choose a photo", "Remove photo"
+  and "Couldn't use that photo" are not the design's words, and TalkBack names each tint by the design's name.
+- The header's avatar is the only way into "Picture", and nothing on the disc says it can be tapped but TalkBack's
+  "Change picture" (Task 23's review): a small edit badge on the disc, drawn in the ink, or a third tonal button
+  is the owner's call.
 - A refused nickname says why in one line ("A name needs at least one character.", "A name has at most
   40 characters.", "Another Fermix on this phone has this name."); the design gives no words.
 - The lock uses the platform's `BiometricPrompt`, a strong biometric or the screen lock, not
@@ -1906,6 +1967,15 @@ owner to settle:
   across a rotation (a selection's keys, the viewer's, the turns an arrival played) are held to no length of the app's
   own; and a landing copy a process death cuts off stays in the cache as a `fetch*.tmp` file until the system or the
   owner clears the cache, as a sweep at start cannot yet tell it from a restored tray's file.
+- The avatar's photo (`AvatarPictures.write`, the owner's pick from another app's provider) has two bounds of the
+  app's own: its pixels (`MAX_IMAGE_PIXELS`, refused from the header) and its time (`LANDING_WAIT_MILLIS`, given up
+  through `onLandingThreads`, the picture before kept and no part left; `AvatarPicturesDeviceTest` feeds it a
+  provider that trickles a byte every 200 ms and never ends). It has no byte bound of its own: the decoder reads
+  what the pixels need, which the pixel bound caps only as far as the format compresses. Unlike a chat landing's,
+  its give-up closes nothing the decode waits on: the decoder opens the provider's stream itself
+  (`ImageDecoder.createSource(resolver, uri)`), so the stop only refuses the part a late decode would hand over. A
+  provider that stalls, or trickles on as `AvatarPicturesDeviceTest`'s does, holds the `io` thread its decode runs
+  on until it answers, ends or the decoder gives the stream up.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the
@@ -2482,7 +2552,18 @@ a `fermix.android.library` module that has a `src/androidTest` gets AndroidX Tes
 runner class. `check` builds the test APK (`assembleDebugAndroidTest`), so `./gradlew build` holds the
 tests to every gate; running them needs a device. Today `feature-onboarding`, `feature-chats`,
 `feature-chat`, `push` and the app have them, and they need no daemon and no camera; the application convention
-gives the app the same as a Compose library's once it has a `src/androidTest`. The app's `ShareDeviceTest`
+gives the app the same as a Compose library's once it has a `src/androidTest`. The app's
+`AvatarPicturesDeviceTest` makes an avatar's photo on the phone's own ImageDecoder, which android.jar's stubs and
+Robolectric's host decoder are not: a JPEG whose EXIF says to turn it a quarter comes out an upright 256 square
+from its centre with no EXIF left, a PNG that says 20,000 × 20,000 is refused within 2 s with the photo before
+kept, and a photo whose provider (the test APK's `EndlessProvider`) trickles a byte every 200 ms and never ends is
+given up at its time bound, the photo before kept and no part left; its `AvatarDeviceTest` sets a photo, a
+media-store image read through the ContentResolver, through the Instance screen's ViewModel, starts the activity
+afresh, its avatars read from nothing kept, and finds the photo in the Chats row's avatar and then the chat bar's,
+the photo's file going with the record, and refuses the app's own file and its own FileProvider's URI, writing
+nothing. A true process
+restart is the JVM's to hold (`AvatarWiringTest`: a new store over the same files reads the record's time and
+the photo back), as an instrumented test lives in the app's process. The app's `ShareDeviceTest`
 shares through the share entry as the system's share sheet starts it. Another app's image is one the device's
 shell, a uid of its own, puts in the media store and shares with `am start --grant-read-uri-permission`, which
 the app cannot read without that grant: with two paired it asks "Send to which Fermix?", keeps asking through a

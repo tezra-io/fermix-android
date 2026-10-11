@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import io.tezra.fermix.data.isOtherAppsContent
 import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.session.MAX_ATTACHMENTS
 
@@ -27,11 +28,11 @@ fun copiedOnLanding(from: PickedFrom): Boolean =
  * from [landing], or, none, held in it already (design section 8.5, "Sources"). The Photo Picker's, the documents
  * UI's, the clipboard's, the keyboard's and a share's items are other apps': a `content:` URI whose authority,
  * without the `user@` prefix the ContentResolver strips up to its last `@`, names no provider of the app's own
- * package ([own]), whose checks the app would pass with its own rights. A camera's capture and Edit's copy are
- * files the chat made: a `file:` URI whose canonical path lies under the app's cache ([inCache], asked only of such a
- * URI). An item held is either, a paste's, the keyboard's and a share's being the chat's copies by then. Any other
- * scheme is refused, a scheme compared exactly, as the ContentResolver compares it: `CONTENT:` and `FILE:` are
- * neither.
+ * package ([own]), whose checks the app would pass with its own rights (data's isOtherAppsContent, the avatar's photo's
+ * rule too). A camera's capture and Edit's copy are files the chat made: a `file:` URI whose canonical path lies under
+ * the app's cache ([inCache], asked only of such a URI). An item held is either, a paste's, the keyboard's and a
+ * share's being the chat's copies by then. Any other scheme is refused, a scheme compared exactly, as the
+ * ContentResolver compares it: `CONTENT:` and `FILE:` are neither.
  */
 internal fun mayRead(
     scheme: String?,
@@ -40,22 +41,13 @@ internal fun mayRead(
     own: (String) -> Boolean,
     inCache: () -> Boolean,
 ): Boolean {
-    val provider = scheme == "content" && isForeign(authority, own)
+    val provider = isOtherAppsContent(scheme, authority, own)
     val made = { scheme == "file" && inCache() }
     return when (landing) {
         null -> provider || made()
         PickedFrom.CAMERA, PickedFrom.OUTBOX -> made()
         PickedFrom.PHOTOS, PickedFrom.FILES, PickedFrom.PASTE, PickedFrom.KEYBOARD, PickedFrom.SHARE -> provider
     }
-}
-
-/** Whether [authority], its `user@` prefix stripped, names a provider at all, and none of the app's own ([own]). */
-private fun isForeign(
-    authority: String?,
-    own: (String) -> Boolean,
-): Boolean {
-    val name = authority?.substringAfterLast('@').orEmpty()
-    return name.isNotEmpty() && !own(name)
 }
 
 /** Whether [picked]'s URI names a file the chat made, which goes once it leaves the tray. */

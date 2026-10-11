@@ -41,6 +41,7 @@ import io.tezra.fermix.instance.AvatarSize
 import io.tezra.fermix.instance.InstanceAvatar
 import io.tezra.fermix.instance.dot
 import io.tezra.fermix.instance.linkWords
+import io.tezra.fermix.instance.rememberAvatarPicture
 import io.tezra.fermix.instance.tintColor
 
 // The visual canon's chat bar (`.ab.tonal.line`): 64 dp on the tonal surface over a hairline, the tint's 2 dp
@@ -84,7 +85,12 @@ internal fun ChatBar(
                 horizontalArrangement = Arrangement.spacedBy(WHO_GAP),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                InstanceAvatar(tint = header.record.tint, dot = header.link.dot, size = AvatarSize.SMALL)
+                InstanceAvatar(
+                    tint = header.record.tint,
+                    dot = header.link.dot,
+                    size = AvatarSize.SMALL,
+                    picture = rememberAvatarPicture(header.record.id, header.record.pictureAt, AvatarSize.SMALL),
+                )
                 Column {
                     Text(
                         header.record.title,

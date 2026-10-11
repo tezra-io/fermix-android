@@ -52,6 +52,7 @@ import io.tezra.fermix.instance.Link
 import io.tezra.fermix.instance.Tag
 import io.tezra.fermix.instance.dot
 import io.tezra.fermix.instance.linkWords
+import io.tezra.fermix.instance.rememberAvatarPicture
 
 // The visual canon's `.row`: 72 dp, 16 dp at the sides, 12 dp between the avatar, the text and the meta;
 // 8 dp between the title and its tag; the meta 4 dp apart; the badge 20 dp, 6 dp inside, a pill. Its
@@ -92,7 +93,14 @@ internal fun ChatRowItem(
     var height by remember { mutableIntStateOf(0) }
     Box(modifier = modifier.onSizeChanged { height = it.height }) {
         RowLayout(
-            avatar = { InstanceAvatar(tint = row.record.tint, dot = row.link.dot, size = AvatarSize.ROW) },
+            avatar = {
+                InstanceAvatar(
+                    tint = row.record.tint,
+                    dot = row.link.dot,
+                    size = AvatarSize.ROW,
+                    picture = rememberAvatarPicture(row.record.id, row.record.pictureAt, AvatarSize.ROW),
+                )
+            },
             modifier =
                 Modifier.rowFocusRing().held(open, colors.agentBubble).combinedClickable(
                     hapticFeedbackEnabled = false,

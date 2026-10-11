@@ -90,7 +90,7 @@ class ChatsTestActivity : ComponentActivity() {
 }
 
 private val NO_CHATS_ACTIONS = ChatsActions({}, {}, {}, {}, { _, _ -> }, {}, {}, {}, {})
-private val NO_INSTANCE_ACTIONS = InstanceActions({}, {}, {}, {}, {}, {}, {})
+private val NO_INSTANCE_ACTIONS = InstanceActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
 @Composable
 private fun Host(rig: ChatsTestRig) {

@@ -60,7 +60,7 @@ private const val WORDS = "look at this"
 private const val ASKS = "Send to which Fermix?"
 
 /**
- * How long a landing may take once its turn comes: the app's own time for it (Landings.kt's LANDING_WAIT_MILLIS), its
+ * How long a landing may take once its turn comes: the app's own time for it (data's LANDING_WAIT_MILLIS), its
  * bound's bytes through a pipe on an emulator well within it.
  */
 private const val LANDING_MILLIS = 60_000L

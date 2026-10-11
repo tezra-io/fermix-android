@@ -56,7 +56,7 @@ design/               design section 13.1 as code, with the M51 update's monochr
 data/                 the phone's durable state, io.tezra.fermix.data (Android library, JVM-tested
                       on the bundled SQLite): the instance records' DataStore, one Room database
                       per (instance, profile) with its schema in data/schemas, the media cache, the
-                      launch check
+                      avatars' photos (AvatarPictures), the image and landing bounds, the launch check
 push/                 a push before it is shown, io.tezra.fermix.push (Android library, no Firebase,
                       JVM-tested against push_vectors.json): the envelope's bounds, the push key, the
                       cipher, the trial over each instance's key, the typed plaintext, the
@@ -69,8 +69,8 @@ feature-onboarding/   design section 13.3 as screens, io.tezra.fermix.onboarding
                       src/sharedTest
 feature-instance/     design section 13.7's Instance screen, io.tezra.fermix.instance (Compose library):
                       Link (a session's state and diagnostics as a row, a bar and the screen read
-                      them, 1002 a protocol error and never revoked), the avatar and its dot,
-                      InstanceViewModel, and its previews in src/test
+                      them, 1002 a protocol error and never revoked), the avatar with its dot and
+                      photo, the Picture sheet, InstanceViewModel, and its previews in src/test
 feature-chats/        design sections 13.4 and 9.4 as screens, io.tezra.fermix.chats (Compose library):
                       the Chats list and its rows, the trust screens, the app lock's screens,
                       ChatsViewModel, the conversation shortcuts and channels (ConversationSync); its
@@ -386,6 +386,19 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   leave an empty or a partial file in the old one's place (`SyncedWritesTest`). A read started after a write has
   returned shows it, so a test reads once after a write of its own has returned; it waits, bounded, on the store's
   flow or a `stateIn` only for a write someone else makes, and never on a predicate that an empty list satisfies.
+- A record's fields are set by one hand each: what a pairing sets (gateway key, TLS pin, device id, key alias,
+  push salt, the phone's name as paired and when), what only the owner sets (the nickname through `rename`, the
+  tint through `setTint`, refused outside `TINT_NAMES`, and the photo's time `picture_at` through `setPicture`),
+  and the rest, which `update` writes; `update` refuses a change to the first two (`SET_APART`), and a pairing
+  again or a merge keeps the owner's. A new owner-set field joins `SET_APART`, gets its own write, and is kept by
+  `replaceAt`.
+- The avatars' photos are files of data's `AvatarPictures` in `avatars`, beside the records file, one
+  `<instance id>.jpg` each, written whole and renamed into place; the record's `picture_at` is the version a
+  screen reads one by. They go with their record, as its databases do: `remove`, a merge's old id (whose photo
+  moves to the new id in one rename, never a copy, before the merged record that names it is written) and the
+  launch check's sweep, which also deletes a write's part a process left. Nothing else writes or deletes in
+  `avatars`, and the screens read a photo only through `rememberAvatarPicture`, the app's one cache, off the main
+  thread.
 - The phone reaches no address but its daemon's. A link preview's thumbnail, like any blob, comes only
   through `Session.fetchMedia`, never from the URL an event names, and `feature-chat`'s own code holds no
   HTTP client, socket, URL fetch or web view (`ChatMediaTest` scans its sources and build script, and the
@@ -405,8 +418,11 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   is logged, never a stopped app. What enters the chat from outside it goes through the one check, `mayRead`:
   another app's `content:` URI whose authority, without its `user@` prefix, names no provider of the app's own
   package, which the app would read with its own rights, or a `file:` URI the chat made under its cache; a
-  refusal is logged by scheme and authority, never by path. A clip's URI is never opened for its text
-  (onboarding's Paste takes the URI's own words). A link from the wire opens a web address or nothing
+  refusal is logged by scheme and authority, never by path. Another app's URI is the one rule in data
+  (`isOtherAppsContent`, `ownsProvider` and `outsideOf` in `OtherApps.kt`), which every reader of one reaches: the
+  avatar's photo is read through the ContentResolver only after `avatarSource` has held its URI to that rule, never
+  as a path and never unchecked, and a new reader of another app's URI calls it too. A clip's URI is never opened
+  for its text (onboarding's Paste takes the URI's own words). A link from the wire opens a web address or nothing
   (`MessageLinks`): `http` or `https` of at most 2,048 bytes, a link preview's bound, in the Custom Tab, any
   other scheme or a longer address never handed to the system, its tap logged by the scheme alone; a tapped
   address is never looked up to another (`DefinedLinks`: a destination that is a label in brackets is no
@@ -425,13 +441,15 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   none of it, on `io`; and what a landing waits for of the chat's own (its record, its draft) is waited for
   `READ_WAIT_MILLIS` at most. An image the tray or Send decodes is refused from its decoder's header listener,
   before a pixel is decoded, past `MAX_IMAGE_PIXELS`: a decode reads every pixel whatever size it draws at, so its
-  time is the image's. What goes out is weighed as the codec encodes it: a request, each `attach_begin`, an
-  approval's answer (`ApprovalAnswer.TooLong`) and a `media_fetch` of a ref from the wire, before the session takes
-  it, and a command the daemon names past the wire's rule for a name is never offered; the outbox's 128 is a
-  refusal the caller hears (`Session.send`'s false), never a throw. What the owner pastes is the clipboard's, and
-  never enters a saved state, which goes through the binder as the app stops, whose 1 MB a paste outgrows: the
-  composer's `TextFieldState` is remembered, not saved, and the chat brings its words back; search saves the query
-  it took. A path that takes something new from outside names its three bounds in
+  time is the image's. An avatar's photo holds to the same two bounds, `MAX_IMAGE_PIXELS` and
+  `LANDING_WAIT_MILLIS` through `onLandingThreads`, which live in data's `ImageBounds.kt` for both to reach: a
+  bound is kept once, where every reader of it reaches it, never copied. What goes out is weighed as the codec
+  encodes it: a request, each `attach_begin`, an approval's answer (`ApprovalAnswer.TooLong`) and a `media_fetch` of
+  a ref from the wire, before the session takes it, and a command the daemon names past the wire's rule for a name
+  is never offered; the outbox's 128 is a refusal the caller hears (`Session.send`'s false), never a throw. What the
+  owner pastes is the clipboard's, and never enters a saved state, which goes through the binder as the app stops,
+  whose 1 MB a paste outgrows: the composer's `TextFieldState` is remembered, not saved, and the chat brings its
+  words back; search saves the query it took. A path that takes something new from outside names its three bounds in
   the same change, with a test that feeds it the other side's worst: a stream that never ends, many at once, a call
   that never answers, a string past one frame. On the device the other app is the test APK's own provider
   (`EndlessProvider`), written in Java: the platform runs it in the test APK's own process, which has no Kotlin

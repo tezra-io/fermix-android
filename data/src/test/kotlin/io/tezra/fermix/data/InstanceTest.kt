@@ -2,6 +2,7 @@ package io.tezra.fermix.data
 
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
@@ -53,6 +54,13 @@ class InstanceTest {
         listOf("ocean", "3", "Ocean blue", "Purple").forEach { name ->
             assertThrows<IllegalArgumentException> { record.copy(tint = name) }
         }
+    }
+
+    @Test
+    fun `a picture's time is when the owner set it, never before 1970, and none without a picture`() {
+        assertNull(record.pictureAt)
+        assertEquals(0L, record.copy(pictureAt = 0L).pictureAt)
+        assertThrows<IllegalArgumentException> { record.copy(pictureAt = -1L) }
     }
 
     @Test

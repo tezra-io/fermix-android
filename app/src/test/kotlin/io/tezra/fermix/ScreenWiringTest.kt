@@ -391,5 +391,8 @@ class ScreenWiringTest {
             notifications = policy,
             unpair = {},
             releaseBuild = false,
+            photo = { error("no photo in this test") },
+            now = { 0L },
+            log = { message, fault -> throw AssertionError(message, fault) },
         )
 }

@@ -95,6 +95,16 @@ class InstanceRulesTest {
     }
 
     @Test
+    fun `a pairing again or a merge keeps the owner's picture, which the pairing never brings`() {
+        val pictured = mac.copy(pictureAt = 1_790_000_000_000L)
+        val again = instance(gateway = 1, host = "suj-mbp", keyAlias = "fermix.device.1.ffffffff")
+        assertEquals(pictured.pictureAt, planUpsert(listOf(pictured, linux), again).instances[0].pictureAt)
+        val reinstalled = instance(gateway = 7, host = "suj-mbp")
+        assertEquals(pictured.pictureAt, planMerge(listOf(pictured, linux), mac.id, reinstalled).instances[0].pictureAt)
+        assertNull(planMerge(listOf(mac, linux), mac.id, reinstalled.copy(pictureAt = 5L)).instances[0].pictureAt)
+    }
+
+    @Test
     fun `a pairing that brings a nickname another Fermix on this phone is titled with is refused`() {
         // mac is titled Studio and dev suj-mbp, whatever the case.
         val all = listOf(mac, linux, dev)
@@ -143,7 +153,7 @@ class InstanceRulesTest {
     }
 
     @Test
-    fun `an update that touches what a pairing set, or the owner's nickname or tint, is refused`() {
+    fun `an update that touches what a pairing set, or the owner's nickname, tint or picture, is refused`() {
         val refused =
             mapOf<String, (Instance) -> Instance>(
                 "gateway_pk" to { it.copy(gatewayPk = base64(key(9))) },
@@ -153,6 +163,7 @@ class InstanceRulesTest {
                 "push_salt" to { it.copy(pushSalt = base64(key(9))) },
                 "nickname" to { it.copy(nickname = "Box") },
                 "tint" to { it.copy(tint = "Ocean") },
+                "picture_at" to { it.copy(pictureAt = 1_790_000_000_000L) },
             )
         refused.forEach { (field, change) ->
             val refusal = assertThrows<IllegalArgumentException> { updated(listOf(mac, linux), mac.id, change) }

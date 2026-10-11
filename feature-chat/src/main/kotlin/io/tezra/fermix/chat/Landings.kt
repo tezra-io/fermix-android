@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import io.tezra.fermix.data.LANDING_WAIT_MILLIS
 import io.tezra.fermix.session.MAX_ATTACHMENTS
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -26,14 +27,6 @@ const val LANDING_MAX_BYTES = 128L * 1024 * 1024
  * share may land in a chat whose model was made a moment before; past that, nothing of it lands.
  */
 internal const val READ_WAIT_MILLIS = 10_000L
-
-/**
- * How long a landing takes at most once its turn comes, its providers' descriptions, the chat's record and its copies
- * all within it, and again how long a landing of another app's items waits for its turn behind those before it: past
- * either, what had not landed is left out, logged, a provider's call cancelled and its copy's stream closed. The number
- * is the owner's to settle.
- */
-internal const val LANDING_WAIT_MILLIS = 60_000L
 
 /** What lands of the items added: [landed], for the tray, and the first of them too big to go ([tooBig]), if any. */
 internal data class Landing(

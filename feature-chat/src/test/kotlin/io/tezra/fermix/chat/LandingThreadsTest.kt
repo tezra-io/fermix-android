@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import io.tezra.fermix.data.onLandingThreads
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

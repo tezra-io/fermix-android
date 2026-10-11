@@ -7,7 +7,7 @@ import android.text.SpannableString
 import android.text.style.URLSpan
 import androidx.test.core.app.ApplicationProvider
 import io.tezra.fermix.chat.Shared
-import io.tezra.fermix.chat.ownsProvider
+import io.tezra.fermix.data.ownsProvider
 import io.tezra.fermix.session.MAX_ATTACHMENTS
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

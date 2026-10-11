@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
+import io.tezra.fermix.data.MAX_IMAGE_PIXELS
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

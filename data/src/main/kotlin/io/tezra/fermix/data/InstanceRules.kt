@@ -105,8 +105,8 @@ internal fun planMerge(
 
 /**
  * What only a pairing sets, the gateway key, the TLS pin, the device id, the key alias, the push salt, the
- * phone's name as paired and when, and what only the owner sets, the nickname ([renamed]) and the tint: an
- * update that changes one is refused.
+ * phone's name as paired and when, and what only the owner sets, the nickname ([renamed]), the tint and the
+ * picture's time (InstanceStore's setTint and setPicture): an update that changes one is refused.
  */
 private val SET_APART: List<Pair<String, (Instance) -> Any?>> =
     listOf(
@@ -119,6 +119,7 @@ private val SET_APART: List<Pair<String, (Instance) -> Any?>> =
         "paired_at" to Instance::pairedAt,
         "nickname" to Instance::nickname,
         "tint" to Instance::tint,
+        "picture_at" to Instance::pictureAt,
     )
 
 /**
@@ -141,7 +142,8 @@ internal fun updated(
 /**
  * [paired] in the row at [index], which hands the row's record back for its key alias to be deleted, so
  * [paired] must hold another alias. The nickname kept is the old row's, or else the new pairing's, which is
- * then a new name and held to the rename rule among the other rows.
+ * then a new name and held to the rename rule among the other rows; the tint and the picture's time are the old
+ * row's, as only the owner sets them.
  */
 private fun replaceAt(
     current: List<Instance>,
@@ -151,7 +153,7 @@ private fun replaceAt(
     val old = current[index]
     require(paired.keyAlias != old.keyAlias) { "a pairing into the row of ${old.id} kept its key alias" }
     if (old.nickname == null) requireFreeNickname(paired.nickname, paired.id, current - old)
-    val kept = paired.copy(nickname = old.nickname ?: paired.nickname, tint = old.tint)
+    val kept = paired.copy(nickname = old.nickname ?: paired.nickname, tint = old.tint, pictureAt = old.pictureAt)
     return Replacement(current.toMutableList().also { it[index] = kept }, old)
 }
 
