@@ -242,9 +242,12 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   system prompt among it: its field takes the focus while the prompt still slides in, and a PIN it matches before
   the slide ends comes back as a cancel, so `ShareDeviceTest` types once the focused field has held still (Task
   14c).
-- Screenshots: git tracks none (the owner, 2026-10-05: "git ignore those images"): `.gitignore` holds each module's
-  `src/test/screenshots/` and `docs/app-shots/`, so a clone has no reference, and neither `check` nor CI compares
-  an image. Every preview in a `fermix.android.library.compose` module is a screenshot test, which draws only
+- Screenshots: git tracks none (the owner, 2026-10-05: "git ignore those images") but the hand-picked few in
+  `docs/screenshots/` (the owner, 2026-10-11: "a selected few, to give a reference for the Android app"), each a
+  preview's compact light and dark image copied from `docs/app-shots` by the change that moves that preview, named
+  in its README; `.gitignore` holds each module's `src/test/screenshots/` and `docs/app-shots/`, so a clone has no
+  reference to compare with, and neither `check` nor CI compares an image. Every preview in a
+  `fermix.android.library.compose` module is a screenshot test, which draws only
   when Roborazzi records or compares: in a plain `test` it passes without composing its preview, one that throws
   among them, so a green `test` or `build` says nothing of the previews. `./gradlew recordRoborazziDebug`, part of
   every change's done, draws every preview at its twelve windows into its module's `src/test/screenshots/`,

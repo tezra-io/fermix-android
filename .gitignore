@@ -39,7 +39,8 @@ __pycache__/
 # No screenshot is tracked, from 2026-10-05 on (the owner: "git ignore those images"): a module's
 # src/test/screenshots holds what `./gradlew recordRoborazziDebug` last drew on this machine, its own
 # references for a compare, and docs/app-shots what scripts/app_shots.sh made from them. CI's screens job
-# draws its own and uploads docs/app-shots as an artifact; the images pushed before stay in history.
+# draws its own and uploads docs/app-shots as an artifact; the images pushed before stay in history. The one
+# exception is docs/screenshots/, a hand-picked few of those screens, tracked (the owner, 2026-10-11).
 */src/test/screenshots/
 docs/app-shots/
 

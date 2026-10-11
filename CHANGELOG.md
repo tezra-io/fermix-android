@@ -225,6 +225,9 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   replies streamed in, all in memory and with no network, so the whole app can be walked with no daemon.
   The demo offers no notifications. The release never holds it: its policy check refuses an APK with any
   class, component or resource of the demo, and, with the release's R8 mapping, a class of it under any name.
+- **A few of the app's screens are in the repository.** `docs/screenshots/` holds eight screens, light and
+  dark (Welcome, Verify, Paired, the Chats list, a chat, the thinking card, an approval, the Instance screen),
+  copied from a green record as a reader's reference; every other screenshot stays out of git.
 
 ### Changed
 

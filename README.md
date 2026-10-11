@@ -23,6 +23,7 @@ config/detekt/          the detekt configuration; there is no baseline
 contracts/mobile/       the engine's mobile wire contract, byte for byte, pinned by contracts/CHECKSUMS.txt and contracts/SOURCE.json
 docs/                   RELEASING.md: how a release goes from a tag to a draft, to real phones, to GitHub and Play;
                         app-shots/, which git ignores: every preview's compact window, light and dark, as scripts/app_shots.sh copies it from a record
+                        screenshots/, tracked: a hand-picked eight of those screens, light and dark, a reader's reference (the owner, 2026-10-11)
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
 core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
@@ -676,7 +677,9 @@ short enough to fit whole in the shortest window at font scale 2.0, so that ever
 twelve images.
 
 No screenshot is in the repository (the owner, 2026-10-05: "git ignore those images"; the departures
-under "Build and check"): `.gitignore` holds each module's `src/test/screenshots/` and `docs/app-shots/`,
+under "Build and check") but the hand-picked few in `docs/screenshots/` (the owner, 2026-10-11), a reader's
+reference of eight screens, light and dark, which a change that moves one of them copies anew from
+`docs/app-shots`: `.gitignore` holds each module's `src/test/screenshots/` and `docs/app-shots/`,
 so a clone has nothing to compare with, and neither `./gradlew build` nor CI compares an image. A preview's
 test draws only when Roborazzi records or compares: a plain `test` passes it without composing the preview,
 one that throws among them, so a green `test` or `build` says nothing of the previews.
@@ -2383,7 +2386,9 @@ Where CI departs from CI/CD design section 3, for the owner to settle:
   and on a module that drew none (`checkPreviewsDrawn`), compares nothing, and uploads `docs/app-shots` as its
   `app-shots` artifact, kept 30 days, or `app-shots-incomplete` when the record is red (the design module,
   above). Nothing on CI can tell that one preview among a module's others is no longer found: only a compare
-  against a machine's own record names it.
+  against a machine's own record names it. On 2026-10-11 the owner asked for "a selected few" in git as a
+  reference for the app: `docs/screenshots/` holds eight screens, light and dark, copied by hand from a green
+  record and refreshed by the change that moves one of them; the references and `docs/app-shots` stay untracked.
   This also departs from the rule that a reference changes only with the change that moved it: a change to
   what a screen draws is shown by a record before it, Roborazzi's compare after it and the pictures of its CI
   run (AGENTS.md). As a verify the job took 337 to 471 s over its last eight runs on dev, up to Task 16b's,
