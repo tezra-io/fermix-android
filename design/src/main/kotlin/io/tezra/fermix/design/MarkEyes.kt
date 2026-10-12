@@ -25,11 +25,17 @@ object Narrow {
     val easing = MarkEasing.EmphasizedDecelerate
 }
 
+/**
+ * An eye shut, a share of its height: the reference player's blink at its deepest, a line through the eye's centre.
+ * Securing's blink closes to it, and the avatar's Wink and Sleepy eyes (AvatarEyes.kt) stand at it.
+ */
+internal const val EYE_SHUT = 0.1f
+
 /** Connecting's Securing: the eyes open to full, and blink once (the blink's times are the reference player's). */
 object Open {
     const val MILLIS = 200
     val easing = MarkEasing.EmphasizedDecelerate
-    val blink = listOf(MarkKey(0, 1f, MarkEasing.Hold), MarkKey(50, 1f), MarkKey(110, 0.1f), MarkKey(190, 1f))
+    val blink = listOf(MarkKey(0, 1f, MarkEasing.Hold), MarkKey(50, 1f), MarkKey(110, EYE_SHUT), MarkKey(190, 1f))
 }
 
 /** Verify: the eyes look down at the code and stay there. */

@@ -104,8 +104,9 @@ class FermixMarkTest {
         assertEquals(1.5f, eyeCorner(3f))
         assertEquals(0.005f, eyeCorner(0.01f))
         val blink = MarkPose.Rest.copy(blink = 0.1f)
-        assertEquals(1.542f, eyeHeight(MarkGeometry.leftEye, blink), 1e-4f)
-        assertEquals(0.01f, eyeHeight(MarkGeometry.leftEye, MarkPose.Rest.copy(happy = 1f)))
+        assertEquals(1.542f, eyeHeight(MarkGeometry.leftEye, blink, blink.blinkLeft), 1e-4f)
+        assertEquals(1.542f, eyeHeight(MarkGeometry.leftEye, MarkPose.Rest, sideBlink = 0.1f), 1e-4f)
+        assertEquals(0.01f, eyeHeight(MarkGeometry.leftEye, MarkPose.Rest.copy(happy = 1f), sideBlink = 1f))
     }
 
     @Test
@@ -136,15 +137,33 @@ class FermixMarkTest {
 
     @Test
     fun `a squint shrinks the eye's height about its centre, with a blink on top`() {
-        assertEquals(15.42f * 0.72f, eyeHeight(MarkGeometry.leftEye, MarkPose.Rest.copy(squint = 0.72f)), 1e-4f)
+        val squinting = MarkPose.Rest.copy(squint = 0.72f)
+        assertEquals(15.42f * 0.72f, eyeHeight(MarkGeometry.leftEye, squinting, squinting.blinkLeft), 1e-4f)
         val both = MarkPose.Rest.copy(squint = 0.72f, blink = 0.5f, idleBlink = 0.5f)
-        assertEquals(15.42f * 0.72f * 0.25f, eyeHeight(MarkGeometry.leftEye, both), 1e-4f)
+        assertEquals(15.42f * 0.72f * 0.25f, eyeHeight(MarkGeometry.leftEye, both, both.blinkLeft), 1e-4f)
         pose = MarkPose.Rest.copy(squint = 0.72f)
         val image = drawn()
         val eye = MarkGeometry.leftEye
         // 72 % of 15.42 is 11.1 units, so 6.5 above the centre is now the visor's.
         assertEquals(ink, image.at(eye.centre.x, eye.centre.y - 5f))
         assertEquals(canvas, image.at(eye.centre.x, eye.centre.y - 6.5f))
+    }
+
+    // The avatar's Wink (AvatarEyes.kt): one eye shut to the player's line through its centre, the other open. A
+    // quarter of an eye's height above its centre is the ink while the eye is open and the visor's once it is shut.
+    @Test
+    fun `a wink shuts the right eye alone, to a line through its centre`() {
+        pose = MarkPose.Rest.copy(blinkRight = 0.1f)
+        val image = drawn()
+        val left = MarkGeometry.leftEye
+        val right = MarkGeometry.rightEye
+        assertEquals(ink, image.at(left.centre.x, left.centre.y - left.height / 4f))
+        assertEquals(canvas, image.at(right.centre.x, right.centre.y - right.height / 4f))
+        assertEquals(ink, image.at(right.centre))
+        pose = MarkPose.Rest.copy(blinkLeft = 0.1f)
+        val other = drawn()
+        assertEquals(canvas, other.at(left.centre.x, left.centre.y - left.height / 4f))
+        assertEquals(ink, other.at(right.centre.x, right.centre.y - right.height / 4f))
     }
 
     @Test

@@ -70,7 +70,7 @@ fun ShareSheetContent(
             RowLayout(
                 avatar = {
                     InstanceAvatar(
-                        tint = row.record.tint,
+                        record = row.record,
                         dot = row.link.dot,
                         size = AvatarSize.ROW,
                         picture = rememberAvatarPicture(row.record.id, row.record.pictureAt, AvatarSize.ROW),

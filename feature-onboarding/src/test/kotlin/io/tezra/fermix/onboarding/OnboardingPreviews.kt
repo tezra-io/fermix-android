@@ -204,12 +204,12 @@ fun PairedPreview() {
     }
 }
 
-/** A second Fermix on suj-mbp, in Ocean as the canon draws it. */
+/** A second Fermix on suj-mbp, in Sky, where the canon draws it in Ocean, the old tint of that hue. */
 @FermixPreviews
 @Composable
 fun NamePreview() {
     val first = record(gateway = 5)
-    val second = record(gateway = 1, tint = "Ocean")
+    val second = record(gateway = 1, tint = "Sky")
     FermixPreviewTheme {
         NameScreen(
             paired = PairedFacts(second, listOf(first), needsName = true, offerNotifications = false),

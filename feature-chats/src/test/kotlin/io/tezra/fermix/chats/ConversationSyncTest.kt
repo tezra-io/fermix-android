@@ -30,18 +30,19 @@ class ConversationSyncTest {
     }
 
     private val first = sample(1, tint = "Slate")
-    private val second = sample(2, tint = "Ocean", nickname = "Dev")
+    private val second = sample(2, tint = "Sky", nickname = "Dev")
 
     @Test
     fun `a row's conversation is made with it, under its instance and profile, tinted as the row`() {
         val surface = FakeSurface()
         val sync = ConversationSync(surface)
         sync.sync(listOf(first), emptyMap())
-        assertEquals(listOf(Conversation(first.id, "main", HOST, null, dev = false, "Slate")), surface.published)
+        val made = Conversation(first.id, "main", HOST, null, dev = false, "Slate", "Open")
+        assertEquals(listOf(made), surface.published)
         assertEquals(setOf("${first.id}:main"), surface.present)
         sync.sync(listOf(first, second), emptyMap())
         // Named "Dev", it carries the DEV tag, as its row does (design section 9.2).
-        assertEquals(Conversation(second.id, "main", "Dev", null, dev = true, "Ocean"), surface.published.last())
+        assertEquals(Conversation(second.id, "main", "Dev", null, dev = true, "Sky", "Open"), surface.published.last())
         assertEquals(2, surface.published.size)
     }
 
@@ -50,18 +51,19 @@ class ConversationSyncTest {
         val surface = FakeSurface()
         val sync = ConversationSync(surface)
         // The canon's production and dev daemons on one Mac, both titled suj-mbp.
-        val dev = sample(3, profile = "fermix-dev", tint = "Ocean")
+        val dev = sample(3, profile = "fermix-dev", tint = "Sky")
         sync.sync(listOf(first, dev), mapOf(first.id to "Juno", dev.id to "Fermix"))
         assertEquals(
             listOf(
-                Conversation(first.id, "main", HOST, "Juno", dev = false, "Slate"),
-                Conversation(dev.id, "main", HOST, null, dev = true, "Ocean"),
+                Conversation(first.id, "main", HOST, "Juno", dev = false, "Slate", "Open"),
+                Conversation(dev.id, "main", HOST, null, dev = true, "Sky", "Open"),
             ),
             surface.published,
         )
         // The agent renamed on the computer: its conversation is published again under the new name.
         sync.sync(listOf(first, dev), mapOf(first.id to "Ada", dev.id to "Fermix"))
-        assertEquals(Conversation(first.id, "main", HOST, "Ada", dev = false, "Slate"), surface.published.last())
+        val renamed = Conversation(first.id, "main", HOST, "Ada", dev = false, "Slate", "Open")
+        assertEquals(renamed, surface.published.last())
         assertEquals(3, surface.published.size)
     }
 
@@ -86,14 +88,30 @@ class ConversationSyncTest {
         val pictured = first.copy(pictureAt = PICTURED_AT)
         sync.sync(listOf(first), emptyMap())
         sync.sync(listOf(pictured), emptyMap())
-        val expected = Conversation(first.id, "main", HOST, null, dev = false, "Slate", pictureAt = PICTURED_AT)
+        val expected = Conversation(first.id, "main", HOST, null, dev = false, "Slate", "Open", pictureAt = PICTURED_AT)
         assertEquals(expected, surface.published.last())
         sync.sync(listOf(pictured), emptyMap())
         assertEquals(2, surface.published.size)
-        sync.sync(listOf(pictured.copy(tint = "Sand")), emptyMap())
-        assertEquals("Sand", surface.published.last().tint)
-        sync.sync(listOf(pictured.copy(tint = "Sand", pictureAt = null)), emptyMap())
+        sync.sync(listOf(pictured.copy(tint = "Amber")), emptyMap())
+        assertEquals("Amber", surface.published.last().tint)
+        sync.sync(listOf(pictured.copy(tint = "Amber", pictureAt = null)), emptyMap())
         assertEquals(null, surface.published.last().pictureAt)
+        assertEquals(4, surface.published.size)
+    }
+
+    @Test
+    fun `a conversation is published again when its eyes change, and only then`() {
+        val surface = FakeSurface()
+        val sync = ConversationSync(surface)
+        sync.sync(listOf(first, second), emptyMap())
+        val winking = first.copy(eyes = "Wink")
+        sync.sync(listOf(winking, second), emptyMap())
+        assertEquals(Conversation(first.id, "main", HOST, null, dev = false, "Slate", "Wink"), surface.published.last())
+        assertEquals(3, surface.published.size)
+        sync.sync(listOf(winking, second), emptyMap())
+        assertEquals(3, surface.published.size)
+        sync.sync(listOf(winking.copy(eyes = "Open"), second), emptyMap())
+        assertEquals("Open", surface.published.last().eyes)
         assertEquals(4, surface.published.size)
     }
 

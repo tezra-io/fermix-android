@@ -24,10 +24,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -35,18 +37,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.tezra.fermix.data.nicknameRefusal
 import io.tezra.fermix.data.showsDevTag
+import io.tezra.fermix.design.EyeStyle
 import io.tezra.fermix.design.FermixShapes
 import io.tezra.fermix.design.FermixSpacing
 import io.tezra.fermix.design.FermixType
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.design.LocalReducedMotion
+import io.tezra.fermix.design.MarkEyePaths
 import io.tezra.fermix.design.NameMotion
 import io.tezra.fermix.design.Tint
+import io.tezra.fermix.design.drawAvatarEyes
 import io.tezra.fermix.design.focusRing
 
 // The visual canon's "Name this Fermix" (6b): the title 8 dp down, the field 22 dp under it on 16 dp
 // corners, the chips 8 dp apart under the field, and the row as the Chats list will show it 12 dp lower:
-// the avatar a plain disc in the tint, as the M51 update's reference player draws the Chats row's, and the DEV tag.
+// the avatar a disc in the tint with the mark's open eyes, as the Chats row draws a new Fermix's, and the DEV tag.
 private val TITLE_TOP = 8.dp
 private val FIELD_TOP = 22.dp
 private val FIELD_CORNER = 16.dp
@@ -205,8 +210,9 @@ private fun DevTag() {
 }
 
 /**
- * The avatar, a plain disc in [tint], which cross-fades to a new tint over 200 ms (the M51 update's 7.4), or takes it
- * at once under Remove animations.
+ * The avatar, a disc in [tint] with the mark's open eyes on it, a new pairing's (the owner, 2026-10-11), as the Chats
+ * list will show it; the disc cross-fades to a new tint over 200 ms (the M51 update's 7.4), or takes it at once under
+ * Remove animations, and the eyes stay as they are.
  */
 @Composable
 internal fun Avatar(
@@ -216,7 +222,14 @@ internal fun Avatar(
     val reduced = LocalReducedMotion.current
     val fading by animateColorAsState(tint.color, tween(NameMotion.TINT_MILLIS), label = "avatar")
     val color = if (reduced) tint.color else fading
-    Box(modifier = modifier.size(FermixSpacing.avatar).background(color, CircleShape))
+    val paths = remember { MarkEyePaths() }
+    Box(
+        modifier =
+            modifier
+                .size(FermixSpacing.avatar)
+                .background(color, CircleShape)
+                .drawWithCache { onDrawBehind { drawAvatarEyes(EyeStyle.Open, size, paths) } },
+    )
 }
 
 /** The design's tint a record names (data keeps it by name). */

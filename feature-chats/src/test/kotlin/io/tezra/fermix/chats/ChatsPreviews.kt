@@ -69,7 +69,7 @@ private val THREE =
                     unread = 2,
                 ),
                 ChatRow(
-                    record = sample(2, profile = "fermix-dev", tint = "Ocean"),
+                    record = sample(2, profile = "fermix-dev", tint = "Sky"),
                     profileId = "main",
                     agentName = null,
                     dev = true,
@@ -79,7 +79,7 @@ private val THREE =
                     unread = 0,
                 ),
                 ChatRow(
-                    record = sample(3, host = LINUX_HOST, tint = "Sage"),
+                    record = sample(3, host = LINUX_HOST, tint = "Olive"),
                     profileId = "main",
                     agentName = null,
                     dev = false,
@@ -155,20 +155,20 @@ private val STATES =
         rows =
             listOf(
                 stateRow(
-                    sample(2, profile = "fermix-dev", tint = "Ocean"),
+                    sample(2, profile = "fermix-dev", tint = "Sky"),
                     Link.Up(Candidate.Scope.LAN, latencyMs = 9, caughtUp = true),
                     RowLine.Thinking,
                     "09:40",
                 ),
-                stateRow(sample(4, tint = "Clay"), Link.IdentityChanged, RowLine.Speaks(Link.IdentityChanged), "Mon"),
+                stateRow(sample(4, tint = "Coral"), Link.IdentityChanged, RowLine.Speaks(Link.IdentityChanged), "Mon"),
                 stateRow(
-                    sample(3, host = LINUX_HOST, tint = "Sage"),
+                    sample(3, host = LINUX_HOST, tint = "Olive"),
                     Link.Replaced,
                     RowLine.Speaks(Link.Replaced),
                     "Tue",
                 ),
                 stateRow(
-                    sample(5, nickname = "Studio", tint = "Plum").copy(pictureAt = PICTURED_AT),
+                    sample(5, nickname = "Studio", tint = "Iris").copy(pictureAt = PICTURED_AT),
                     Link.ProtocolError,
                     RowLine.Speaks(Link.ProtocolError),
                     "Wed",
@@ -222,9 +222,9 @@ fun AppLockSettingPreview() {
 private val SHARE_ROWS =
     listOf(
         sample(1, tint = "Slate") to Link.Up(Candidate.Scope.LAN, latencyMs = 9, caughtUp = true),
-        sample(2, profile = "fermix-dev", tint = "Ocean") to
+        sample(2, profile = "fermix-dev", tint = "Sky") to
             Link.Up(Candidate.Scope.TAILNET, latencyMs = 38, caughtUp = true),
-        sample(3, host = LINUX_HOST, tint = "Sage") to Link.NotOpen,
+        sample(3, host = LINUX_HOST, tint = "Olive") to Link.NotOpen,
     ).map { (record, link) ->
         ChatRow(
             record = record,

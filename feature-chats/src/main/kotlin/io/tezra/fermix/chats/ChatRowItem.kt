@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.DropdownMenu
@@ -53,6 +55,7 @@ import io.tezra.fermix.instance.Tag
 import io.tezra.fermix.instance.dot
 import io.tezra.fermix.instance.linkWords
 import io.tezra.fermix.instance.rememberAvatarPicture
+import io.tezra.fermix.instance.tintColor
 
 // The visual canon's `.row`: 72 dp, 16 dp at the sides, 12 dp between the avatar, the text and the meta;
 // 8 dp between the title and its tag; the meta 4 dp apart; the badge 20 dp, 6 dp inside, a pill. Its
@@ -95,7 +98,7 @@ internal fun ChatRowItem(
         RowLayout(
             avatar = {
                 InstanceAvatar(
-                    tint = row.record.tint,
+                    record = row.record,
                     dot = row.link.dot,
                     size = AvatarSize.ROW,
                     picture = rememberAvatarPicture(row.record.id, row.record.pictureAt, AvatarSize.ROW),
@@ -155,7 +158,7 @@ internal fun RepairRowItem(
     var height by remember { mutableIntStateOf(0) }
     Box(modifier = Modifier.onSizeChanged { height = it.height }) {
         RowLayout(
-            avatar = { InstanceAvatar(tint = REPAIR_TINT, dot = null, size = AvatarSize.ROW) },
+            avatar = { Spacer(Modifier.size(AvatarSize.ROW.disc).background(tintColor(REPAIR_TINT), CircleShape)) },
             modifier =
                 Modifier.rowFocusRing().held(open, colors.agentBubble).combinedClickable(
                     hapticFeedbackEnabled = false,
@@ -216,7 +219,10 @@ private fun Modifier.held(
     tone: Color,
 ): Modifier = if (open) background(tone) else this
 
-/** A row dropped by a restore has lost its tint with its record: it is drawn in the first one. */
+/**
+ * A row dropped by a restore has lost its tint and its eyes with its record: it is a plain disc in Slate, the greyest
+ * tint, standing for a Fermix the phone no longer holds.
+ */
 private const val REPAIR_TINT = "Slate"
 
 @Composable

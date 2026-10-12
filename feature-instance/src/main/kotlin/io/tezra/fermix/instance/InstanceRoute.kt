@@ -50,6 +50,7 @@ fun InstanceRoute(
                 onClearCache = guarded(viewModel::clearCache),
                 onUnpair = guarded(viewModel::unpair),
                 onTint = { if (showing()) viewModel.setTint(it) },
+                onEyes = { if (showing()) viewModel.setEyes(it) },
                 onChoosePhoto = guarded { picker.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly)) },
                 onRemovePhoto = guarded(viewModel::removePicture),
             )

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
@@ -16,6 +17,8 @@ import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.design.AVATAR_EYE_INK
+import io.tezra.fermix.design.Tint
 import io.tezra.fermix.instance.AvatarSize
 import io.tezra.fermix.instance.InstanceViewModel
 import kotlinx.coroutines.flow.first
@@ -46,6 +49,12 @@ private const val JPEG_SLACK = 24
 
 /** The least share of an avatar's disc the photo's colour must cover: the disc less its dot and its rim. */
 private const val COVERED = 0.6
+
+/** How far a drawn tint's or ink's channel may stray from its colour. */
+private const val TINT_SLACK = 8
+
+/** How much more of the mark's ink an open eye shows than one shut to a line: about ten times, at least four. */
+private const val WINK_RATIO = 4
 
 /**
  * The avatar's photo through the Instance screen's ViewModel on the device (the owner, 2026-10-10): the owner's pick,
@@ -116,6 +125,29 @@ class AvatarDeviceTest {
     }
 
     /**
+     * The avatar's eyes (the owner, 2026-10-11) through the Instance screen's ViewModel: a wink is the record's, and
+     * stays so once the app's activity starts afresh, and the Chats row's avatar winks: its left eye open in the mark's
+     * ink, its right shut to a line.
+     */
+    @Test
+    fun eyesSetThroughTheInstanceScreenAreTheRecordsOnceTheAppStartsAfreshAndTheChatsRowWinks() {
+        runBlocking { services.instances.upsert(record) }
+        InstanceViewModel(services.instanceParts(), record.id).setEyes("Wink")
+        val records = services.instances
+        runBlocking { withTimeout(STEP_MILLIS) { records.instances.first { it.single().eyes == "Wink" } } }
+
+        app.startActivity(
+            Intent()
+                .setComponent(ComponentName(app, MainActivity::class.java))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+        )
+        val named = hasText(HOST) and hasClickAction()
+        rule.waitUntil("the Chats row", STEP_MILLIS) { rule.onAllNodes(named).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("Wink", runBlocking { records.instances.first() }.single().eyes)
+        rule.waitUntil("the wink on the Chats row", STEP_MILLIS) { winks(rule.onNode(named)) }
+    }
+
+    /**
      * A photo URI the app may not read (AGENTS.md: a string from another app never names a path or picks what the app
      * reads), each a real image: a `file:` URI, which the resolver would open as a path, and the app's own
      * FileProvider's, which the app reads with its own rights. Each is refused, the screen says so, and nothing is
@@ -154,6 +186,36 @@ class AvatarDeviceTest {
         return magentaPixels(image) >= disc * COVERED
     }
 }
+
+/**
+ * Whether [node]'s image shows a winking avatar: in the box of its tint's pixels, the avatar's disc, the mark's ink
+ * lies in the left half, an open eye, at least [WINK_RATIO] times as much as in the right, a shut one's line.
+ */
+private fun winks(node: SemanticsNodeInteraction): Boolean {
+    val image = runCatching { node.captureToImage().asAndroidBitmap() }.getOrNull() ?: return false
+    val tint = Tint.Slate.color.toArgb()
+    val ink = AVATAR_EYE_INK.toArgb()
+    val tinted = (0 until image.width).filter { x -> columnCount(image, x, tint) > 0 }
+    // The disc's middle column; with no tint drawn yet there is none, and no column is either side of it.
+    val middle = tinted.average()
+    val open = tinted.filter { x -> x < middle }.sumOf { x -> columnCount(image, x, ink) }
+    val shut = tinted.filter { x -> x >= middle }.sumOf { x -> columnCount(image, x, ink) }
+    return open > 0 && open >= WINK_RATIO * shut
+}
+
+/** How many of [image]'s pixels in column [x] are [colour]. */
+private fun columnCount(
+    image: Bitmap,
+    x: Int,
+    colour: Int,
+): Int = (0 until image.height).count { y -> near(image.getPixel(x, y), colour, TINT_SLACK) }
+
+/** Whether [pixel] is [colour], each channel within [slack]. */
+private fun near(
+    pixel: Int,
+    colour: Int,
+    slack: Int,
+): Boolean = listOf(16, 8, 0).all { shift -> abs((pixel shr shift and 0xFF) - (colour shr shift and 0xFF)) <= slack }
 
 /** How many of [image]'s pixels are the photo's colour, within a JPEG's slack. */
 private fun magentaPixels(image: Bitmap): Int {

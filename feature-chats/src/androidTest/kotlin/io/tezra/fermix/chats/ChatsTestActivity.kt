@@ -43,7 +43,7 @@ internal val TWO_ROWS =
                     unread = 2,
                 ),
                 ChatRow(
-                    record = sample(2, profile = "fermix-dev", tint = "Ocean", nickname = "Dev"),
+                    record = sample(2, profile = "fermix-dev", tint = "Sky", nickname = "Dev"),
                     profileId = "main",
                     agentName = null,
                     dev = true,
@@ -90,7 +90,7 @@ class ChatsTestActivity : ComponentActivity() {
 }
 
 private val NO_CHATS_ACTIONS = ChatsActions({}, {}, {}, {}, { _, _ -> }, {}, {}, {}, {})
-private val NO_INSTANCE_ACTIONS = InstanceActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+private val NO_INSTANCE_ACTIONS = InstanceActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
 @Composable
 private fun Host(rig: ChatsTestRig) {

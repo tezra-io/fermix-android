@@ -53,9 +53,9 @@ fun mergeTarget(
 }
 
 /**
- * The auto-picked tint of a new pairing (design section 9.2): the first of the six, in design's order,
+ * The auto-picked tint of a new pairing (design section 9.2): the first of the eight, in design's order,
  * that no record on this phone carries, so a second Fermix on one computer never shares the first one's;
- * with all six taken, the one fewest records carry, the first of those. A Fermix paired again keeps its
+ * with all eight taken, the one fewest records carry, the first of those. A Fermix paired again keeps its
  * own tint, which the store's upsert keeps.
  */
 fun pickTint(existing: List<Instance>): String {

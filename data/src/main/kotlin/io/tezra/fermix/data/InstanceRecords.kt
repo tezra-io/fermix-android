@@ -6,6 +6,8 @@ import io.tezra.fermix.transport.Candidate
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -55,6 +57,34 @@ internal object InstancesSerializer : OkioSerializer<Instances> {
         // OkioStorage syncs the file as this returns, before it moves it in place: what the sink still buffers would
         // reach the file only after that sync (atomicDataStore).
         sink.emit()
+    }
+}
+
+/**
+ * Design section 13.1's six tints, which a record written before the owner's eight (2026-10-11) names, each to the new
+ * tint of its hue, so every Fermix keeps the colour family the owner chose; Slate is one of the eight, and stays.
+ */
+private val LEGACY_TINT_NAMES: Map<String, String> =
+    mapOf("Sage" to "Olive", "Clay" to "Coral", "Plum" to "Iris", "Ocean" to "Sky", "Sand" to "Amber")
+
+/**
+ * A record's tint as the file holds it: written as it is, and read as itself or, one of the six old names, as the new
+ * one of its hue ([LEGACY_TINT_NAMES]). A file of the old names reads right every time and holds the new ones from its
+ * next write, never a [CorruptionException], which would cost the phone every record. Any other name is read as it is,
+ * for the record's own rule to refuse.
+ */
+internal object TintNameSerializer : KSerializer<String> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("io.tezra.fermix.data.TintName", PrimitiveKind.STRING)
+
+    override fun serialize(
+        encoder: Encoder,
+        value: String,
+    ) = encoder.encodeString(value)
+
+    override fun deserialize(decoder: Decoder): String {
+        val stored = decoder.decodeString()
+        return LEGACY_TINT_NAMES[stored] ?: stored
     }
 }
 

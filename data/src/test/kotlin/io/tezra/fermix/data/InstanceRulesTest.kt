@@ -14,9 +14,9 @@ import org.junit.jupiter.api.assertThrows
  * section 13.7, and "Move to top".
  */
 class InstanceRulesTest {
-    private val mac = instance(gateway = 1, host = "suj-mbp", nickname = "Studio", tint = "Plum")
-    private val linux = instance(gateway = 3, host = "linux-box", tint = "Sage")
-    private val dev = instance(gateway = 5, host = "suj-mbp", tint = "Clay").copy(profile = "fermix-dev")
+    private val mac = instance(gateway = 1, host = "suj-mbp", nickname = "Studio", tint = "Iris").copy(eyes = "Happy")
+    private val linux = instance(gateway = 3, host = "linux-box", tint = "Olive")
+    private val dev = instance(gateway = 5, host = "suj-mbp", tint = "Coral").copy(profile = "fermix-dev")
 
     @Test
     fun `the DEV tag marks the fermix-dev profile, or a Fermix the owner calls Dev in any case`() {
@@ -33,10 +33,10 @@ class InstanceRulesTest {
     }
 
     @Test
-    fun `the same daemon paired again replaces its record in place, keeping its nickname and tint`() {
-        val again = instance(gateway = 1, host = "suj-mbp", tint = "Ocean", keyAlias = "fermix.device.1.ffffffff")
+    fun `the same daemon paired again replaces its record in place, keeping its nickname, tint and eyes`() {
+        val again = instance(gateway = 1, host = "suj-mbp", tint = "Sky", keyAlias = "fermix.device.1.ffffffff")
         val plan = planUpsert(listOf(mac, linux), again)
-        assertEquals(listOf(again.copy(nickname = "Studio", tint = "Plum"), linux), plan.instances)
+        assertEquals(listOf(again.copy(nickname = "Studio", tint = "Iris", eyes = "Happy"), linux), plan.instances)
         assertEquals(mac, plan.replaced)
     }
 
@@ -56,10 +56,11 @@ class InstanceRulesTest {
     }
 
     @Test
-    fun `a reinstalled daemon merges into the row the owner paired again, which keeps its place, nickname and tint`() {
-        val reinstalled = instance(gateway = 7, host = "suj-mbp", tint = "Ocean")
+    fun `a reinstalled daemon merges into the row paired again, which keeps its place, nickname, tint and eyes`() {
+        val reinstalled = instance(gateway = 7, host = "suj-mbp", tint = "Sky")
         val plan = planMerge(listOf(mac, linux), mac.id, reinstalled)
-        assertEquals(listOf(reinstalled.copy(nickname = "Studio", tint = "Plum"), linux), plan.instances)
+        val kept = reinstalled.copy(nickname = "Studio", tint = "Iris", eyes = "Happy")
+        assertEquals(listOf(kept, linux), plan.instances)
         assertEquals(mac, plan.replaced)
     }
 
@@ -68,7 +69,7 @@ class InstanceRulesTest {
         val reinstalled = instance(gateway = 7, host = "linux-box", nickname = "Box")
         val plan = planMerge(listOf(linux), linux.id, reinstalled)
         assertEquals("Box", plan.instances.single().nickname)
-        assertEquals("Sage", plan.instances.single().tint)
+        assertEquals("Olive", plan.instances.single().tint)
     }
 
     @Test
@@ -88,9 +89,9 @@ class InstanceRulesTest {
 
     @Test
     fun `the row's own daemon paired again through a merge keeps the row, as an upsert would`() {
-        val again = mac.copy(tint = "Ocean", keyAlias = "fermix.device.1.ffffffff")
+        val again = mac.copy(tint = "Sky", eyes = "Open", keyAlias = "fermix.device.1.ffffffff")
         val plan = planMerge(listOf(mac, linux), mac.id, again)
-        assertEquals(listOf(again.copy(tint = "Plum"), linux), plan.instances)
+        assertEquals(listOf(again.copy(tint = "Iris", eyes = "Happy"), linux), plan.instances)
         assertEquals(mac, plan.replaced)
     }
 
@@ -153,7 +154,7 @@ class InstanceRulesTest {
     }
 
     @Test
-    fun `an update that touches what a pairing set, or the owner's nickname, tint or picture, is refused`() {
+    fun `an update that touches what a pairing set, or the owner's nickname, tint, eyes or picture, is refused`() {
         val refused =
             mapOf<String, (Instance) -> Instance>(
                 "gateway_pk" to { it.copy(gatewayPk = base64(key(9))) },
@@ -162,7 +163,8 @@ class InstanceRulesTest {
                 "key_alias" to { it.copy(keyAlias = "fermix.device.1.ffffffff") },
                 "push_salt" to { it.copy(pushSalt = base64(key(9))) },
                 "nickname" to { it.copy(nickname = "Box") },
-                "tint" to { it.copy(tint = "Ocean") },
+                "tint" to { it.copy(tint = "Sky") },
+                "eyes" to { it.copy(eyes = "Wink") },
                 "picture_at" to { it.copy(pictureAt = 1_790_000_000_000L) },
             )
         refused.forEach { (field, change) ->

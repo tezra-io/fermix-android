@@ -299,3 +299,8 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   its location or camera details, and goes when the Fermix does. "Remove photo" brings the colour back, and the
   last photo you choose, or its removal, is what stays, even while an earlier one is still loading. Only a photo
   another app hands over, as the photo picker does, is read; the sheet opens whole, even on a phone on its side.
+- **A Fermix's avatar has eyes, on brighter colours.** Without a photo, an avatar now shows the Fermix mark's two
+  eyes, open, happy, winking, squinting, sleepy or looking sideways, as you pick under the colours in "Picture",
+  everywhere the avatar shows, the conversation shortcut's icon included; a new Fermix's eyes are open. The six
+  muted colours are now eight brighter ones (Coral, Amber, Olive, Teal, Sky, Iris, Rose and Slate), and a Fermix
+  keeps the hue it had: Sage becomes Olive, Clay Coral, Plum Iris, Ocean Sky and Sand Amber.

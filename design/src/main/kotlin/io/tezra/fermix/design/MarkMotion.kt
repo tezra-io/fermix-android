@@ -200,8 +200,9 @@ object Hop {
 /**
  * One instant of the mark, every value the drawing takes (the update's sections 3 to 6 and 7.4, the reference player's
  * `REST` and `render`): the drop's, the hop's, the idle's, and where the eyes look and how far open they are
- * ([eyeX] and [eyeY], in mark units, down positive; [squint], a share of their height). [Rest] is the mark standing,
- * eyes open, looking ahead.
+ * ([eyeX] and [eyeY], in mark units, down positive; [squint], a share of their height). [blinkLeft] and [blinkRight]
+ * close one eye alone, a share of its height, for the avatar's wink (AvatarEyes.kt); no moment moves them. [Rest] is
+ * the mark standing, eyes open, looking ahead.
  */
 @Immutable
 data class MarkPose(
@@ -224,6 +225,8 @@ data class MarkPose(
     val eyeX: Float = 0f,
     val eyeY: Float = 0f,
     val squint: Float = 1f,
+    val blinkLeft: Float = 1f,
+    val blinkRight: Float = 1f,
 ) {
     companion object {
         val Rest = MarkPose()

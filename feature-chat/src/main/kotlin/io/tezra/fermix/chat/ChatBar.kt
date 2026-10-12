@@ -86,7 +86,7 @@ internal fun ChatBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 InstanceAvatar(
-                    tint = header.record.tint,
+                    record = header.record,
                     dot = header.link.dot,
                     size = AvatarSize.SMALL,
                     picture = rememberAvatarPicture(header.record.id, header.record.pictureAt, AvatarSize.SMALL),

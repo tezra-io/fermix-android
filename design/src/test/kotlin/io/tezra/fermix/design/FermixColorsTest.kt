@@ -112,21 +112,34 @@ class FermixColorsTest {
         assertEquals(Color(0xFF000000).copy(alpha = 0.56f), FermixColors.Dark.scrim)
     }
 
+    // The owner, 2026-10-11: "Pick some colors that would look great for background." Eight brighter tints in place of
+    // design section 13.1's six muted ones; Coral and Sky a step darker than first proposed, to a mark's 3 : 1 on light
+    // mode's canvas (ContrastTest).
     @Test
-    fun `the six tints are the canon's, in the design's order`() {
+    fun `the eight tints are the owner's, in their order`() {
         val expected =
             listOf(
+                Tint.Coral to Color(0xFFDC785D),
+                Tint.Amber to Color(0xFFE9A23B),
+                Tint.Olive to Color(0xFF8A9A5B),
+                Tint.Teal to Color(0xFF3D9A8B),
+                Tint.Sky to Color(0xFF569ACC),
+                Tint.Iris to Color(0xFF7B6FD0),
+                Tint.Rose to Color(0xFFD96C9A),
                 Tint.Slate to Color(0xFF6B7A90),
-                Tint.Sage to Color(0xFF76917E),
-                Tint.Clay to Color(0xFFAD7F6B),
-                Tint.Plum to Color(0xFF8C7093),
-                Tint.Ocean to Color(0xFF5C8BA3),
-                Tint.Sand to Color(0xFFB09A6E),
             )
         assertEquals(expected, Tint.entries.map { it to it.color })
     }
 
-    // The update's 1.2: the six tints "still never stand in for an accent", and the one blue left is the signal.
+    // The avatar's eyes lie on a tint, a fixed surface of its own colour, so they are the mark's ink in both modes, as
+    // the launcher icon draws the mark: light mode's ink.
+    @Test
+    fun `the avatar's eyes are the mark's ink, light mode's ink, in both modes`() {
+        assertEquals(Color(0xFF0B0B0D), AVATAR_EYE_INK)
+        assertEquals(FermixColors.Light.ink, AVATAR_EYE_INK)
+    }
+
+    // The update's 1.2: the tints "still never stand in for an accent", and the one blue left is the signal.
     @Test
     fun `no tint is the signal or the ink`() {
         for (tint in Tint.entries) {

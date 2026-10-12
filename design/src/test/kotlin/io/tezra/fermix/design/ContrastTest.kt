@@ -58,6 +58,18 @@ class ContrastTest {
         }
     }
 
+    // An avatar is a disc of its tint with the mark's two eyes on it, in the mark's ink in both modes (AVATAR_EYE_INK),
+    // and the disc lies on the canvas: the eyes read on every tint as a mark, and so does every disc on the dark canvas
+    // and, but Amber, which is pinned with the pairs under their floor, on the light one.
+    @Test
+    fun `the avatar's eyes read on every tint, and every tint on the canvas, as a mark`() {
+        for (tint in Tint.entries) {
+            assertAtLeast(MARK, AVATAR_EYE_INK, tint.color)
+            assertAtLeast(MARK, tint.color, FermixColors.Dark.canvas)
+            if (tint != Tint.Amber) assertAtLeast(MARK, tint.color, FermixColors.Light.canvas)
+        }
+    }
+
     // The Fermix wordmark's two eye-dots are the signal (the owner, 2026-10-10), drawn at a mark's size on the canvas,
     // Welcome's and the Chats list's bar's, never as text: dark mode's would be under text's 4.5 : 1 (README).
     @Test
@@ -228,8 +240,8 @@ class ContrastTest {
         // A queued owner's bubble, drawn whole at M51's 55 %: its words on its fill, over light mode's canvas.
         val queued = { color: Color -> color.copy(alpha = QUEUED_ALPHA).compositeOver(light.canvas) }
         assertMeasured(4.3, queued(light.onInk), queued(light.ink))
-        // Sand, the one tint under a mark's 3 : 1: its avatar, a plain disc, on light mode's canvas.
-        assertMeasured(2.7, Tint.Sand.color, light.canvas)
+        // Amber, the one tint under a mark's 3 : 1 on light mode's canvas: its avatar's disc there.
+        assertMeasured(2.2, Tint.Amber.color, light.canvas)
         // Connecting's step dots: the current one, the ink, against the done ones, the secondary text; those to come,
         // the hairline, on the canvas.
         assertMeasured(3.0, light.ink, light.textSecondary)

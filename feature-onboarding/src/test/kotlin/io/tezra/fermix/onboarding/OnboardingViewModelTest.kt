@@ -416,7 +416,7 @@ class OnboardingViewModelTest {
                     .first()
                     .single()
             assertEquals(facts(gateway = 1).id, stored.id)
-            assertEquals("Slate", stored.tint)
+            assertEquals("Coral", stored.tint)
             assertEquals(PHONE, stored.deviceName)
             assertEquals(PAIRED_AT, stored.pairedAt)
             assertEquals(listOf<String?>(null), rig.control.replaced)
@@ -467,7 +467,8 @@ class OnboardingViewModelTest {
             rig.shows(OnboardingKey.Paired)
             val paired = checkNotNull(rig.model.ui.value.paired)
             assertTrue(paired.needsName)
-            assertEquals("Sage", paired.record.tint)
+            // The Fermix already paired is the fixture's Slate, so this one takes the first tint none carries.
+            assertEquals("Coral", paired.record.tint)
             rig.model.continueFromPaired()
             assertEquals(listOf(OnboardingKey.Paired, OnboardingKey.Name), rig.model.stack.value)
             rig.model.name("Dev")
@@ -686,7 +687,7 @@ class OnboardingViewModelTest {
     fun `Pair again on a reinstalled daemon's row merges the new pairing into it, nickname and tint kept`() =
         runTest(main) {
             val rig = Rig(this)
-            val old = record(gateway = 5, tint = "Plum", nickname = "Studio")
+            val old = record(gateway = 5, tint = "Iris", nickname = "Studio")
             rig.store.upsert(old)
             rig.model.getStarted(mergeInto = old.id)
             assertEquals(listOf(PAIR), rig.model.stack.value)
@@ -700,7 +701,7 @@ class OnboardingViewModelTest {
                     .single()
             assertEquals(facts(gateway = 1).id, merged.id)
             assertEquals("Studio", merged.nickname)
-            assertEquals("Plum", merged.tint)
+            assertEquals("Iris", merged.tint)
             assertEquals(listOf<String?>(old.keyAlias), rig.control.replaced)
         }
 

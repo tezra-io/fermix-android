@@ -64,8 +64,8 @@ private val FOOTER_TOP = 16.dp
 private val FOOTER_STYLE = FermixType.bodyMedium.copy(fontSize = 12.sp, lineHeight = 16.sp)
 
 /**
- * What the Instance screen's controls do, each the ViewModel's; [onChoosePhoto] opens the system's Photo Picker for
- * an image, whose pick the route hands the ViewModel.
+ * What the Instance screen's controls do, each the ViewModel's; [onTint] and [onEyes] set the avatar's tint and eyes,
+ * and [onChoosePhoto] opens the system's Photo Picker for an image, whose pick the route hands the ViewModel.
  */
 data class InstanceActions(
     val onBack: () -> Unit,
@@ -76,6 +76,7 @@ data class InstanceActions(
     val onClearCache: () -> Unit,
     val onUnpair: () -> Unit,
     val onTint: (String) -> Unit,
+    val onEyes: (String) -> Unit,
     val onChoosePhoto: () -> Unit,
     val onRemovePhoto: () -> Unit,
 )
@@ -128,7 +129,7 @@ fun InstanceScreen(
         }, onDismiss = done)
     }
     if (picturing) {
-        PictureSheet(ui.record.tint, ui.record.pictureAt != null, actions, onDismiss = { picturing = false })
+        PictureSheet(ui.record, actions, onDismiss = { picturing = false })
     }
 }
 

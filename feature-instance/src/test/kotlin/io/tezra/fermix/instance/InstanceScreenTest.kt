@@ -66,6 +66,7 @@ class InstanceScreenTest {
             onClearCache = { calls += "clear" },
             onUnpair = { calls += "unpair" },
             onTint = { calls += "tint:$it" },
+            onEyes = { calls += "eyes:$it" },
             onChoosePhoto = { calls += "choose" },
             onRemovePhoto = { calls += "remove" },
         )

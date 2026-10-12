@@ -83,15 +83,16 @@ class InstanceStoreTest {
         }
 
     @Test
-    fun `the same daemon paired again keeps its row, nickname, tint and files, and hands back the old record`() =
+    fun `the same daemon paired again keeps its row, nickname, tint, eyes and files, and hands back the old record`() =
         runTest {
             val (store, databases) = open()
-            val first = instance(gateway = 1, nickname = "Studio", tint = "Plum")
+            val first = instance(gateway = 1, nickname = "Studio", tint = "Iris").copy(eyes = "Wink")
             store.upsert(first)
             fill(databases, first)
-            val again = instance(gateway = 1, tint = "Ocean", keyAlias = "fermix.device.1.ffffffff")
+            val again = instance(gateway = 1, tint = "Sky", keyAlias = "fermix.device.1.ffffffff")
             assertEquals(first, store.upsert(again))
-            assertEquals(listOf(again.copy(nickname = "Studio", tint = "Plum")), store.instances.first())
+            val kept = again.copy(nickname = "Studio", tint = "Iris", eyes = "Wink")
+            assertEquals(listOf(kept), store.instances.first())
             assertTrue(File(databases.mediaDirectory(first.id, PROFILE), BLOB_SHA256).isFile)
         }
 
@@ -99,15 +100,16 @@ class InstanceStoreTest {
     fun `a reinstalled daemon merges into the row paired again, and the old row's databases and media are deleted`() =
         runTest {
             val (store, databases) = open()
-            val old = instance(gateway = 1, nickname = "Studio", tint = "Plum")
+            val old = instance(gateway = 1, nickname = "Studio", tint = "Iris").copy(eyes = "Wink")
             val other = instance(gateway = 3, host = "linux-box")
             store.upsert(old)
             store.upsert(other)
             fill(databases, old)
             fill(databases, other)
-            val reinstalled = instance(gateway = 7, tint = "Ocean")
+            val reinstalled = instance(gateway = 7, tint = "Sky")
             assertEquals(old, store.merge(old.id, reinstalled))
-            assertEquals(listOf(reinstalled.copy(nickname = "Studio", tint = "Plum"), other), store.instances.first())
+            val kept = reinstalled.copy(nickname = "Studio", tint = "Iris", eyes = "Wink")
+            assertEquals(listOf(kept, other), store.instances.first())
             assertFalse(File(root, old.id).exists(), "the old row's files are still there")
             assertThrows<InstanceGone> { databases.open(old.id, PROFILE) }
             assertTrue(File(databases.mediaDirectory(other.id, PROFILE), BLOB_SHA256).isFile)
@@ -219,19 +221,74 @@ class InstanceStoreTest {
         }
 
     @Test
-    fun `the owner's tint is one of the design's six, any other is refused, and none is written once removed`() =
+    fun `the owner's tint is one of the design's eight, any other is refused, and none is written once removed`() =
         runTest {
             val (store, _) = open()
             val mac = instance(gateway = 1)
             store.upsert(mac)
-            assertTrue(store.setTint(mac.id, "Ocean"))
-            assertEquals(listOf(mac.copy(tint = "Ocean")), store.instances.first())
-            listOf("Purple", "ocean", "").forEach { name ->
+            assertTrue(store.setTint(mac.id, "Sky"))
+            assertEquals(listOf(mac.copy(tint = "Sky")), store.instances.first())
+            // An old name is only ever read from a file (InstanceRecordTest), never set.
+            listOf("Purple", "sky", "", "Ocean").forEach { name ->
                 assertThrows<IllegalArgumentException> { store.setTint(mac.id, name) }
             }
-            assertEquals(listOf(mac.copy(tint = "Ocean")), store.instances.first())
+            assertEquals(listOf(mac.copy(tint = "Sky")), store.instances.first())
             store.remove(mac.id)
-            assertFalse(store.setTint(mac.id, "Sand"))
+            assertFalse(store.setTint(mac.id, "Amber"))
+        }
+
+    @Test
+    fun `the owner's eyes are one of the six styles, any other is refused, and none is written once removed`() =
+        runTest {
+            val (store, _) = open()
+            val mac = instance(gateway = 1)
+            val linux = instance(gateway = 3, host = "linux-box")
+            store.upsert(mac)
+            store.upsert(linux)
+            assertTrue(store.setEyes(mac.id, "Wink"))
+            assertEquals(listOf(mac.copy(eyes = "Wink"), linux), store.instances.first())
+            listOf("Wide", "wink", "").forEach { name ->
+                assertThrows<IllegalArgumentException> { store.setEyes(mac.id, name) }
+            }
+            assertEquals(listOf(mac.copy(eyes = "Wink"), linux), store.instances.first())
+            store.remove(mac.id)
+            assertFalse(store.setEyes(mac.id, "Happy"))
+            assertEquals(listOf(linux), store.instances.first())
+        }
+
+    @Test
+    fun `a tint leaves the eyes as they were, and the eyes the tint`() =
+        runTest {
+            val (store, _) = open()
+            val mac = instance(gateway = 1)
+            store.upsert(mac)
+            assertTrue(store.setEyes(mac.id, "Sleepy"))
+            assertTrue(store.setTint(mac.id, "Iris"))
+            assertTrue(store.setEyes(mac.id, "Squint"))
+            assertEquals(listOf(mac.copy(tint = "Iris", eyes = "Squint")), store.instances.first())
+        }
+
+    @Test
+    fun `a records file stored under the old tint names reads under the new ones, and its next write keeps them`() =
+        runTest {
+            val stored = Buffer()
+            val records = listOf(instance(gateway = 1, tint = "Olive"), instance(gateway = 3, tint = "Amber"))
+            InstancesSerializer.writeTo(Instances(records), stored)
+            // The file as a build before the eyes and the eight tints wrote it: Sage and Sand, and no eyes.
+            val old =
+                stored
+                    .readUtf8()
+                    .replace("\"tint\":\"Olive\"", "\"tint\":\"Sage\"")
+                    .replace("\"tint\":\"Amber\"", "\"tint\":\"Sand\"")
+                    .replace(",\"eyes\":\"Open\"", "")
+            assertTrue("Sage" in old && "Sand" in old && "eyes" !in old, old)
+            val file = File(directory, "instances.json").apply { writeText(old) }
+            val (store, _) = open()
+            assertEquals(records, store.instances.first())
+            assertTrue(store.setEyes(records[0].id, "Happy"))
+            val rewritten = file.readText()
+            assertTrue("\"tint\":\"Olive\"" in rewritten && "\"tint\":\"Amber\"" in rewritten, rewritten)
+            assertFalse("Sage" in rewritten || "Sand" in rewritten, rewritten)
         }
 
     @Test

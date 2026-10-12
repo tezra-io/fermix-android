@@ -15,8 +15,9 @@ const val SHARE_CATEGORY = "io.tezra.fermix.category.SHARE_TARGET"
  * One (instance, profile)'s conversation (design section 9.1): its conversation shortcut and its
  * notification channel, both under [id], named and tinted as its row: its [title], the host-owned [agent]'s
  * name when that is not "Fermix", and the DEV tag when [dev] (section 9.2), so that two daemons of one
- * computer are told apart in the phone's settings and its share sheet as on the list. [pictureAt] is the version
- * of the owner's photo when the avatar has one (the owner, 2026-10-10), which the shortcut's icon then shows.
+ * computer are told apart in the phone's settings and its share sheet as on the list. Its icon is the row's avatar:
+ * the [tint] with the record's [eyes] on it (the owner, 2026-10-11), or, with [pictureAt], the version of the owner's
+ * photo (2026-10-10), the photo in their place.
  */
 data class Conversation(
     val instanceId: String,
@@ -25,6 +26,7 @@ data class Conversation(
     val agent: String?,
     val dev: Boolean,
     val tint: String,
+    val eyes: String,
     val pictureAt: Long? = null,
 ) {
     init {
@@ -56,6 +58,7 @@ fun conversationsOf(
             agent = hostAgent(agents[it.id]),
             dev = showsDevTag(it.profile, it.title),
             tint = it.tint,
+            eyes = it.eyes,
             pictureAt = it.pictureAt,
         )
     }
@@ -67,17 +70,17 @@ fun conversationsOf(
 interface ConversationSurface {
     fun published(): Set<String>
 
-    /** Makes [conversation]'s shortcut and channel, or brings their title and tint up to date. */
+    /** Makes [conversation]'s shortcut and channel, or brings their title and icon up to date. */
     fun publish(conversation: Conversation)
 
     fun remove(ids: Set<String>)
 }
 
 /**
- * Keeps [surface] to the records: a row's conversation is made with it and changed with it, its name, tint and
+ * Keeps [surface] to the records: a row's conversation is made with it and changed with it, its name, tint, eyes and
  * picture with its row's, and goes when it does, by unpairing, removal or a restore that dropped it. Its first sync
  * after the process starts publishes every conversation once; after that, only what changed, so its icon is drawn
- * again only as the picture or the tint changes.
+ * again only as the picture, the tint or the eyes change.
  */
 class ConversationSync(
     private val surface: ConversationSurface,

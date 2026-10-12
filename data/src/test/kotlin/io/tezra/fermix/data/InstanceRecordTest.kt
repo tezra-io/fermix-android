@@ -73,6 +73,7 @@ class InstanceRecordTest {
                 "paired_at",
                 "last_candidate",
                 "picture_at",
+                "eyes",
             )
         assertEquals(expected, names)
         val secretName = Regex("secret|psk|private|token|password", RegexOption.IGNORE_CASE)
@@ -99,19 +100,52 @@ class InstanceRecordTest {
         }
 
     @Test
-    fun `a record reads back as it was written, caps, candidates, nickname, last candidate and picture included`() =
+    fun `a record reads back as written, caps, candidates, nickname, last candidate, picture and eyes included`() =
         runTest {
             val named =
                 paired.copy(
                     nickname = "Mini",
+                    tint = "Teal",
                     deviceName = "Pixel 9 Pro",
                     pairedAt = 1_790_000_000_000L,
                     lastCandidate = paired.candidates.last(),
                     pictureAt = 1_790_000_100_000L,
+                    eyes = "Sleepy",
                 )
             val records = Instances(listOf(named, instance(gateway = 3)))
             val text = written(records)
             assertEquals(records, InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray())))
+        }
+
+    // The owner, 2026-10-11: eight brighter tints in place of the six. A record a build before them wrote names one of
+    // the six, and DataStore would hand a refused one to every reader as corruption, never replace it: each old name
+    // reads as the new one of its hue, and a record with no eyes, written before them, reads Open.
+    @Test
+    fun `a record under one of the six old tint names reads as the new one of its hue, and with no eyes as Open`() =
+        runTest {
+            val hues =
+                mapOf("Slate" to "Slate", "Sage" to "Olive", "Clay" to "Coral", "Plum" to "Iris", "Ocean" to "Sky")
+                    .plus("Sand" to "Amber")
+            for ((old, new) in hues) {
+                val text = written(Instances(listOf(instance(gateway = 1, tint = new))))
+                val stored =
+                    text.replace("\"tint\":\"$new\"", "\"tint\":\"$old\"").replace(",\"eyes\":\"Open\"", "")
+                assertTrue("\"$old\"" in stored && "eyes" !in stored, stored)
+                val read = InstancesSerializer.readFrom(Buffer().write(stored.encodeToByteArray()))
+                assertEquals(new, read.instances.single().tint, old)
+                assertEquals("Open", read.instances.single().eyes, old)
+                assertTrue("\"tint\":\"$new\"" in written(read), "$old is written back as $new")
+            }
+        }
+
+    @Test
+    fun `a record stored under a new name reads as itself`() =
+        runTest {
+            for (name in TINT_NAMES) {
+                val records = Instances(listOf(instance(gateway = 1, tint = name)))
+                val text = written(records)
+                assertEquals(records, InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray())))
+            }
         }
 
     @Test

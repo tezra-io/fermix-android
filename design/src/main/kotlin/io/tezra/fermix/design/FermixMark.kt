@@ -72,23 +72,39 @@ private fun DrawScope.drawMark(
         scale(scaleX = scaleX, scaleY = scaleY, pivot = MarkGeometry.feet)
     }) {
         drawPath(paths.body(pose), ink)
-        // Where the eyes look moves them and their happy arcs together, inside the visor (the update's 7.4).
-        translate(left = pose.eyeX, top = pose.eyeY) {
-            drawEye(MarkGeometry.leftEye, pose.eyeLeft, eyeHeight(MarkGeometry.leftEye, pose), ink)
-            drawEye(MarkGeometry.rightEye, pose.eyeRight, eyeHeight(MarkGeometry.rightEye, pose), ink)
-            drawHappyArcs(paths, pose.happy, ink)
-        }
+        drawEyes(pose, paths.eyes, ink)
     }
 }
 
 /**
- * [eye]'s height in [pose]: the drop's blink, the idle's, a squint and the happy eyes each shrink it about its centre,
- * and only the drop's pop scales it whole.
+ * [pose]'s eyes in [ink], in mark units: the two eyes and the happy arcs over them, where the eyes look. The mark draws
+ * them inside its body's transform, and the avatar inside its own (AvatarEyes.kt), so both draw the one shape.
+ */
+internal fun DrawScope.drawEyes(
+    pose: MarkPose,
+    paths: MarkEyePaths,
+    ink: Color,
+) {
+    // Where the eyes look moves them and their happy arcs together, inside the visor (the update's 7.4).
+    translate(left = pose.eyeX, top = pose.eyeY) {
+        drawEye(MarkGeometry.leftEye, pose.eyeLeft, eyeHeight(MarkGeometry.leftEye, pose, pose.blinkLeft), ink)
+        drawEye(MarkGeometry.rightEye, pose.eyeRight, eyeHeight(MarkGeometry.rightEye, pose, pose.blinkRight), ink)
+        drawHappyArcs(paths, pose.happy, ink)
+    }
+}
+
+/**
+ * [eye]'s height in [pose]: the drop's blink, the idle's, a squint, the happy eyes and [sideBlink], that eye's own
+ * blink, each shrink it about its centre, and only the drop's pop scales it whole.
  */
 internal fun eyeHeight(
     eye: MarkEye,
     pose: MarkPose,
-): Float = max(EYE_MIN_HEIGHT, eye.height * pose.blink * pose.idleBlink * pose.squint * (1f - pose.happy))
+    sideBlink: Float,
+): Float {
+    val shrunk = pose.blink * pose.idleBlink * pose.squint * sideBlink * (1f - pose.happy)
+    return max(EYE_MIN_HEIGHT, eye.height * shrunk)
+}
 
 /**
  * An eye's corner radius at [height]: the mark's 2.2 units, never more than half the height, so the corners stay
@@ -116,7 +132,7 @@ private fun DrawScope.drawEye(
 
 /** The happy arcs over both eyes at opacity [happy], none while it is 0. */
 private fun DrawScope.drawHappyArcs(
-    paths: MarkPaths,
+    paths: MarkEyePaths,
     happy: Float,
     ink: Color,
 ) {
@@ -125,7 +141,30 @@ private fun DrawScope.drawHappyArcs(
     drawPath(path = paths.rightArc, color = ink, alpha = happy, style = paths.arcStroke)
 }
 
-/** The mark's fixed paths and the arcs' stroke, made once (section 6), and the body a pose draws. */
+/**
+ * The happy arcs over the eyes and their stroke (the update's section 5), made once: whatever draws the mark's eyes,
+ * the mark or an avatar, remembers one and hands it to each frame, which then makes nothing.
+ */
+class MarkEyePaths {
+    internal val leftArc = happyArc(MarkGeometry.leftEye)
+    internal val rightArc = happyArc(MarkGeometry.rightEye)
+    internal val arcStroke = Stroke(width = MarkGeometry.HAPPY_STROKE, cap = StrokeCap.Round, join = StrokeJoin.Round)
+}
+
+/** [eye]'s happy arc: a quadratic from foot to foot, its control above the eye's centre. */
+private fun happyArc(eye: MarkEye): Path =
+    Path().apply {
+        val (cx, cy) = eye.centre
+        moveTo(cx - MarkGeometry.HAPPY_HALF_WIDTH, cy + MarkGeometry.HAPPY_FOOT)
+        quadraticTo(
+            cx,
+            cy - MarkGeometry.HAPPY_RISE,
+            cx + MarkGeometry.HAPPY_HALF_WIDTH,
+            cy + MarkGeometry.HAPPY_FOOT,
+        )
+    }
+
+/** The mark's fixed paths, its eyes' among them, made once (section 6), and the body a pose draws. */
 private class MarkPaths {
     private val outline = PathParser().parsePathString(MarkGeometry.OUTLINE).toPath()
     private val visor = PathParser().parsePathString(MarkGeometry.VISOR).toPath()
@@ -133,9 +172,7 @@ private class MarkPaths {
     /** The body standing: the outline with the visor open, cut out by the even-odd rule, as the vector fills it. */
     private val standing = cutOut(outline, visor)
 
-    val leftArc = happyArc(MarkGeometry.leftEye)
-    val rightArc = happyArc(MarkGeometry.rightEye)
-    val arcStroke = Stroke(width = MarkGeometry.HAPPY_STROKE, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val eyes = MarkEyePaths()
 
     /**
      * [pose]'s body: the falling dot, an ellipse, until the morph starts; the morph's 96 points closed by Catmull-Rom
@@ -200,16 +237,4 @@ private class MarkPaths {
             close()
         }
     }
-
-    private fun happyArc(eye: MarkEye): Path =
-        Path().apply {
-            val (cx, cy) = eye.centre
-            moveTo(cx - MarkGeometry.HAPPY_HALF_WIDTH, cy + MarkGeometry.HAPPY_FOOT)
-            quadraticTo(
-                cx,
-                cy - MarkGeometry.HAPPY_RISE,
-                cx + MarkGeometry.HAPPY_HALF_WIDTH,
-                cy + MarkGeometry.HAPPY_FOOT,
-            )
-        }
 }

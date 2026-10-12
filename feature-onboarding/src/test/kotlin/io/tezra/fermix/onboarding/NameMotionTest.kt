@@ -33,7 +33,7 @@ class NameMotionTest {
     val rule = createAndroidComposeRule<RoborazziActivity>()
 
     private val rig = MotionRig(rule)
-    private var tint by mutableStateOf(Tint.Ocean)
+    private var tint by mutableStateOf(Tint.Sky)
 
     private fun showAvatar(scale: Float = 1f) = rig.show(scale) { Avatar(tint, Modifier.testTag(AVATAR)) }
 
@@ -46,24 +46,24 @@ class NameMotionTest {
     @Test
     fun `the avatar's tint cross-fades to a new one over 200 ms`() {
         showAvatar()
-        assertEquals(Tint.Ocean.color.toArgb(), centre())
-        tint = Tint.Clay
+        assertEquals(Tint.Sky.color.toArgb(), centre())
+        tint = Tint.Coral
         rig.frameAfterWrite()
         rig.advanceTo(rig.at + NameMotion.TINT_MILLIS / 2L)
         val mid = centre()
         assertTrue(
             "mid-way at ${Integer.toHexString(mid)}",
-            mid != Tint.Ocean.color.toArgb() && mid != Tint.Clay.color.toArgb(),
+            mid != Tint.Sky.color.toArgb() && mid != Tint.Coral.color.toArgb(),
         )
         rig.advanceTo(rig.at + NameMotion.TINT_MILLIS)
-        assertEquals(Tint.Clay.color.toArgb(), centre())
+        assertEquals(Tint.Coral.color.toArgb(), centre())
     }
 
     @Test
     fun `under Remove animations the avatar takes its new tint at once`() {
         showAvatar(scale = 0f)
-        tint = Tint.Clay
+        tint = Tint.Coral
         rig.frameAfterWrite()
-        assertEquals(Tint.Clay.color.toArgb(), centre())
+        assertEquals(Tint.Coral.color.toArgb(), centre())
     }
 }

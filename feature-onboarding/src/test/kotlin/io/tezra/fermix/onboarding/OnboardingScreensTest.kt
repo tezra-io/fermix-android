@@ -415,7 +415,7 @@ class OnboardingScreensTest {
 
     @Test
     fun `Name labels its field, its three suggestions and Continue`() {
-        val paired = PairedFacts(record(gateway = 1, tint = "Ocean"), listOf(record(gateway = 5)), true, false)
+        val paired = PairedFacts(record(gateway = 1, tint = "Sky"), listOf(record(gateway = 5)), true, false)
         show { NameScreen(paired = paired, onContinue = {}) }
         assertActions(listOf("Dev", "Production", "Test", "Continue", NAME_FIELD))
         rule.onNode(hasSetTextAction()).assertContentDescriptionEquals("Name this Fermix")

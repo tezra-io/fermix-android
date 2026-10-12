@@ -4,11 +4,15 @@ import android.graphics.ImageDecoder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.tezra.fermix.data.ChatState
+import io.tezra.fermix.data.EYE_STYLES
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.InstanceStore
 import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.data.ProfileDatabases
+import io.tezra.fermix.data.TINT_NAMES
 import io.tezra.fermix.data.Use
+import io.tezra.fermix.data.setEyes
+import io.tezra.fermix.data.setTint
 import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionState
@@ -190,7 +194,7 @@ class InstanceViewModel(
         testing?.cancel()
         testing = null
         facts.update { it.copy(test = TestState.Idle, pictureFailed = false) }
-        viewModelScope.launch { measureCache() }
+        viewModelScope.launch { measureCache(parts, instanceId, facts) }
     }
 
     /** The owner's nickname, checked by the dialog against data's rule, or none: "Reset to gateway name". */
@@ -237,13 +241,20 @@ class InstanceViewModel(
     fun clearCache() {
         viewModelScope.launch {
             val cleared = parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.clear() }
-            if (cleared is Use.Ran) measureCache()
+            if (cleared is Use.Ran) measureCache(parts, instanceId, facts)
         }
     }
 
     /** A tint of the Picture sheet's, one of data's TINT_NAMES, on the record. */
     fun setTint(tint: String) {
+        require(tint in TINT_NAMES) { "tint '$tint' is not one of $TINT_NAMES" }
         viewModelScope.launch { parts.instances.setTint(instanceId, tint) }
+    }
+
+    /** Eyes of the Picture sheet's, one of data's EYE_STYLES, on the record. */
+    fun setEyes(eyes: String) {
+        require(eyes in EYE_STYLES) { "eyes '$eyes' are not one of $EYE_STYLES" }
+        viewModelScope.launch { parts.instances.setEyes(instanceId, eyes) }
     }
 
     /**
@@ -275,12 +286,19 @@ class InstanceViewModel(
     fun unpair() {
         viewModelScope.launch { parts.unpair(instanceId) }
     }
+}
 
-    /** The cache's size, unless a removal took the files meanwhile: the record went first, and the screen with it. */
-    private suspend fun measureCache() {
-        val measured = parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.size() }
-        if (measured is Use.Ran) facts.update { it.copy(cacheBytes = measured.value) }
-    }
+/**
+ * [instanceId]'s cache's size into [facts], unless a removal took the files meanwhile: the record went first, and the
+ * screen with it. Beside the ViewModel, as detekt holds a class to eleven functions.
+ */
+private suspend fun measureCache(
+    parts: InstanceParts,
+    instanceId: String,
+    facts: MutableStateFlow<ScreenFacts>,
+) {
+    val measured = parts.profiles.withMediaCache(instanceId, MAIN_PROFILE) { it.size() }
+    if (measured is Use.Ran) facts.update { it.copy(cacheBytes = measured.value) }
 }
 
 /**

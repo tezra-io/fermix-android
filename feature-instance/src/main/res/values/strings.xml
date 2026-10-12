@@ -41,13 +41,24 @@
     <string name="instance_picture_choose">Choose a photo</string>
     <string name="instance_picture_remove">Remove photo</string>
     <string name="instance_picture_failed">Couldn\'t use that photo</string>
-    <!-- The six tints as TalkBack names them on the Picture sheet: the design's names (section 13.1). -->
+    <!-- Not the design's: the eight tints as TalkBack names them on the Picture sheet, their own names (the owner,
+         2026-10-11, in place of section 13.1's six). -->
+    <string name="instance_tint_coral">Coral</string>
+    <string name="instance_tint_amber">Amber</string>
+    <string name="instance_tint_olive">Olive</string>
+    <string name="instance_tint_teal">Teal</string>
+    <string name="instance_tint_sky">Sky</string>
+    <string name="instance_tint_iris">Iris</string>
+    <string name="instance_tint_rose">Rose</string>
     <string name="instance_tint_slate">Slate</string>
-    <string name="instance_tint_sage">Sage</string>
-    <string name="instance_tint_clay">Clay</string>
-    <string name="instance_tint_plum">Plum</string>
-    <string name="instance_tint_ocean">Ocean</string>
-    <string name="instance_tint_sand">Sand</string>
+    <!-- Not the design's: the avatar's six eye styles as TalkBack names them on the Picture sheet (the owner,
+         2026-10-11). -->
+    <string name="instance_eyes_open">Open eyes</string>
+    <string name="instance_eyes_happy">Happy eyes</string>
+    <string name="instance_eyes_wink">A wink</string>
+    <string name="instance_eyes_squint">Squinting eyes</string>
+    <string name="instance_eyes_sleepy">Sleepy eyes</string>
+    <string name="instance_eyes_sideways">Looking sideways</string>
     <!-- A label the design does not give (section 13.8): the back button's. -->
     <string name="instance_back">Back</string>
 

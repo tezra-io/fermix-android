@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,6 +17,7 @@ import io.tezra.fermix.design.ColumnWidth
 import io.tezra.fermix.design.FermixColumn
 import io.tezra.fermix.design.FermixPreviewTheme
 import io.tezra.fermix.design.FermixPreviews
+import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.session.Diagnostic
 import io.tezra.fermix.session.DiagnosticKind
 import io.tezra.fermix.transport.Candidate
@@ -28,8 +30,10 @@ import java.time.ZoneOffset
 // connected over the LAN with Tailscale likely up, after a test whose race its tailnet address won, so that both its
 // candidates are lit as the canon draws them, each by its own handshake, with a few lines in its log, its page's
 // top, and its foot with "Advanced" open; and the foot of the page of one that cannot be reached, without FCM, on a
-// debug build. The pairing's day is read in UTC, so the images are the same in every zone. The photo is drawn as the
-// preview composes, a fixed pose: a dusk over the sea, read through the app's picture cache as a screen reads one.
+// debug build; and the Picture sheet's content on its tonal surface, the eight tints, the six eye styles on Coral,
+// Happy chosen, and "Remove photo". The pairing's day is read in UTC, so the images are the same in every zone. The
+// photo is drawn as the preview composes, a fixed pose: a dusk over the sea, read through the app's picture cache as a
+// screen reads one.
 
 private val LOG =
     listOf(
@@ -47,6 +51,7 @@ private val NO_ACTIONS =
         onClearCache = {},
         onUnpair = {},
         onTint = {},
+        onEyes = {},
         onChoosePhoto = {},
         onRemovePhoto = {},
     )
@@ -165,5 +170,18 @@ fun InstanceScreenFootPreview() {
             // Past the end: the page settles at its foot.
             scroll = rememberScrollState(initial = Int.MAX_VALUE),
         )
+    }
+}
+
+@FermixPreviews
+@Composable
+fun PictureSheetPreview() {
+    val record = sample(nickname = "Studio").copy(tint = "Coral", eyes = "Happy", pictureAt = PAIRED_AT)
+    FermixPreviewTheme {
+        FermixColumn(ColumnWidth.Narrow) {
+            Column(modifier = Modifier.background(LocalFermixColors.current.tonalSolid)) {
+                PictureSheetContent(record, onTint = {}, onEyes = {}, onChoose = {}, onRemove = {})
+            }
+        }
     }
 }

@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.ui.graphics.toArgb
 import io.tezra.fermix.data.AvatarPictures
+import io.tezra.fermix.design.AVATAR_EYE_INK
 import io.tezra.fermix.instance.tintColor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -37,7 +38,8 @@ class PlatformConversationsTest {
 
     @Test
     fun `a published conversation is a shortcut in the share category`() {
-        val conversation = Conversation("ab".repeat(32), "main", HOST, agent = null, dev = false, tint = "Slate")
+        val conversation =
+            Conversation("ab".repeat(32), "main", HOST, agent = null, dev = false, tint = "Slate", eyes = "Open")
         val pictures = AvatarPictures(File(app.noBackupFilesDir, "avatars"))
         val surface =
             PlatformConversations(app, pictures, { _, fault -> throw AssertionError("logged", fault) }) {
@@ -53,27 +55,41 @@ class PlatformConversationsTest {
         assertEquals(setOf(SHARE_CATEGORY), shortcut.categories)
     }
 
+    // The eyes' line runs through the icon's centre, so its middle row crosses both eyes: two runs of the mark's ink,
+    // one each side of the centre, inside the 72 dp a mask shows, the centre between them and the edges the tint.
     @Test
-    fun `a conversation's icon is its avatar, the tint alone, as the Chats row draws it`() {
-        val icon = conversationAvatar("Sand", app.resources.displayMetrics.density, picture = null)
-        val pixels = IntArray(icon.width * icon.height)
-        icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
-        assertEquals(setOf(tintColor("Sand").toArgb()), pixels.toSet())
+    fun `a conversation's icon is its avatar, the tint with its eyes across the 72 dp a mask shows`() {
+        val icon = conversationAvatar("Amber", "Open", app.resources.displayMetrics.density, picture = null)
+        val side = icon.width
+        val tint = tintColor("Amber").toArgb()
+        val ink = AVATAR_EYE_INK.toArgb()
+        val middle = side / 2
+        assertEquals(tint, icon.getPixel(middle, middle))
+        assertEquals(tint, icon.getPixel(0, 0))
+        assertEquals(tint, icon.getPixel(0, middle))
+        val inked = (0 until side).filter { column -> icon.getPixel(column, middle) == ink }
+        val inset = (side * SAFE_INSET).toInt()
+        assertTrue("the ink along the middle row: $inked", inked.isNotEmpty())
+        assertTrue(inked.first() > inset && inked.last() < side - inset)
+        assertTrue(inked.any { it < middle } && inked.any { it > middle })
+        assertTrue("the eyes are drawn whole, not a few pixels", inked.size > side / 20)
     }
 
     @Test
     fun `a conversation with a picture has it for its icon, across the adaptive icon's 72 dp, over the tint`() {
         val density = app.resources.displayMetrics.density
         val picture = Bitmap.createBitmap(PICTURE_PX, PICTURE_PX, Bitmap.Config.ARGB_8888).apply { eraseColor(MAGENTA) }
-        val icon = conversationAvatar("Sand", density, picture)
+        val icon = conversationAvatar("Amber", "Open", density, picture)
         val side = icon.width
         // The adaptive icon's 108 dp, of which the launcher shows the 72 at its centre: the picture fills those.
         val inset = (side * SAFE_INSET).toInt()
         assertEquals(MAGENTA, icon.getPixel(side / 2, side / 2))
         assertEquals(MAGENTA, icon.getPixel(inset + 2, side / 2))
         assertEquals(MAGENTA, icon.getPixel(side - inset - 3, side - inset - 3))
-        assertEquals(tintColor("Sand").toArgb(), icon.getPixel(inset - 2, side / 2))
-        assertEquals(tintColor("Sand").toArgb(), icon.getPixel(0, 0))
+        assertEquals(tintColor("Amber").toArgb(), icon.getPixel(inset - 2, side / 2))
+        assertEquals(tintColor("Amber").toArgb(), icon.getPixel(0, 0))
+        val ink = AVATAR_EYE_INK.toArgb()
+        assertTrue("no eye lies over the picture", (0 until side).none { icon.getPixel(it, side / 2) == ink })
     }
 
     @Test
@@ -87,7 +103,8 @@ class PlatformConversationsTest {
             PlatformConversations(app, pictures, { message, _ -> logged += message }) {
                 Intent(Intent.ACTION_VIEW, Uri.parse("fermix://chat/x/main"))
             }
-        surface.publish(Conversation(id, "main", HOST, agent = null, dev = false, tint = "Slate", pictureAt = 1L))
+        val pictured = Conversation(id, "main", HOST, null, dev = false, tint = "Slate", eyes = "Open", pictureAt = 1L)
+        surface.publish(pictured)
         assertEquals(1, logged.size)
         val shortcut =
             app

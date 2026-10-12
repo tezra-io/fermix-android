@@ -38,6 +38,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -357,7 +358,7 @@ class AvatarWiringTest {
         }
 
     @Test
-    fun `Remove photo takes the record's time and the file, and a tint chosen is the record's`() =
+    fun `Remove photo takes the record's time and file, a tint or eyes chosen are the record's, and others refused`() =
         runTest(main, timeout = SETTLE) {
             val store = store()
             val model = model(store)
@@ -369,13 +370,25 @@ class AvatarWiringTest {
             withContext(waiter) {
                 withTimeout(SETTLE) { while (store.pictures.fileOf(RECORD.id).exists()) delay(POLL_MILLIS) }
             }
-            model.setTint("Ocean")
+            model.setTint("Sky")
             assertEquals(
-                "Ocean",
+                "Sky",
                 store.instances
-                    .first { it.single().tint == "Ocean" }
+                    .first { it.single().tint == "Sky" }
                     .single()
                     .tint,
             )
+            model.setEyes("Wink")
+            assertEquals(
+                "Wink",
+                store.instances
+                    .first { it.single().eyes == "Wink" }
+                    .single()
+                    .eyes,
+            )
+            // An old tint's name is only ever read from a file, never set; an eye style is one of the six.
+            assertThrows(IllegalArgumentException::class.java) { model.setTint("Ocean") }
+            assertThrows(IllegalArgumentException::class.java) { model.setEyes("Wide") }
+            assertEquals(listOf("Sky" to "Wink"), store.instances.first().map { it.tint to it.eyes })
         }
 }

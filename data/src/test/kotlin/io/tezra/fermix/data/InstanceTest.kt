@@ -50,9 +50,19 @@ class InstanceTest {
 
     @Test
     fun `a tint is a name, the design's own, which the UI maps`() {
-        listOf("Ocean", "Sand").forEach { name -> assertEquals(name, record.copy(tint = name).tint) }
-        listOf("ocean", "3", "Ocean blue", "Purple").forEach { name ->
+        listOf("Sky", "Amber").forEach { name -> assertEquals(name, record.copy(tint = name).tint) }
+        // An old name is read from a file as the new one of its hue (InstanceRecordTest), and is no record's.
+        listOf("sky", "3", "Sky blue", "Purple", "Ocean").forEach { name ->
             assertThrows<IllegalArgumentException> { record.copy(tint = name) }
+        }
+    }
+
+    @Test
+    fun `the eyes are a style's name, the design's own, Open for a new record`() {
+        assertEquals("Open", record.eyes)
+        EYE_STYLES.forEach { name -> assertEquals(name, record.copy(eyes = name).eyes) }
+        listOf("open", "", "Wide", "Sideways ").forEach { name ->
+            assertThrows<IllegalArgumentException> { record.copy(eyes = name) }
         }
     }
 

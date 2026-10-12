@@ -139,15 +139,21 @@ class InstanceStore internal constructor(
     }
 
     /**
-     * The owner's [tint] for [id]'s avatar, one of [TINT_NAMES] (design section 13.1), any other refused before the
-     * write. False, and nothing written, once no record is [id].
+     * [id]'s record changed by [change], what only the owner sets ([setTint], [setEyes], [setPicture]), in one write of
+     * these records; false, and nothing written, once no record is [id]. The tint's and the eyes' setters are written
+     * beside the class over this one write, as detekt holds a class to eleven functions.
      */
-    suspend fun setTint(
+    internal suspend fun changeOwned(
         id: String,
-        tint: String,
+        change: (Instance) -> Instance,
     ): Boolean {
-        require(tint in TINT_NAMES) { "tint '$tint' is not one of $TINT_NAMES" }
-        return records.changeOwned(id) { it.copy(tint = tint) }
+        var present = false
+        records.locked { current ->
+            present = current.instances.any { it.id == id }
+            val changed = current.instances.map { if (it.id == id) change(it) else it }
+            if (present) current.copy(instances = changed) else current
+        }
+        return present
     }
 
     /**
@@ -159,7 +165,7 @@ class InstanceStore internal constructor(
         id: String,
         at: Long?,
     ): Boolean {
-        val present = records.changeOwned(id) { it.copy(pictureAt = at) }
+        val present = changeOwned(id) { it.copy(pictureAt = at) }
         if (!present || at == null) withContext(io) { pictures.delete(id) }
         return present
     }
@@ -223,6 +229,30 @@ class InstanceStore internal constructor(
     }
 }
 
+/**
+ * The owner's [tint] for [id]'s avatar, one of [TINT_NAMES] (the owner's eight of 2026-10-11, where design section 13.1
+ * has six), any other refused before the write. False, and nothing written, once no record is [id].
+ */
+suspend fun InstanceStore.setTint(
+    id: String,
+    tint: String,
+): Boolean {
+    require(tint in TINT_NAMES) { "tint '$tint' is not one of $TINT_NAMES" }
+    return changeOwned(id) { it.copy(tint = tint) }
+}
+
+/**
+ * The owner's [eyes] for [id]'s avatar, one of [EYE_STYLES] (the owner, 2026-10-11), any other refused before the
+ * write. False, and nothing written, once no record is [id].
+ */
+suspend fun InstanceStore.setEyes(
+    id: String,
+    eyes: String,
+): Boolean {
+    require(eyes in EYE_STYLES) { "eyes '$eyes' are not one of $EYE_STYLES" }
+    return changeOwned(id) { it.copy(eyes = eyes) }
+}
+
 /** A merge's one write: [paired] in [oldId]'s row, refused as [planMerge] says. Returns the old record. */
 private suspend fun DataStore<Instances>.writeMerge(
     oldId: String,
@@ -246,23 +276,6 @@ private suspend fun deleteFilesOf(
 ) = withContext(io) {
     databases.delete(id)
     pictures.delete(id)
-}
-
-/**
- * [id]'s record changed by [change], what only the owner sets, in one write of these records; false, and nothing
- * written, once no record is [id].
- */
-private suspend fun DataStore<Instances>.changeOwned(
-    id: String,
-    change: (Instance) -> Instance,
-): Boolean {
-    var present = false
-    locked { current ->
-        present = current.instances.any { it.id == id }
-        val changed = current.instances.map { if (it.id == id) change(it) else it }
-        if (present) current.copy(instances = changed) else current
-    }
-    return present
 }
 
 /** The avatars' directory beside [records], the records file: credential-encrypted as it is, and never backed up. */

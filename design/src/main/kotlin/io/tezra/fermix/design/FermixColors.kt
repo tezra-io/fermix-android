@@ -119,28 +119,34 @@ private const val CODE_CARD = 0xFF16171B
 private const val SELECTION_ALPHA = 0.20f
 
 /**
- * The six per-instance tones of design section 13.1, muted to about 30 % chroma, with the canon's
- * values. A tint appears in three places only: the avatar, the Custom Tab toolbar and the 2 dp line
- * under the app bar; it never stands in for the ink or the signal, and it is the same in both modes.
+ * The eight per-instance tints, brighter than design section 13.1's six muted ones, which they replace (the owner,
+ * 2026-10-11: "Pick some colors that would look great for background"). A tint appears in three places only: the
+ * avatar's disc, under the mark's eyes or the owner's photo, the 2 dp line under the chat's bar and the Custom Tab
+ * toolbar; it never stands in for the ink or the signal, and it is the same in both modes. The eyes on it are the
+ * mark's ink in both modes ([AVATAR_EYE_INK]), which reads on every one (ContrastTest).
  */
 enum class Tint(
     val color: Color,
 ) {
+    Coral(color = Color(CORAL)),
+    Amber(color = Color(AMBER)),
+    Olive(color = Color(OLIVE)),
+    Teal(color = Color(TEAL)),
+    Sky(color = Color(SKY)),
+    Iris(color = Color(IRIS)),
+    Rose(color = Color(ROSE)),
     Slate(color = Color(SLATE)),
-    Sage(color = Color(SAGE)),
-    Clay(color = Color(CLAY)),
-    Plum(color = Color(PLUM)),
-    Ocean(color = Color(OCEAN)),
-    Sand(color = Color(SAND)),
 }
 
 // The tints' values, ARGB.
+private const val CORAL = 0xFFDC785D
+private const val AMBER = 0xFFE9A23B
+private const val OLIVE = 0xFF8A9A5B
+private const val TEAL = 0xFF3D9A8B
+private const val SKY = 0xFF569ACC
+private const val IRIS = 0xFF7B6FD0
+private const val ROSE = 0xFFD96C9A
 private const val SLATE = 0xFF6B7A90
-private const val SAGE = 0xFF76917E
-private const val CLAY = 0xFFAD7F6B
-private const val PLUM = 0xFF8C7093
-private const val OCEAN = 0xFF5C8BA3
-private const val SAND = 0xFFB09A6E
 
 /** The colours of the mode FermixTheme draws in. Read outside FermixTheme, it fails. */
 val LocalFermixColors =

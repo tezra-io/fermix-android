@@ -12,11 +12,11 @@ class PairedRecordTest {
     @Test
     fun `the record keeps what the pairing reported, with no nickname and notifications off`() {
         val reported = facts(gateway = 1)
-        val stored = instanceOf(reported, "Ocean", PHONE, PAIRED_AT)
+        val stored = instanceOf(reported, "Sky", PHONE, PAIRED_AT)
         assertEquals(reported.id, stored.id)
         assertEquals(reported.keyAlias, stored.keyAlias)
         assertEquals(reported.candidates, stored.candidates)
-        assertEquals("Ocean", stored.tint)
+        assertEquals("Sky", stored.tint)
         assertNull(stored.nickname)
         assertFalse(stored.notificationsEnabled)
         assertEquals(PHONE, stored.deviceName)
@@ -25,11 +25,11 @@ class PairedRecordTest {
 
     @Test
     fun `the tint is the first no record carries, then the one fewest carry`() {
-        assertEquals("Slate", pickTint(emptyList()))
-        assertEquals("Clay", pickTint(listOf(record(1, "Slate"), record(2, "Sage"))))
+        assertEquals("Coral", pickTint(emptyList()))
+        assertEquals("Amber", pickTint(listOf(record(1, "Coral"), record(2, "Olive"))))
         val everyOnce = TINT_NAMES.mapIndexed { index, tint -> record(index + 1, tint) }
-        assertEquals("Slate", pickTint(everyOnce))
-        assertEquals("Sage", pickTint(everyOnce + record(9, "Slate")))
+        assertEquals("Coral", pickTint(everyOnce))
+        assertEquals("Amber", pickTint(everyOnce + record(9, "Coral")))
     }
 
     @Test

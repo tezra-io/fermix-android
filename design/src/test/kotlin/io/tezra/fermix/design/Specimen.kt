@@ -279,7 +279,7 @@ private fun Tints(colors: FermixColors) {
     }
 }
 
-/** An instance's avatar as the M51 update's reference player draws the Chats row's: a plain disc in the tint. */
+/** An instance's avatar's ground, a plain disc in the tint, without the eyes the avatar draws on it (SpecimenEyes). */
 @Composable
 private fun Avatar(
     tint: Tint,

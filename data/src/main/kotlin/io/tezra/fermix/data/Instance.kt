@@ -17,10 +17,18 @@ private const val HEX_RADIX = 16
 private val BASE64_KEY = Regex("[A-Za-z0-9+/]{43}=")
 
 /**
- * The names of the design module's `Tint` (design section 13.1), in its order: what [Instance.tint] may be.
- * This module does not depend on design, so design's TintNamesTest holds the enum to this list.
+ * The names of the design module's `Tint` (the owner's eight of 2026-10-11, in place of design section 13.1's six),
+ * in its order: what [Instance.tint] may be. This module does not depend on design, so design's TintNamesTest holds the
+ * enum to this list. A record stored under one of the six old names reads as the new one of its hue
+ * ([TintNameSerializer]).
  */
-val TINT_NAMES: List<String> = listOf("Slate", "Sage", "Clay", "Plum", "Ocean", "Sand")
+val TINT_NAMES: List<String> = listOf("Coral", "Amber", "Olive", "Teal", "Sky", "Iris", "Rose", "Slate")
+
+/**
+ * The names of the design module's `EyeStyle` (the owner, 2026-10-11), in its order: what [Instance.eyes] may be, the
+ * first a new record's. Design's EyeStylesTest holds the enum to this list, as TintNamesTest holds the tints.
+ */
+val EYE_STYLES: List<String> = listOf("Open", "Happy", "Wink", "Squint", "Sleepy", "Sideways")
 
 /**
  * One paired daemon as this phone records it (design section 9.1): public data only, never a secret
@@ -48,7 +56,9 @@ val TINT_NAMES: List<String> = listOf("Slate", "Sage", "Clay", "Plum", "Ocean", 
  * screen needs them, and only the pairing knows them. [pictureAt] is when the owner last set a photo as the avatar
  * (the owner, 2026-10-10), in Unix milliseconds, none while the avatar is the tint: the photo itself is a file of
  * AvatarPictures, beside the records, and the time is its version, so a screen holding the last one draws the new
- * one. Like the nickname and the tint, only the owner sets it; a pairing keeps it.
+ * one. Like the nickname and the tint, only the owner sets it; a pairing keeps it. [eyes] are the avatar's eyes (the
+ * owner, 2026-10-11), one of [EYE_STYLES], the design module's `EyeStyle` by name: Open for a new record, until the
+ * owner picks another; only the owner sets them, and a pairing keeps them.
  *
  * Protocol v2 (design section 7) supplies fields this record requires, so a version-1 pairing cannot make
  * one, and the app refuses a version-1 link at scan (D1). [pushSalt] is the `pair_approved.push_salt` row's,
@@ -65,6 +75,7 @@ data class Instance(
     @SerialName("profile") val profile: String,
     @SerialName("label") val label: String,
     @SerialName("nickname") val nickname: String? = null,
+    @Serializable(with = TintNameSerializer::class)
     @SerialName("tint") val tint: String,
     @SerialName("candidates") val candidates: List<
         @Serializable(with = CandidateSerializer::class)
@@ -84,6 +95,7 @@ data class Instance(
     @Serializable(with = CandidateSerializer::class)
     @SerialName("last_candidate") val lastCandidate: Candidate? = null,
     @SerialName("picture_at") val pictureAt: Long? = null,
+    @SerialName("eyes") val eyes: String = EYE_STYLES.first(),
 ) {
     init {
         keyBytes("gateway_pk", gatewayPk)
@@ -104,6 +116,7 @@ data class Instance(
         require(deviceName == null || deviceName.isNotBlank()) { "device_name is blank" }
         require(pairedAt == null || pairedAt >= 0L) { "paired_at is $pairedAt" }
         require(pictureAt == null || pictureAt >= 0L) { "picture_at is $pictureAt" }
+        require(eyes in EYE_STYLES) { "eyes '$eyes' are not one of $EYE_STYLES" }
     }
 
     /** `sha256(gateway_pk)` in lowercase hex: the key of everything this phone keeps for the daemon. */

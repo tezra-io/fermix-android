@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -16,9 +17,13 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import io.tezra.fermix.data.Instance
 import io.tezra.fermix.design.FermixColors
 import io.tezra.fermix.design.LocalFermixColors
+import io.tezra.fermix.design.MarkEyePaths
 import io.tezra.fermix.design.Tint
+import io.tezra.fermix.design.drawAvatarEyes
+import io.tezra.fermix.design.eyeStyleOf
 
 // The visual canon's `.mark`: two dots a dot wide, 0.28 of a dot apart. Its `.dot`: 14 dp (12 on the small
 // avatar) on a 2 dp ring of the canvas, 1 dp past the avatar's bottom right.
@@ -37,29 +42,37 @@ enum class AvatarSize(
 }
 
 /**
- * A Fermix's avatar (design section 9.2): its [tint], one of data's TINT_NAMES, as a disc with nothing on it, as the
- * M51 update's reference player draws its Chats row (the two-dot mark it carried is retired, 7.3), or the owner's
- * [picture] in the round in its place (the owner, 2026-10-10), read for it by [rememberAvatarPicture]; and the
- * connection [dot], none where the canon draws none. The picture's brush is made once per picture and size, so a
- * frame draws two or three circles and makes nothing.
+ * A Fermix's avatar (design section 9.2): [record]'s tint, one of data's TINT_NAMES, as a disc with the mark's two eyes
+ * on it in the record's style, one of data's EYE_STYLES, in the mark's ink (the owner, 2026-10-11, where the M51
+ * update's reference player draws the Chats row a plain disc, 7.3), or the owner's [picture] in the round in their
+ * place (2026-10-10), read for it by [rememberAvatarPicture]; and the connection [dot], none where the canon draws
+ * none. The eyes' paths are made once per avatar and the picture's brush once per picture and size, so a frame draws
+ * the disc, the eyes or the photo, and the dot, and makes nothing.
  */
 @Composable
 fun InstanceAvatar(
-    tint: String,
+    record: Instance,
     dot: Dot?,
     size: AvatarSize,
     modifier: Modifier = Modifier,
     picture: ImageBitmap? = null,
 ) {
     val colors = LocalFermixColors.current
-    val fill = tintColor(tint)
+    val fill = tintColor(record.tint)
+    val eyes = eyeStyleOf(record.eyes)
+    val paths = remember { MarkEyePaths() }
     Spacer(
         modifier =
             modifier.size(size.disc).drawWithCache {
                 val brush = picture?.let { pictureBrush(it, this.size) }
                 val dotAcross = size.connectionDot.toPx()
                 onDrawBehind {
-                    if (brush == null) drawCircle(color = fill) else drawCircle(brush = brush)
+                    if (brush == null) {
+                        drawCircle(color = fill)
+                        drawAvatarEyes(eyes, this.size, paths)
+                    } else {
+                        drawCircle(brush = brush)
+                    }
                     if (dot != null) drawConnectionDot(dotAcross, dotColor(dot, colors), colors.canvas)
                 }
             },

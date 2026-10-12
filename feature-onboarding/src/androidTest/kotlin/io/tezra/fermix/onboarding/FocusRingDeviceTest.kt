@@ -112,7 +112,7 @@ class FocusRingDeviceTest {
 
     @Test
     fun a_tapped_field_has_the_focus_and_no_ring_until_a_key_takes_the_window_out_of_touch_mode() {
-        val paired = PairedFacts(record(gateway = 1, tint = "Ocean"), listOf(record(gateway = 5)), true, false)
+        val paired = PairedFacts(record(gateway = 1, tint = "Sky"), listOf(record(gateway = 5)), true, false)
         rule.setContent {
             FermixTheme(darkTheme = false) {
                 Box(Modifier.fillMaxSize().background(colors.canvas)) { NameScreen(paired = paired, onContinue = {}) }

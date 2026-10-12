@@ -335,7 +335,9 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   selection's wash takes the grey and the error text under their floor. `ContrastTest` measures the
   update's table, holds each pair of tokens it lists to its WCAG floor, and pins at what it measures each
   pair of tokens under its floor that README's departures name for the owner; a new pair of tokens the app
-  draws goes in it, held or, named in README, pinned.
+  draws goes in it, held or, named in README, pinned. An avatar's eyes are drawn on its tint, a fixed surface,
+  in the mark's ink `AVATAR_EYE_INK` in both modes (the owner, 2026-10-11), never the mode's ink, through
+  design's `drawAvatarEyes`, the mark's own `drawEyes`.
 - Focus: every focusable takes the focus ring (the M51 update's 1.3), and only the design's modifier draws
   it: a new button, chip, field, card, bubble or row that can take the focus takes `Modifier.focusRing(shape,
   on)` in its own shape, `Modifier.rowFocusRing(on, shape)` when it spans its column, sheet, menu or window, as a
@@ -388,7 +390,8 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   flow or a `stateIn` only for a write someone else makes, and never on a predicate that an empty list satisfies.
 - A record's fields are set by one hand each: what a pairing sets (gateway key, TLS pin, device id, key alias,
   push salt, the phone's name as paired and when), what only the owner sets (the nickname through `rename`, the
-  tint through `setTint`, refused outside `TINT_NAMES`, and the photo's time `picture_at` through `setPicture`),
+  tint through `setTint`, refused outside `TINT_NAMES`, the avatar's eyes through `setEyes`, refused outside
+  `EYE_STYLES`, and the photo's time `picture_at` through `setPicture`),
   and the rest, which `update` writes; `update` refuses a change to the first two (`SET_APART`), and a pairing
   again or a merge keeps the owner's. A new owner-set field joins `SET_APART`, gets its own write, and is kept by
   `replaceAt`.

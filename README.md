@@ -373,11 +373,12 @@ every screen builds on. `FermixTheme` provides it and hands it to Material 3 too
 components draw in it: `FermixColors`, light and dark, monochrome as the M51 update's section 1 gives
 them (the ink and the `onInk` on it, the secondary text, the `selection`, the status colours with dark
 mode's own error text, `errText`, and `signal`, Fermix blue, for what is unread and the Fermix wordmark's
-two eye-dots), and the six `Tint`s, with every one of Material's colour roles built from them, `primary`
-the ink, and never Dynamic Color; text selection washed in `selection`; and `textButtonColors(colors)`,
-the ink's words on no fill, for the text buttons Material would draw in its primary; `FermixType`,
-section 13.1's type scale in Google Sans Flex, with Google Sans Code
-and tabular figures for code and the SAS, and tabular figures in label-small's timestamps;
+two eye-dots), and the eight `Tint`s, the same in both modes (Coral `#DC785D`, Amber `#E9A23B`, Olive `#8A9A5B`,
+Teal `#3D9A8B`, Sky `#569ACC`, Iris `#7B6FD0`, Rose `#D96C9A` and Slate `#6B7A90`, the owner's brighter set), with
+every one of Material's colour roles built from the colours, `primary` the ink, and never Dynamic Color; text
+selection washed in `selection`; and `textButtonColors(colors)`, the ink's words on no fill, for the text buttons
+Material would draw in its primary; `FermixType`, section 13.1's type scale in Google Sans Flex, with Google Sans
+Code and tabular figures for code and the SAS, and tabular figures in label-small's timestamps;
 `FermixShapes` and `bubbleShape(sender, position)`; `FermixSpacing`;
 `FermixColumn`, section 13.11's centred column of 640 dp or 480 dp on a window 600 dp wide or more
 and the whole window below that, with the window's width class from androidx.window, which needs
@@ -426,6 +427,21 @@ threads reading past a table within seconds of the card, and the emulator died w
 and in a preview, the mark holds the canon's pose and the halo its middle (`TwoDotMarkAt` draws a pose).
 `SpecimenMark` draws the mark's fixed poses: the drop's beats, an idle blink's middle,
 the happy eyes and the hop's top; `SpecimenTwoDotMark` the halo at the foot, middle and top of a breath.
+
+An avatar without a photo is its tint with the mark's two eyes on it (the owner, 2026-10-11: "Just different style
+of eyes is fine"), drawn by the mark's own `drawEyes(pose, paths, ink)`, which `FermixMark` draws its eyes and happy
+arcs with, so the two never part. `MarkPose` carries `blinkLeft` and `blinkRight`, each eye's own shut beside the
+pair's `blink`, which no moment moves and the avatar's wink does; `MarkEyePaths` holds the happy arcs, made once.
+`EyeStyle` is the six still styles the owner picks from, each a pose: Open (`MarkPose.Rest`), Happy (the happy
+arcs), Wink (the right eye at `EYE_SHUT`, 0.1 of its height, the reference player's shut eye, which `Open.blink`'s
+key at 110 ms reads too), Squint (both eyes at `AVATAR_SQUINT`, 0.4 of their height, wider than tall), Sleepy (both
+eyes at `EYE_SHUT`) and Sideways (the pair `AVATAR_LOOK`, 11 mark units, to the left, pressed toward the disc's edge,
+its right eye on the disc's centre); `eyeStyleOf(name)` is the style data stores by name, and any other name
+fails loud. `drawAvatarEyes(style, disc, paths)` lays the pair on a disc: from the left eye's left edge to the right
+eye's right edge, about 28.2 mark units, it spans `EYE_SPAN`, 0.46, of the disc's width, centred, its line through
+the disc's centre, in `AVATAR_EYE_INK`, the mark's ink `#0B0B0D` in both modes, as the launcher icon draws the mark
+on its white canvas: a tint is a fixed surface of its own colour. `SpecimenEyes` draws the six at 32, 48 and 72 dp
+on Coral, Teal and Slate.
 
 The rest of onboarding's motion (the M51 update's 7.2 and 7.4) is data beside the mark's, one table a moment, in
 `OnboardingMotion.kt` for the screen changes and the screens before the ceremony and `CeremonyMotion.kt` for the
@@ -600,9 +616,17 @@ reads it where it is silent, for the owner to settle:
 - A queued message of the owner's is drawn whole at M51's 55 % (section 13.6), so its words on its ink
   measure 4.3 to 4.4 : 1 in light mode (5.0 : 1 in dark), just under 4.5 : 1; at 60 % they would measure
   5.2 : 1. The opacity is M51's and stands.
-- Sand, one of the six tints, which 1.2 leaves as they are, measures 2.7 : 1 for the avatar on light mode's
-  canvas, under a mark's 3 : 1; the other five pass. Nothing is drawn on a tint any more: the avatar is a plain
-  disc, as the reference player's Chats row draws it.
+- The tints depart from section 13.1's six (the owner, 2026-10-11: "Pick some colors that would look great for
+  background"): eight brighter ones under new names, recorded here for the owner to carry into the design document,
+  which agents never edit. As `ContrastTest` measures them by WCAG 2, each against the eyes' ink `#0B0B0D` (which is
+  dark mode's canvas too), light mode's canvas and dark mode's ink `#DEDFE3`: Coral 6.4, 3.05 and 2.3 : 1; Amber
+  9.1, 2.2 and 1.6; Olive 6.4, 3.06 and 2.3; Teal 5.8, 3.4 and 2.5; Sky 6.5, 3.05 and 2.3; Iris 4.7, 4.2 and 3.1;
+  Rose 6.1, 3.2 and 2.4; Slate 4.5, 4.4 and 3.3. So the eyes read on every tint, and every tint reads as a mark on
+  both canvases but Amber, 2.2 : 1 on light mode's canvas, under a mark's 3 : 1, where Sand stood at 2.7: darkening
+  it to 3 : 1 (`#C38731`) makes it ochre, so it stays as the owner's set has it and `ContrastTest` pins it. Coral
+  and Sky are the proposal's `#E07A5F` and `#5BA4D9` nudged to 3.05 : 1 there, a change no one would see.
+- The avatar's eyes are drawn in the mark's own ink in both modes, as the launcher icon draws the mark on its white
+  canvas, not in the mode's ink: on dark mode's ink only Iris and Slate would reach 3 : 1.
 - Where 1.3 names no row, the accent as a fill became the ink with `onInk` on it, and as text or an icon
   the ink: text buttons and dialog actions, Connecting's current step, the SAS ring, the upload bars, the
   approval's Approve and countdown, the model chip's dot and the sheet's check, a Chats row's "thinking…"
@@ -675,16 +699,16 @@ checksum, so the tests never download one. A screen's previews are
 annotated `@FermixPreviews`, which draws them twelve times: a compact (412×915 dp), a medium
 (673×841 dp) and an expanded (841×673 dp) window, light and dark, at font scale 1.0 and 2.0, each in
 `FermixPreviewTheme { }`. The first are the design module's own, in its tests: `SpecimenColour`
-(the colours with their names, the six tints as avatars, and Material's Button, TextButton and filled
-Card as the theme hands them the design), `SpecimenControls` (a switch on beside one off, a chosen
+(the colours with their names, the eight tints as plain discs with their names, and Material's Button, TextButton
+and filled Card as the theme hands them the design), `SpecimenControls` (a switch on beside one off, a chosen
 filter chip beside one not, a focused field with its label and selected words, and a progress
 bar, each as Material draws it in the theme), `SpecimenType` (the type scale with its sizes) and
 `SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces) and
 `SpecimenFocus` (the focus ring around a pill, a text button, a chip, a card, a switch's row and a plain row
 on the canvas, the agent bubble and the ink, drawn as a preview's ring is, with nothing focused) and
 `SpecimenWordmark` (the Fermix wordmark at 96 dp and at the 40 and 24 dp Welcome and the Chats list's bar draw
-it, each box in the hairline), each
-short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
+it, each box in the hairline) and `SpecimenEyes` (the avatar's six eye styles at 32, 48 and 72 dp on three tints),
+each short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
 twelve images.
 
 No screenshot is in the repository (the owner, 2026-10-05: "git ignore those images"; the departures
@@ -739,8 +763,15 @@ for field, and public data alone: the device key lives in the Keystore under its
 test holds the written records to having no secret's field or value. Its `id`, `sha256(gateway_pk)`,
 is computed, never stored, and every file is keyed by it, never by a host name (onboarding gotcha 8);
 the keys are kept as the wire's text and checked when a record is made, with the host, profile, port
-and tint, which is one of `TINT_NAMES`, the design module's `Tint` by name, since `data` does not depend
-on `design`; a test in `design` holds the enum and the list equal. Protocol v2 supplies fields the record
+and tint, which is one of `TINT_NAMES`, the design module's `Tint` by name, and the avatar's `eyes`, one of
+`EYE_STYLES` (Open, Happy, Wink, Squint, Sleepy, Sideways), design's `EyeStyle` by name, Open for a record written
+before them and for every new pairing, since the owner picks them (no auto-pick); `data` does not depend on
+`design`, so tests in `design` hold each enum and its list equal. The tints were six until the owner's eight
+(2026-10-11), and a record still stored under an old name is read as the new one of its hue by the `tint` field's
+own serializer (`TintNameSerializer`, through `LEGACY_TINT_NAMES`): Sage as Olive, Clay as Coral, Plum as Iris,
+Ocean as Sky and Sand as Amber, Slate as itself. It writes a name as it is, so a file keeps its old names until its
+next write and reads right every time; without it an old name would be a `CorruptionException`, which is never
+replaced, and every record on the phone would be lost with it. Protocol v2 supplies fields the record
 requires (`pair_approved.push_salt`, the QR's `profile`), so a version-1 pairing cannot make one. The
 records are a typed DataStore, `DataStore<Instances>`, written as JSON through kotlinx.serialization by an
 `OkioSerializer` of the module's own: design section 12.1 says Proto DataStore, and the typed store is
@@ -762,23 +793,25 @@ the file only after that sync. The settings (`AppSettingsStore`) are kept, read 
 store makes its DataStore from its file and holds it alone (the constructor handed one is the module's, for its
 tests), and DataStore is the module's dependency, not its API, so no other module can read around the lock.
 `upsert` records a pairing on `pair_approved`: the same daemon paired again replaces its record in
-place, with the owner's nickname, tint and photo, and the record it replaced is handed back so the caller
+place, with the owner's nickname, tint, eyes and photo, and the record it replaced is handed back so the caller
 deletes the old key alias (design section 6.1); a pairing always brings a new alias, so one under the
 alias the record holds is refused and the live key is never handed back, and no two records may share
 an alias. A nickname a pairing brings, from the Paired screen, is held to the rename rule below in the
 same write, and a refused one writes nothing. `update` is every later change
 in one write, what `hello_ack` reports (host, label, profile, candidates, caps, push platforms) and this
 phone's settings (notifications, the last `push_register`), and it refuses a change to what a pairing
-set (gateway key, TLS pin, device id, key alias, push salt) or to the owner's nickname, tint and photo's
+set (gateway key, TLS pin, device id, key alias, push salt) or to the owner's nickname, tint, eyes and photo's
 time (`picture_at`). `merge` is "Pair again" on the row of a daemon that was reinstalled: the new gateway key,
-of the row's profile, takes that row's place, nickname, tint and photo, the photo's file moved to the new id in
-one rename, and the old row's databases and media are deleted (section 9.2); a pairing under that row's alias is
+of the row's profile, takes that row's place, nickname, tint, eyes and photo, the photo's file moved to the new id
+in one rename, and the old row's databases and media are deleted (section 9.2); a pairing under that row's alias is
 refused there too, since the caller deletes it. The owner names the row; the store never merges by host and profile,
 which two daemons on one computer can share, and it does not compare hosts, since a pairing knows only the link's
 name until the first `hello_ack`. `rename` takes 1 to 40 characters (code points), trimmed, refused when
 another row is titled the same in any case, and null resets the name to the daemon's; `remove` deletes
 a record with its files and photo; `reorder` is "Move to top" and the list's manual order. `setTint` is the
-owner's tint, one of `TINT_NAMES`, any other refused before the write, and `setPicture` the time the owner set
+owner's tint, one of `TINT_NAMES`, any other refused before the write, `setEyes` the owner's eyes, one of
+`EYE_STYLES`, refused the same way (the two are written beside the class over its one owner's write,
+`changeOwned`, as detekt holds a class to eleven functions), and `setPicture` the time the owner set
 a photo, or none, which deletes the photo's file (the owner, 2026-10-10); each writes nothing once the record is
 gone. `launchCheck` runs at
 launch: an instance whose key alias the injected `aliasExists` does not find, as on an app restored
@@ -940,7 +973,7 @@ starts core-session's pairing through `PairingControl` (the handle, or a test's 
 to Pair, and `CeremonyDriver` shows each `PairingState`'s screen as the pure `screenFor` maps it: Connecting's
 three lines, with "Trying Tailscale…" after 4 s of reaching a tailnet candidate and "Securing the line…"
 paced for 600 ms, as no state holds it; Verify with its code, its end and the name `pair_request`
-carried; `pair_approved` stored through data's `InstanceStore` with an auto-picked tint, the phone's
+carried; `pair_approved` stored through data's `InstanceStore` with an auto-picked tint and Open eyes, the phone's
 name and the time before Paired shows, merged into the row "Pair again" named when it is the same
 profile's and no other row holds the new daemon (`mergeTarget`), the replaced record's key handed to the
 commit to delete, and the paired session the approval hands over given, as the record is stored, to the
@@ -1028,7 +1061,7 @@ stateless `…At` draws the pose a preview fixes:
   time left, "30 seconds left", politely, once each: the clock carries a polite live region and that words only
   during those two seconds, a saved list keeping a rotation from telling it again.
 - Paired has only the mark's arrival from Verify, and its own hop (above).
-- Name's avatar cross-fades to a new tint over 200 ms.
+- Name's avatar cross-fades to a new tint over 200 ms, its Open eyes drawn over it as the Chats list will show it.
 - Notifications' bell swings once from its top, 14, −10, 6 and −3 degrees from 300 to 1,000 ms. A grant
   cross-fades it to a check over 200 ms and ends onboarding 400 ms later. The grant is the answer as it comes: the
   record says so and push registers at once, and the 600 ms is the ViewModel's wait
@@ -1289,10 +1322,13 @@ ends on it, so the newest of the diagnostics that say how a connection ended dec
 error while it was the last, cleared by a connection or a later ending, and never shown as revoked.
 `Link.dot` is section 13.5's dot, never optimistic: ok only for a completed handshake, warn while
 connecting and for a changed identity, err for a revoked phone, the tertiary ink otherwise.
-`InstanceAvatar` draws a row's tint as a plain disc, as the M51 update's reference player draws its Chats row,
-or the owner's photo in the round in its place (the owner, 2026-10-10), with that dot at the canon's three sizes:
-the Chats row's and the share sheet's 48 dp, the chat bar's 32 and the Instance header's 72. The photo's brush is
-made once per photo and size (`drawWithCache`), so a frame draws two or three circles and makes nothing. Every
+`InstanceAvatar(record, dot, size)` draws a record's tint as a disc with the record's eyes on it in the mark's ink
+(design's `drawAvatarEyes`; the owner, 2026-10-11), or the owner's photo in the round in their place, with no eyes
+over it (the owner, 2026-10-10), with that dot at the canon's three sizes: the Chats row's and the share sheet's
+48 dp, the chat bar's 32 and the Instance header's 72. It takes the record, not its tint and eyes, since detekt
+allows a function five parameters. The photo's brush and the eyes' paths are made once per avatar
+(`drawWithCache`, a remembered `MarkEyePaths`), so a frame draws its circles and the eyes' paths and makes
+nothing. Every
 avatar reads its photo through `rememberAvatarPicture(id, pictureAt, size)`, the one reader: the app's
 `AvatarPictureCache` (`LocalAvatarPictures`, provided at the activity's root) decodes data's 256 square at the
 size drawn on `io`, one read at a time, once per (instance, version, size), and keeps the last 16 for every
@@ -1342,26 +1378,34 @@ foot of one that cannot be reached, drawn by a record into
 `feature-instance/src/test/screenshots`.
 
 "Picture" (the owner, 2026-10-10) is a sheet over the Instance screen, the tonal surface as the share sheet's,
-opened whole as the attach sheet is, so on a phone on its side nothing waits under the edge: its title, the six
+opened whole as the attach sheet is, so on a phone on its side nothing waits under the edge: its title, the eight
 tints as one choice, each a 40 dp disc in its 48 dp target, a radio button TalkBack names by the tint's own words
-in strings.xml (the design's names), the record's ringed in the ink and every one taking the focus ring; "Choose a
-photo", which opens the system's Photo Picker for one image (`PickVisualMedia`, images only, so the app holds no
-storage permission); and "Remove photo" while there is one. A tint is set at once and the sheet stays; choosing or
-removing a photo closes it, and the sheet survives a rotation. `InstanceViewModel` owns the writes: `setTint`,
-`setPicture(uri)`, which has data's `AvatarPictures` write the square from the picked URI, and then sets the
-record's `picture_at` to the wall clock's time, and `removePicture`. The URI is read only as another app's
-(`InstanceParts.photo`, data's `avatarSource`): a `content:` URI whose authority, its `user@` prefix stripped,
+in strings.xml, the record's ringed in the ink and every one taking the focus ring, eight to a line where they fit
+and four and four where they do not, as on a phone; under them the six eye styles as a second choice, each a 40 dp
+disc in the record's tint with the style's eyes, in its 48 dp target, a radio button TalkBack names by the style's
+words ("Open eyes", "Happy eyes", "A wink", "Squinting eyes", "Sleepy eyes", "Looking sideways"), the record's
+ringed as a tint is; "Choose a photo", which opens the system's Photo Picker for one image (`PickVisualMedia`,
+images only, so the app holds no storage permission); and "Remove photo" while there is one. A tint or a style is
+set at once and the sheet stays, and with a photo set both rows still set the record while the photo keeps the disc;
+choosing or removing a photo closes it, and the sheet survives a rotation. `InstanceViewModel` owns the writes:
+`setTint` and `setEyes`, each refusing a name that is not one of data's lists, `setPicture(uri)`, which has data's
+`AvatarPictures` write the square from the picked URI, and
+then sets the record's `picture_at` to the wall clock's time, and `removePicture`. The URI is read only as another
+app's (`InstanceParts.photo`, data's `avatarSource`): a `content:` URI whose authority, its `user@` prefix stripped,
 names no provider of the app's own, read through the ContentResolver; a `file:` URI, the app's own FileProvider
 and any other scheme are refused, the chat's landings' rule (data's `isOtherAppsContent`, which `mayRead` holds
 to as well). A photo that cannot be read, is past the pixel bound, takes past the landing's time, is refused or
 can no longer be read, or whose provider fails, leaves the record as it was, is logged by the exception's class
 alone, and the header says "Couldn't use that photo", politely to TalkBack, until the next visit; one whose write
 ends after a removal took its record goes with the record (`InstanceStore.setPicture`). `PictureSheetTest` holds
-the avatar a button that opens the sheet, the tints' roles, selection, 48 dp and spoken names, a tap's tint,
-"Choose a photo", "Remove photo" only with a photo and in the window on a phone on its side, and the failure's
-line; `AvatarTest` the photo drawn in the round and the tint without one, and the cache's one read per key, its 16
+the avatar a button that opens the sheet, the eight tints' and the six styles' roles, selection, 48 dp and spoken
+names, a tap's tint and a tap's style, "Choose a photo", "Remove photo" only with a photo and in the window on a
+phone on its side, and the failure's line; `AvatarTest` the photo drawn in the round with no eyes over it, and the
+tint with its eyes in the mark's ink without one, in both modes, and the cache's one read per key, its 16
 kept and an unreadable photo logged; `AvatarSourceTest` and `AvatarWiringTest` the refusals, over the app's own
-manifest, and `AvatarDeviceTest` them on a phone.
+manifest, and `AvatarDeviceTest` them on a phone, with eyes set through the Instance screen's ViewModel read back
+as the record's once the app starts afresh and drawn winking on the Chats row. `PictureSheetPreview` draws the
+sheet's content: the tints, the styles and "Remove photo".
 
 `feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
 screens, section 13.7's app lock screens and the phone's conversations. `ChatsScreen(ui, actions)` is the
@@ -1388,11 +1432,13 @@ removes. `ConversationSync` keeps one long-lived conversation shortcut, in the s
 (`SHARE_CATEGORY`) so the share sheet offers it as a Direct Share target, and one notification channel per
 (instance, profile), id `{instance}:{profile}`, named as its row reads (`conversationName`: the title,
 the agent's name when it is not "Fermix", and the DEV tag) and tinted as its row, its icon the avatar, the
-tint alone to the icon's edges, or the owner's photo across the 72 dp at the icon's centre that a launcher's mask
-shows, over the tint (`conversationAvatar`; a photo that cannot be read is logged and the icon is the tint), through
+tint to the icon's edges with the record's eyes across the 72 dp at the icon's centre that a launcher's mask shows,
+or the owner's photo across those 72 dp instead (`conversationAvatar`, drawn once on the CPU through Compose's own
+`CanvasDrawScope` into a bitmap, so the icon's eyes are the row's; a photo that cannot be read is logged and the
+icon is the tint with its eyes), through
 `ConversationSurface`: `PlatformConversations` on the phone, a fake in the JVM tests. Each row's
-conversation is made with it, published again when it is renamed or its agent is, or its tint or photo
-changes, and only then, and removed with it, and
+conversation is made with it, published again when it is renamed or its agent is, or its tint, eyes
+(`Conversation.eyes`) or photo changes, and only then, and removed with it, and
 the first sync after a start removes what a removal cut short. The JVM tests cover the row rules, a row's
 time in the locale it is handed, a last message's plain words, the sync, and on Robolectric a conversation's name, a
 `1002` row reading "Protocol error" and nothing of being unpaired, a revoked row naming who unpaired it,
@@ -1421,8 +1467,19 @@ owner to settle:
   on this phone". Section 13.9's "Something went wrong on {host}" is a daemon's `turn_error`, and would put
   the fault on the computer.
 - A conversation's name carries the DEV tag as "{name} (DEV)", as a row draws the tag beside its title.
-- A "Re-pair this Fermix" row is drawn in the Slate tint with no dot, and its long-press offers only
-  "Remove".
+- A "Re-pair this Fermix" row is drawn in the Slate tint with no dot and no eyes, a plain disc: it stands for a
+  record the phone no longer holds. Its long-press offers only "Remove".
+- An avatar without a photo shows the Fermix mark's two eyes on its tint, in one of six still styles the owner
+  picks on "Picture" (the owner, 2026-10-11: "Just different style of eyes is fine"), where the M51 update's 7.3,
+  whose reference player draws the Chats row as a plain disc, retired the two-dot mark from it. The eyes are the
+  mark's ink in both modes, as the launcher icon draws the mark. A new pairing's eyes are Open, and the Name step's
+  disc draws them so. The styles' spoken names ("Open eyes", "Happy eyes", "A wink", "Squinting eyes", "Sleepy
+  eyes", "Looking sideways") and the eight tints' (Coral, Amber, Olive, Teal, Sky, Iris, Rose, Slate) are not the
+  design's words. `AVATAR_LOOK`, Sideways' 11 mark units (about 5.7 dp on the chat bar's 32 dp avatar, the pair's
+  outer corners 4.4 units inside the rim: an avatar has no visor to bound the eyes, the search's 2.6 units is under
+  2 dp on a 48 dp disc, and 5 units read as Open set off-centre at 32 and 40 dp), `AVATAR_SQUINT`, Squint's 0.4 of
+  the eyes' height (the mark's own `Narrow.SQUINT`, 0.72, read as Open at those sizes), and `EYE_SPAN`, the pair's
+  0.46 of the disc's width, are the app's numbers, for the owner to settle.
 - The Notifications switch sets the record's flag and hands it to `NotificationsPolicy`, which does
   nothing yet; its channel and `push_register` come with the notifications change.
 - The Instance page is the owner's of 2026-10-10 where section 13.7 and the canon list rows and text actions:
@@ -1434,9 +1491,9 @@ owner to settle:
   "Expanded" and "Collapsed" are not the design's words.
 - An avatar can be the owner's photo (the owner, 2026-10-10), where section 9.2 and D11 give the owner a nickname
   and a colour alone: the Instance header's avatar is the button that opens "Picture", which sets the tint as
-  well, and the photo shows wherever the avatar does, the conversation shortcut's icon included. The Name step's
-  disc and a link preview's Custom Tab keep the tint. "Change picture", "Picture", "Choose a photo", "Remove photo"
-  and "Couldn't use that photo" are not the design's words, and TalkBack names each tint by the design's name.
+  well, and the photo shows wherever the avatar does, the conversation shortcut's icon included, with no eyes over
+  it. The Name step's disc and a link preview's Custom Tab keep the tint. "Change picture", "Picture", "Choose a
+  photo", "Remove photo" and "Couldn't use that photo" are not the design's words.
 - The header's avatar is the only way into "Picture", and nothing on the disc says it can be tapped but TalkBack's
   "Change picture" (Task 23's review): a small edit badge on the disc, drawn in the ink, or a third tonal button
   is the owner's call.
@@ -2029,7 +2086,10 @@ brings the app back with what it had open over it (the Files picker, a Custom Ta
 fits the window to the top screen (`fitWindow`): `FLAG_SECURE` while an onboarding screen shows, or the Instance
 screen with the daemon's key fingerprint (section 12.4), or the app is locked (`secureWindow`), and white system
 bars with no contrast scrim over the scan's camera, which is dark in
-both modes as the canon's `.phone.bleed` draws it, the theme's bars everywhere else. With the app lock
+both modes as the canon's `.phone.bleed` draws it, the theme's bars everywhere else. A sheet or a dialog over a
+secured screen takes the flag from it (Compose's `SecureFlagPolicy.Inherit`, Material's default), the Picture sheet
+and the rename and unpair dialogs over the Instance screen among them, so `adb shell screencap` draws them black, as
+it does the screen under them, and `adb emu screenrecord` records them. With the app lock
 on (`LockGate`), the app locks when it comes into sight after the process starts or after 5 s away (a
 rotation or a fold is no return), and nothing shows before the gate has read the setting. While locked
 the lock screen stands in place of the app's screens, none of which is composed, the system's prompt

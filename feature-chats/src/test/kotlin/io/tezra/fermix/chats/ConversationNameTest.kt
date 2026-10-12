@@ -18,7 +18,7 @@ class ConversationNameTest {
     private fun named(
         agent: String?,
         dev: Boolean,
-    ) = conversationName(resources, Conversation("ab".repeat(32), "main", HOST, agent, dev, "Slate"))
+    ) = conversationName(resources, Conversation("ab".repeat(32), "main", HOST, agent, dev, "Slate", "Open"))
 
     @Test
     fun `a conversation carries the agent's name and the DEV tag as its row does`() {
