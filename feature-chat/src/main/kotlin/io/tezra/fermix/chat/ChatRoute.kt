@@ -48,6 +48,8 @@ fun ChatRoute(
     val written by model.composer.written.collectAsStateWithLifecycle()
     val palette by model.composer.palette.collectAsStateWithLifecycle()
     val tooLong by model.composer.tooLong.collectAsStateWithLifecycle()
+    val replying by model.composer.reply.held
+        .collectAsStateWithLifecycle()
     val search by model.search.state.collectAsStateWithLifecycle()
     val sheet by model.models.sheet.collectAsStateWithLifecycle()
     val jump by model.jumps.jump.collectAsStateWithLifecycle()
@@ -72,6 +74,7 @@ fun ChatRoute(
                 media.copy(micOff = composer.micOff),
                 written,
                 tooLong,
+                replying?.let { held -> replyUiOf(held, it.header.record.title) },
             )
         CompositionLocalProvider(LocalUriHandler provides links) { ChatScreen(ui, actions) }
         if (media.attach.sheet) AttachSheet(media.attach, field, tooLong, actions.composer, outside.photos)
@@ -178,6 +181,8 @@ private fun actionsOf(
                 onStop = guarded(model.requests::stop),
                 onPalette = guarded(composer::openPalette),
                 onModel = guarded(model.models::open),
+                onReply = { message -> if (navigation.showing()) composer.reply.start(message) },
+                onDropReply = guarded(composer.reply::drop),
             ),
         onPick = { command -> paletteAction(model, command) },
         onClosePalette = composer::closePalette,

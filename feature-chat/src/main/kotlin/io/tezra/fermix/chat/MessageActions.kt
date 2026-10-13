@@ -67,7 +67,7 @@ internal fun LiftedMessage(
     onDismiss: () -> Unit,
 ) {
     val colors = LocalFermixColors.current
-    val lifted = context.copy(selected = emptySet(), onLongPress = {})
+    val lifted = context.copy(selected = emptySet(), onLongPress = {}, onReply = null)
     Box(
         modifier =
             Modifier

@@ -55,4 +55,12 @@ class PlainWordsTest {
             )
         assertEquals("Sent to the team.", rowWords(reply))
     }
+
+    @Test
+    fun `a row's words for the owner's reply are the question alone`() {
+        val asked = withQuote(ReplyQuote(listOf("It timed out at 60 s.", "The job's default."), cut = false), "Why 60?")
+        assertEquals("Why 60?", rowWords(userRow(5, asked)))
+        assertEquals("> only a quote", rowWords(userRow(6, "> only a quote")))
+        assertEquals("It timed out at 60 s. The job's default. Why 60?", rowWords(agentRow(7, asked)))
+    }
 }

@@ -60,8 +60,8 @@ internal fun rememberOnScreen(): Boolean {
 
 /**
  * What the list's items are drawn with, from the screen's [state] and [actions]: the owner's zone and today,
- * the locale as the device reads it, the host, the model an error card names, and an outbox item's tap
- * opening its menu once the screen adds that.
+ * the locale as the device reads it, the host, the model an error card names, a message's reply handed to the
+ * composer, and an outbox item's tap opening its menu once the screen adds that.
  */
 @Composable
 internal fun timelineBase(
@@ -86,6 +86,7 @@ internal fun timelineBase(
         onOutbox = { _, _ -> },
         cards = actions.cards,
         linkUp = state.header.link is Link.Up,
+        onReply = { item -> actions.composer.onReply(item.message) },
     )
 }
 

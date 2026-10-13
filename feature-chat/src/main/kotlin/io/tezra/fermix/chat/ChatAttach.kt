@@ -176,24 +176,29 @@ class ChatAttach(
 
     /**
      * "Send {n}" and send with the tray full: every item that may go, as one `msg` captioned with the composer's
-     * words; the tray and the field empty once the session took it, then [onTaken]. One send runs at a time. A caption
-     * past what one message carries sends and makes nothing, and the tray and the field stay (ChatComposer.tooLong).
+     * words, under the held reply's quote as Send would put it (replyWith, composedOf): none with no words, nor ahead
+     * of a command's words, which go as the caption and leave the reply held, as tooLong weighs them. The tray and
+     * the field empty once the session took it, and that reply is put down, then [onTaken]. One send runs at a time. A
+     * caption past what one message carries, the quote with it, sends and makes nothing, and the tray, the field and
+     * the reply stay (ChatComposer.tooLong says why).
      */
     fun send(onTaken: () -> Unit) {
         val chosen = sendableOf(picked.value, asFiles.value, sendLimitOf(limit))
         val words = composer.field.value.text
-        if (chosen.isEmpty() || !requests.carries(words) || !sending.compareAndSet(false, true)) return
+        val held = replyWith(words, composer.reply.held.value, composer.commands())
+        val caption = composedOf(held, words)
+        if (chosen.isEmpty() || !requests.carries(caption) || !sending.compareAndSet(false, true)) return
         val files = asFiles.value
         scope.launch {
             try {
                 val made = maker.make(chosen, files)
                 if (made is Made.TooBigMade) leftOut.value = made.tooBig
                 val staged = (made as? Made.Staged)?.attachments ?: return@launch
-                if (!sentStaged(parts, requests, staged, words.trim())) return@launch
+                if (!sentStaged(parts, requests, staged, caption.trim())) return@launch
                 picked.update { it - chosen.toSet() }
                 sheet.value = false
                 forget(chosen)
-                composer.emptyIf(words)
+                composer.emptyIf(words, held)
                 onTaken()
             } finally {
                 sending.set(false)

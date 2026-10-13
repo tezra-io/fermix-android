@@ -43,6 +43,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
@@ -85,8 +86,9 @@ private const val CROSS_ROTATION = 90f
 
 /**
  * What the composer does: the field's change, send, stop, the palette (long-press send, Ctrl+K), the model chip's
- * sheet, the attachments' sheet, tray and keyboard images ([attach]) and the voice note ([voice]). Send takes what
- * to do once the session took the request, where the composer plays its haptic.
+ * sheet, the attachments' sheet, tray and keyboard images ([attach]), the voice note ([voice]), and a reply, started
+ * from a message ([onReply], the timeline's swipe and TalkBack's Reply) and put down by the strip's ✕
+ * ([onDropReply]). Send takes what to do once the session took the request, where the composer plays its haptic.
  */
 data class ComposerActions(
     val onField: (TextFieldValue) -> Unit,
@@ -96,12 +98,14 @@ data class ComposerActions(
     val onModel: () -> Unit = {},
     val attach: AttachActions = AttachActions(),
     val voice: VoiceActions = VoiceActions(),
+    val onReply: (ShownMessage) -> Unit = {},
+    val onDropReply: () -> Unit = {},
 )
 
 /**
  * How the composer looks: the [title] its placeholder names, whether send is stop ([stops]), the model chip, the
- * attachments and voice note ([media]), and the latest change the chat, not the owner's typing, made to the
- * field ([written]).
+ * attachments and voice note ([media]), the latest change the chat, not the owner's typing, made to the
+ * field ([written]), and the reply held over it ([reply]).
  */
 data class ComposerLook(
     val title: String,
@@ -109,13 +113,15 @@ data class ComposerLook(
     val chip: ModelChip?,
     val media: MediaUi = MediaUi(),
     val written: FieldWrite = FieldWrite(),
+    val reply: ReplyUi? = null,
 )
 
 /** What row 2's last control is: send, stop, or the mic while the field and the tray are empty. */
 private enum class EndControl { SEND, STOP, MIC }
 
 /**
- * The composer (design section 13.6): a floating 28 dp tonal pill. Over row 1, the tray of picked items; row 1
+ * The composer (design section 13.6): a floating 28 dp tonal pill. Its first row is the reply held over it, while
+ * there is one (ReplyStrip); over row 1, the tray of picked items; row 1
  * is the field, "Message {title}…", up to six lines, or the recording row, or the voice draft; row 2 (40 dp)
  * holds the attach +, the model chip (design section 8.6), none when the daemon says no model, and at its end the
  * mic while the field and the tray are empty, else the send ↑ in a filled circle, which is stop while a turn
@@ -153,6 +159,7 @@ internal fun Composer(
                     .then(surface)
                     .padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 6.dp),
         ) {
+            ReplyStrip(look.reply, actions.onDropReply)
             val picked = look.media.attach.picked
             if (picked.isNotEmpty() &&
                 voice == VoiceUi.Idle
@@ -242,7 +249,8 @@ private fun HandsFreeControls(
  * whose 1 MB a paste outgrows, and that stops the app (Task 14c); the chat brings the words back itself, from its
  * ViewModel as a rotation makes the field again and from its draft once the process is gone.
  * The TextFieldState takes the keyboard's images ([AttachActions.onKeyboard], IME `commitContent`), which the
- * field over a TextFieldValue refuses.
+ * field over a TextFieldValue refuses. As a reply starts ([ComposerLook.reply]'s revision), the field takes the focus,
+ * and the keyboard with it; a field made again over a reply already held, as a rotation makes it, takes none.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -260,6 +268,7 @@ private fun Field(
     val onField by rememberUpdatedState(actions.onField)
     val onKeyboard by rememberUpdatedState(actions.attach.onKeyboard)
     val written = look.written
+    val focus = rememberReplyFocus(look.reply)
     LaunchedEffect(state) { showCaretAtEnd(state, scroll) }
     LaunchedEffect(written.revision) {
         if (written.revision == applied.intValue) return@LaunchedEffect
@@ -287,6 +296,7 @@ private fun Field(
                 .fillMaxWidth()
                 .heightIn(min = 32.dp)
                 .focusRing(FIELD_RING)
+                .focusRequester(focus)
                 .padding(horizontal = 10.dp, vertical = 4.dp)
                 .contentReceiver { content -> keyboardContent(content, onKeyboard) }
                 .onPreviewKeyEvent { keys(it, actions) { HapticFeedback.perform(view, HapticUse.Send) } }

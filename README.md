@@ -1846,6 +1846,44 @@ among them; a locked recording, with its bars and its timer, and an upload going
 a fold, and a recording held through a rotation locked hands-free; and the viewer open on its image through
 a rotation.
 
+A reply (the owner, 2026-10-11: "Either left/right swipe on the message should pull that up for asking a question on
+top of it"), step 1, the app's alone. A horizontal drag toward the end edge on a message with words that does not
+stream, the owner's or the agent's (`takesReply`), moves the bubble with the finger to 56 dp (`REPLY_SWIPE`), then a
+quarter of the travel past it, never more than 16 dp past (`REPLY_OVERSHOOT`), while the reply glyph behind it fades
+in and grows from 60 % over the travel to the threshold (`ReplySwipe`); crossing the threshold outward plays
+`GESTURE_THRESHOLD_ACTIVATE` once (`HapticUse.ReplyThreshold`), a let go past it starts the reply, and the bubble
+springs home on the standard spatial spring either way. The drag is `draggable`'s, which leaves a vertical one to the
+list, so the list still scrolls. The offset is a float state read only in the bubble's layer and the row's draw, so a
+move recomposes and allocates nothing. Under reduce-motion the bubble stays where it is and the glyph shows whole
+once the finger is past the threshold. TalkBack finds "Reply" as the message's own custom action. A lifted message,
+a message while search is open, a streaming bubble and a picture with no words take none. The reply is held by the
+ViewModel (`ChatComposer.reply`), so a rotation keeps it and a new reply replaces it: a strip over the composer, the
+pill's first row, says "Replying to {title}" for the agent's message or "Replying to your message", shows the
+quote's first three lines, the third marked "…" when more go, and "Drop reply" puts it down; it comes and goes on
+the standard scheme, and the field takes the focus as each reply starts, never as a rotation makes it again. Send
+puts the quote in `msg.text` (`withQuote`, through `composedOf`): each line after "> ", a blank line, then the words
+trimmed, a markdown blockquote and a paragraph, the one shape the daemon sees. The quote (`quoteOf`) is the message's
+lines, CR LF read as LF, an owner's own leading quote dropped (a reply to a reply quotes its question, never its
+context), each line's quote markers stripped, so a quote stays flat, and its blank lines dropped; the agent's
+markdown goes as written. Every line goes, up to 2,000 code points (`QUOTE_MAX_CHARS`), the line breaks counted,
+and up to 2,048 bytes as the frame carries the quote (`QUOTE_MAX_BYTES`, half a frame's header: each line's "> ",
+the line breaks and the blank line after the quote, as JSON escapes them in UTF-8), so a question of some 1,450
+bytes still goes with it whatever the quoted message's script; past either bound the quote is cut at the end of the
+last line that fits whole and marked "…", or a first line longer than that is cut on a character's edge. A slash
+command typed under a reply goes as itself and the reply stays, as a reply never makes a command: its words start
+with the quote. A send with no words, pictures or files alone, takes no quote and keeps the reply for the next
+words; a caption takes it, but a caption of a command's words goes as Send would send them, without it, the reply
+kept (`replyWith`, the one rule Send, the attach sheet and the bound read), and a voice note never does. The bound on
+what one `msg` carries weighs the words with their quote, so "This message is too long to send" shows when the
+words no longer fit beside it. The owner's bubble, and a caption, draw a message that starts with a quote as a chip
+above the question (`QuotedWords`, which `leadingQuote` reads back): a bar in the bubble's ink and three lines at
+80 %, which TalkBack hears as "Quoting: {lines}" before the question; the Chats row's last message is the question
+alone (`rowWords`). `RepliesTest` covers the quote's shape and bounds and its parse back, the ViewModel's tests the
+send, the command, the bound and the drop, `ChatAttachTest` the caption and a command's words under a reply,
+`ReplySwipeTest` (Robolectric) the swipe, the haptic, the scroll, the custom action, reduce-motion, the chip and the
+strip through `ChatRoute`, `RepliesPreview` the chip and the strip at the twelve windows, and `ReplyDeviceTest` a
+swipe on the device that sends its quote and TalkBack's Reply.
+
 Where the code departs from sections 8.3 and 13.5 to 13.7, or reads them where they are silent, for the
 owner to settle:
 
@@ -2033,6 +2071,28 @@ owner to settle:
   (`ImageDecoder.createSource(resolver, uri)`), so the stop only refuses the part a late decode would hand over. A
   provider that stalls, or trickles on as `AvatarPicturesDeviceTest`'s does, holds the `io` thread its decode runs
   on until it answers, ends or the decoder gives the stream up.
+- A reply is the app's alone (step 1). The design keeps Reply for M52, behind the daemon's `caps.reply` and
+  `msg.reply_to_seq`, and hides it from the long-press menu, which stays without it; the task named the field
+  `reply_to`. Nothing on the wire names the message replied to: the quote is plain words in `msg.text`, so the
+  daemon cannot tell a reply from a message that starts with a blockquote, and any message of the owner's that
+  starts with `>` lines, a blank line and words draws as a reply, chip and all. The chip opens nothing, as there is
+  no message to jump to yet.
+- The swipe's numbers, 56 dp to the threshold, a quarter of the travel past it and 16 dp at most, the glyph's 60 %
+  start and its 12 dp gap, are the app's; the design draws no swipe. So are the quote's: 2,000 code points and
+  2,048 bytes, every line sent, three shown, in the strip as in the chip. The task's brief also said "the first three
+  lines, at most 280 characters", and gave the strip "the quote's first two lines"; the owner's 2026-10-12 answer, to
+  give the model the message back whole with its first three lines shown, holds. The bytes are the frame's bound,
+  not the owner's: a message in a script past one byte a character, or with many escapes, is quoted short of 2,000
+  characters (679 of a three-byte script), and ASCII prose of 2,000 characters on more than fifteen lines loses a
+  line or a few at its end, so that a question of some 1,450 bytes always goes with the quote; a larger share for the
+  quote would leave less for the question.
+- "Reply", "Replying to {title}", "Replying to your message", "Drop reply" and "Quoting: {lines}" are the app's
+  words, and the reply glyph is the app's drawing.
+- The agent's markdown is quoted as written, its marks and all, in the strip and the chip as in what is sent: the
+  agent reads its own markup back.
+- The reply held is not part of the draft: a rotation keeps it, a process death drops it. A voice note takes no
+  quote. Edit on a queued reply puts its words back in the field with their quote, as the markdown they were sent
+  as, and a reply held then quotes ahead of them.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the
@@ -2690,7 +2750,9 @@ stays the same node with the same words as the phrase changes, find the approval
 accessibility tree as one node whose custom actions Approve and Deny answer it and its countdown's live
 region saying 30 s, then 10 s, and nothing between, pick a model from the chip's sheet, send on Enter and
 put a newline on Shift+Enter, open search with Ctrl+F sent through the system's input
-(`input keycombination`), and find Copy's words on the clipboard. Beyond the screen the rig answers the
+(`input keycombination`), find Copy's words on the clipboard, swipe the newest answer into a reply whose send
+carries its quote ahead of the question, and start the same reply from Reply, the answer's custom action in the
+window's accessibility tree (`ReplyDeviceTest`). Beyond the screen the rig answers the
 system's pickers and prompts (`PickerRegistry`, through `LocalActivityResultRegistryOwner`), keeps every
 activity the chat starts, grants every permission, stands in for the camera (`FakeCamera`) and shows the
 Photo Picker's tile in the sheet (`ChatOutside`); its tests bring the Photo Picker's, the documents UI's,

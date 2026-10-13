@@ -46,8 +46,8 @@ import java.util.Locale
 /**
  * The screen as it reads: its state, the composer's field, whether the palette shows, search while it is open,
  * the "Model" sheet while it is, the latest jump to a search hit, which the list scrolls to and pulses, the
- * attachments and voice notes ([media]), the latest change the chat made to the field ([written]), and whether the
- * field holds more than one message carries ([tooLong]).
+ * attachments and voice notes ([media]), the latest change the chat made to the field ([written]), whether the
+ * field holds more than one message carries ([tooLong]), and the reply held over the composer ([reply]).
  */
 data class ChatUi(
     val state: ChatScreenState,
@@ -59,6 +59,7 @@ data class ChatUi(
     val media: MediaUi = MediaUi(),
     val written: FieldWrite = FieldWrite(),
     val tooLong: Boolean = false,
+    val reply: ReplyUi? = null,
 )
 
 /**
@@ -106,7 +107,8 @@ data class TimelineMedia(
  * outbox item whose tap menu is open; and what a tap, a long-press, an error card's action and an outbox menu's
  * pick (none when it closes) do; what the cards do; whether a connection is up, which a thumbnail is asked
  * again on; the row jumped to last, which pulses; while search steps through the chat, the words it marks
- * in the row stepped to; and what its blobs read and do ([media]).
+ * in the row stepped to; what its blobs read and do ([media]); and what a swipe or TalkBack's Reply on a message with
+ * words does ([onReply]), none where no reply belongs (a lifted message, the chat while search is open).
  */
 data class TimelineContext(
     val zone: ZoneId,
@@ -127,6 +129,7 @@ data class TimelineContext(
     val highlight: Jump? = null,
     val marks: InChatMarks? = null,
     val media: TimelineMedia = TimelineMedia(),
+    val onReply: ((ChatItem.Message) -> Unit)? = null,
 ) {
     /** The words search marks in [message] while it steps through the chat at its row; none otherwise. */
     fun marksIn(message: ShownMessage): List<String> = marks?.takeIf { it.seq == message.seq }?.words.orEmpty()
@@ -216,9 +219,10 @@ fun ChatScreen(
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
     val highlight = jumpHighlight(ui, listState) ?: held.pulsing
     val media = TimelineMedia(ui.media, actions.media, held.reveal) { key, index -> viewing = cellKey(key, index) }
-    val context =
-        timelineContext(ui.state, actions, overlays)
-            .copy(highlight = highlight, marks = inChatMarksOf(ui.search), media = media)
+    val base = timelineContext(ui.state, actions, overlays)
+    // While search is open its bar stands where the composer was, so no reply starts there.
+    val replies = base.onReply.takeIf { ui.search == null }
+    val context = base.copy(highlight = highlight, marks = inChatMarksOf(ui.search), media = media, onReply = replies)
     val shown = rememberOnScreen()
     val opened = overlays.lifted != null || overlays.selected.isNotEmpty() || ui.palette || ui.search != null
     BackHandler(enabled = opened && viewing == null) {

@@ -53,14 +53,26 @@ fun requestOf(
 ): ClientEvent? {
     require(clientMsgId.isNotEmpty() && profileId.isNotEmpty()) { "a request names itself and its profile" }
     val words = text.trim()
-    val (name, rest) = commandWords(words)
-    val command = if (words.startsWith("/")) commandOf(name, commands) else null
+    val command = commandIn(words, commands)
+    val rest = commandWords(words).second
     return when {
         words.isEmpty() -> null
         command != null -> ClientEvent.Command(clientMsgId, profileId, command.name, rest.trim().ifEmpty { null })
         else -> ClientEvent.Msg(clientMsgId, profileId, words, emptyList())
     }
 }
+
+/** Whether [text] goes as one of the daemon's [commands] (requestOf), not as a `msg`. */
+fun goesAsCommand(
+    text: String,
+    commands: List<CommandDescriptor>,
+): Boolean = commandIn(text.trim(), commands) != null
+
+/** The daemon's command trimmed [words] name, "/name args" by its name or an alias; none for a `msg`'s words. */
+private fun commandIn(
+    words: String,
+    commands: List<CommandDescriptor>,
+): CommandDescriptor? = if (words.startsWith("/")) commandOf(commandWords(words).first, commands) else null
 
 /**
  * Whether [text] is the model command alone, by its name or one of its aliases among the daemon's [commands]:

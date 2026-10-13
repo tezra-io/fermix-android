@@ -23,6 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -50,7 +53,10 @@ private const val QUEUED_ALPHA = 0.55f
  * (MediaMessage). A long-press opens the message's menu; a tap opens a queued, pending or refused item's own, or
  * selects while the chat is selecting. A selected message's row is washed in the selection across the column, so
  * the owner's bubble, the ink itself, stays as it is and the wash shows beside it; what the row draws on its canvas
- * outside its bubbles, a state line, a job's tag over a card, a card's time, then lies on the wash, in the ink.
+ * outside its bubbles, a state line, a job's tag over a card, a card's time, then lies on the wash, in the ink. A
+ * message with words that does not stream, where a reply belongs ([TimelineContext.onReply]), takes the swipe that
+ * replies (ReplySwipe), its glyph drawn by the row behind the message, and TalkBack's Reply on the node its
+ * long-press is on, as a swipe is no accessibility gesture.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -62,14 +68,23 @@ internal fun MessageItem(
     val message = item.message
     val selected = item.key in context.selected
     val wash = if (selected) LocalFermixColors.current.selection else Color.Transparent
+    val onReply = context.onReply
+    val replies = onReply != null && remember(message.text, message.streaming) { takesReply(message) }
+    val swipe = rememberReplySwipe(replies) { context.onReply?.invoke(item) }
+    val reply = stringResource(R.string.chat_reply)
     val gestures =
-        Modifier.combinedClickable(
-            interactionSource = null,
-            indication = null,
-            onClick = { context.onTap(item) },
-            onLongClick = { context.onLongPress(item) },
-        )
-    Box(modifier = modifier.fillMaxWidth().background(wash)) {
+        Modifier
+            .combinedClickable(
+                interactionSource = null,
+                indication = null,
+                onClick = { context.onTap(item) },
+                onLongClick = { context.onLongPress(item) },
+            ).semantics {
+                if (onReply != null && replies) {
+                    customActions = listOf(CustomAccessibilityAction(reply) { true.also { onReply(item) } })
+                }
+            }.replySwipe(swipe)
+    Box(modifier = modifier.fillMaxWidth().background(wash).then(swipe.row)) {
         Column(modifier = Modifier.fillMaxWidth()) {
             // A focused message's ring lies 2 to 4 dp past its bubble, over a link preview 2 dp under it, so the
             // message is raised over its previews while it shows (the timeline raises the item over its neighbours).
@@ -161,7 +176,10 @@ private fun UserMessage(
     }
 }
 
-/** The owner's bubble: the ink, its words and stamp in onInk; [modifier] holds the gestures and the jump's ring. */
+/**
+ * The owner's bubble: the ink, its words and stamp in onInk, a reply's quote above them; [modifier] holds the gestures
+ * and the jump's ring.
+ */
 @Composable
 private fun UserBubble(
     message: ShownMessage,
@@ -180,17 +198,20 @@ private fun UserBubble(
                     vertical = FermixSpacing.bubblePaddingVertical,
                 ),
     ) {
-        // The words search marks, washed as the canon's `.b mark` but in onInk at the selection's share: the selection
-        // is the ink, which would wash the bubble in its own colour and show nothing.
-        val wash = SpanStyle(background = colors.onInk.copy(alpha = colors.selection.alpha))
-        val text = withMarks(AnnotatedString(message.text), context.marksIn(message), wash)
-        val words = @Composable { onLayout: (TextLayoutResult) -> Unit ->
-            Text(text, style = FermixType.body, color = colors.onInk, onTextLayout = onLayout)
-        }
-        if (message.delivery == Delivery.QUEUED) {
-            words {}
-        } else {
-            StampedText(words) { Stamp(message, context, colors.onInk) }
+        // A reply's quote above its question (QuotedWords); then the words search marks, washed as the canon's
+        // `.b mark` but in onInk at the selection's share: the selection is the ink, which would wash the bubble in its
+        // own colour and show nothing.
+        QuotedWords(message.text, colors.onInk) { shown ->
+            val wash = SpanStyle(background = colors.onInk.copy(alpha = colors.selection.alpha))
+            val text = withMarks(AnnotatedString(shown), context.marksIn(message), wash)
+            val words = @Composable { onLayout: (TextLayoutResult) -> Unit ->
+                Text(text, style = FermixType.body, color = colors.onInk, onTextLayout = onLayout)
+            }
+            if (message.delivery == Delivery.QUEUED) {
+                words {}
+            } else {
+                StampedText(words) { Stamp(message, context, colors.onInk) }
+            }
         }
     }
 }

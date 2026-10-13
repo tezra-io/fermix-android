@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
 import kotlinx.coroutines.Dispatchers
@@ -345,6 +346,68 @@ class ChatAttachTest {
             assertEquals("", rig.model.composer.field.value.text)
             assertTrue(rig.ui.picked.isEmpty())
             assertFalse(rig.ui.sheet)
+        }
+
+    @Test
+    fun `a reply's quote goes ahead of a caption and the send clears it, while a send with no words keeps it`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.pipeline.bytes = mapOf("content://p/cat.png" to byteArrayOf(1, 2, 3))
+            runCurrent()
+            val asked = ShownMessage(Sender.Agent, "Which cat?\nThe grey one?", wallAt(1), Delivery.NONE, seq = 2uL)
+            rig.model.composer.reply
+                .start(asked)
+            rig.model.attach.add(listOf("content://p/cat.png"), PickedFrom.PHOTOS)
+            runCurrent()
+            rig.model.attach.send {}
+            runCurrent()
+            assertEquals(
+                "",
+                (
+                    rig.session.sent.value
+                        .single() as ClientEvent.Msg
+                ).text,
+            )
+            val held = checkNotNull(rig.model.composer.reply.held.value) { "a send with no words spent the reply" }
+            rig.model.composer.edit(TextFieldValue("this one"))
+            rig.model.attach.add(listOf("content://p/cat.png"), PickedFrom.PHOTOS)
+            runCurrent()
+            rig.model.attach.send {}
+            runCurrent()
+            val captioned =
+                rig.session.sent.value
+                    .last() as ClientEvent.Msg
+            assertEquals(withQuote(held.quote, "this one"), captioned.text)
+            assertNull(rig.model.composer.reply.held.value)
+            assertEquals("", rig.model.composer.field.value.text)
+        }
+
+    @Test
+    fun `a caption of a command's words is weighed as Send weighs them, and goes without the quote the reply keeps`() =
+        runTest(main) {
+            val rig = Rig(this)
+            rig.pipeline.bytes = mapOf("content://p/cat.png" to byteArrayOf(1, 2, 3))
+            runCurrent()
+            val long = ShownMessage(Sender.Agent, "é".repeat(QUOTE_MAX_CHARS), wallAt(1), Delivery.NONE, seq = 2uL)
+            rig.model.composer.reply
+                .start(long)
+            val words = "/model " + "x".repeat(1_600)
+            rig.model.composer.edit(TextFieldValue(words))
+            rig.model.attach.add(listOf("content://p/cat.png"), PickedFrom.PHOTOS)
+            runCurrent()
+            assertFalse(rig.model.composer.tooLong.value, "the command's words alone fit")
+            rig.model.attach.send {}
+            runCurrent()
+            val captioned =
+                rig.session.sent.value
+                    .single() as ClientEvent.Msg
+            assertEquals(words, captioned.text)
+            assertEquals(1, captioned.attachIds.size)
+            assertEquals(
+                quoteOf(long.text),
+                rig.model.composer.reply.held.value
+                    ?.quote,
+            )
         }
 
     @Test

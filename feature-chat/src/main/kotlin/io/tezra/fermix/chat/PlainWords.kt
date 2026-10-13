@@ -108,12 +108,14 @@ private sealed interface Step {
 
 /**
  * A row's words on one line, as the Chats row shows its last message (design section 9.4): the owner's as
- * typed, as their bubble shows them, and the agent's markdown as its plain words (plainWords).
+ * typed, as their bubble shows them, a reply's question alone without the quote ahead of it (leadingQuote), and the
+ * agent's markdown as its plain words (plainWords).
  */
 fun rowWords(row: TimelineRow): String =
     when (row) {
         is TimelineRow.Message -> {
-            if (row.message.role == USER_ROLE) row.message.content else plainWords(row.message.content)
+            val words = row.message.content
+            if (row.message.role == USER_ROLE) leadingQuote(words)?.rest ?: words else plainWords(words)
         }
 
         is TimelineRow.Reply -> {

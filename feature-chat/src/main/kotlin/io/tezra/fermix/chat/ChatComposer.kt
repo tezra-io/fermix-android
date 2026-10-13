@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.CommandDescriptor
 import io.tezra.fermix.protocol.LENGTH_PREFIX_BYTES
@@ -52,19 +53,71 @@ data class FieldWrite(
 )
 
 /**
+ * A reply the owner holds over the composer (the owner, 2026-10-11): the [sender] of the message it quotes, its
+ * [quote], and that message's [seq] and [clientMsgId], kept for the engine's `reply_to` (step 2) and sent nowhere
+ * now; [revision] counts the replies started, so each one, the same message's again among them, is a new one.
+ */
+data class ReplyDraft(
+    val sender: Sender,
+    val quote: ReplyQuote,
+    val seq: ULong?,
+    val clientMsgId: String?,
+    val revision: Int = 0,
+)
+
+/**
+ * The reply held over the composer, at most one: started by a swipe or TalkBack's Reply on a message with words
+ * ([start]), put down by the strip's ✕ ([drop]) or once a `msg` took its quote ([spent]). It lives with the chat's
+ * ViewModel, so a rotation and the app going to the background keep it and leaving the chat or a process death let it
+ * go; the draft keeps the field's words and not the reply.
+ */
+class ReplyHold {
+    private val draft = MutableStateFlow<ReplyDraft?>(null)
+    private var started = 0
+
+    val held: StateFlow<ReplyDraft?> = draft.asStateFlow()
+
+    /** A reply to [message], in place of any held: a message with words to quote that does not stream (takesReply). */
+    fun start(message: ShownMessage) {
+        require(!message.streaming) { "a streaming bubble takes no reply" }
+        val quote = requireNotNull(quoteOf(message.text)) { "a reply quotes a message's words" }
+        started += 1
+        draft.value = ReplyDraft(message.sender, quote, message.seq, message.clientMsgId, started)
+    }
+
+    fun drop() {
+        draft.value = null
+    }
+
+    /** A `msg` took [sent]'s quote: it is put down, unless another reply was started since. */
+    fun spent(sent: ReplyDraft) {
+        draft.compareAndSet(sent, null)
+    }
+}
+
+/**
+ * What a `msg` of the field's [words] carries while [reply] is held: its quote ahead of them (withQuote), the one
+ * shape the daemon sees; the words as they are with no reply, or with no words, which a reply adds nothing to.
+ */
+fun composedOf(
+    reply: ReplyDraft?,
+    words: String,
+): String = if (reply == null || words.isBlank()) words else withQuote(reply.quote, words)
+
+/**
  * The composer's text path (design section 13.6): the field, restored from the chat's draft as it opens and
  * kept [DRAFT_DEBOUNCE_MS] after each change and as the screen leaves ([keep], on [background], which
  * outlives the screen); the slash palette, open while the field holds a command's word or the owner asked
- * for it (long-press send, Ctrl+K); and send, a `command` for the daemon's commands and a `msg` otherwise,
- * which empties the field once the session took it. A blank field sends nothing: nothing is disabled, and the
- * mic takes send's place (ChatVoice).
+ * for it (long-press send, Ctrl+K); the [reply] held over it, whose quote goes ahead of the next `msg`'s words; and
+ * send, a `command` for the daemon's commands and a `msg` otherwise, which empties the field once the session took
+ * it. A blank field sends nothing: nothing is disabled, and the mic takes send's place (ChatVoice).
  */
 class ChatComposer(
     private val requests: ChatRequests,
     private val store: ChatStore,
     private val scope: CoroutineScope,
     private val background: CoroutineScope,
-    private val commands: () -> List<CommandDescriptor>,
+    internal val commands: () -> List<CommandDescriptor>,
 ) {
     private val text = MutableStateFlow(TextFieldValue(""))
     private val write = MutableStateFlow(FieldWrite())
@@ -83,19 +136,23 @@ class ChatComposer(
     /** The latest change the chat, not the owner, made to the field. */
     val written: StateFlow<FieldWrite> = write.asStateFlow()
 
+    /** The reply held over the composer, whose quote goes ahead of the next `msg`'s words. */
+    val reply = ReplyHold()
+
     /** Whether the palette shows. */
     val palette: StateFlow<Boolean> =
         combine(text, asked) { value, open -> open || paletteQuery(value.text) != null }
             .stateIn(scope, SharingStarted.Eagerly, false)
 
     /**
-     * Whether the field holds more than one message carries (ChatRequests.carries), as a message, a command or a
-     * caption alike: Send then sends nothing, and the line over the composer says why.
+     * Whether what Send would send holds more than one message carries (ChatRequests.carries), as a message, a command
+     * or a caption alike: a command's words as typed, a message's or a caption's under the held reply's quote
+     * (replyWith, composedOf). Send then sends nothing, and the line over the composer says why.
      */
     val tooLong: StateFlow<Boolean> =
-        text
-            .map { !requests.carries(it.text) }
-            .distinctUntilChanged()
+        combine(text, reply.held) { value, held ->
+            !requests.carries(composedOf(replyWith(value.text, held, commands()), value.text))
+        }.distinctUntilChanged()
             .stateIn(scope, SharingStarted.Eagerly, false)
 
     init {
@@ -148,13 +205,18 @@ class ChatComposer(
      * Send: the field's request, the field emptied once the session took it, unless the owner typed on; then
      * [onTaken], where the screen plays send's haptic, which says something went (design section 13.1). A
      * typed `/stop` goes as the Stop control's does (ChatRequests.stopAs), at once or not at all, never into
-     * the outbox, where it would wait for a later connection and stop whatever runs then. Words past what one message
-     * carries send nothing and stay in the field, every one of them ([tooLong]).
+     * the outbox, where it would wait for a later connection and stop whatever runs then. A `msg` goes under the held
+     * reply's quote, made here and nowhere else, and puts the reply down once the session took it; a command goes as
+     * itself and the reply stays. Words past what one message carries, the quote with them, send nothing and stay in
+     * the field, every one of them, and the reply stays ([tooLong]).
      */
     fun send(onTaken: () -> Unit) {
         val words = text.value.text
-        if (!requests.carries(words)) return
-        val request = requests.of(words, commands()) ?: return
+        val held = replyWith(words, reply.held.value, commands())
+        val quoted = composedOf(held, words)
+        if (!requests.carries(quoted)) return
+        val made = requests.of(words, commands()) ?: return
+        val request = if (made is ClientEvent.Msg && held != null) made.copy(text = quoted) else made
         scope.launch {
             val taken =
                 if (request is ClientEvent.Command && request.name == STOP_COMMAND) {
@@ -164,14 +226,21 @@ class ChatComposer(
                 }
             if (!taken) return@launch
             onTaken()
-            emptyIf(words)
+            emptyIf(words, held)
         }
     }
 
-    /** A request captioned [words] went: the field empties unless the owner typed on, and is kept. */
-    fun emptyIf(words: String) {
+    /**
+     * A request captioned [words] went, under [quoted]'s quote when it held one: the field empties unless the owner
+     * typed on, and is kept, and that reply is put down.
+     */
+    fun emptyIf(
+        words: String,
+        quoted: ReplyDraft? = null,
+    ) {
         asked.value = false
         if (text.value.text == words) replace("")
+        quoted?.let(reply::spent)
         keep()
     }
 
@@ -195,6 +264,18 @@ class ChatComposer(
         restoredState.value = true
     }
 }
+
+/**
+ * The reply whose quote goes with the field's [words] while [held] is the one held: none for blank words, which a
+ * quote adds nothing to, nor for words that go as one of the daemon's [commands], as a command goes as itself and the
+ * reply stays. The one rule Send, the attach sheet's Send and tooLong weigh and compose by, so the line over the
+ * composer says "too long" for what each would send.
+ */
+internal fun replyWith(
+    words: String,
+    held: ReplyDraft?,
+    commands: List<CommandDescriptor>,
+): ReplyDraft? = held?.takeUnless { words.isBlank() || goesAsCommand(words, commands) }
 
 /**
  * [field] with a share's [words] after it, on a line of their own, the words cut on a character's edge to the most
@@ -239,7 +320,9 @@ fun fitsOneMsg(
     profileId: String,
 ): Boolean {
     val bare = ClientEvent.Msg(ID_SIZED, profileId, "", List(MAX_ATTACHMENTS) { ID_SIZED }, retryOf = ID_SIZED)
-    val around = encodeClientEvent(MSG_PROTOCOL, ULong.MAX_VALUE, bare).size - LENGTH_PREFIX_BYTES - QUOTES
-    val escaped = JsonPrimitive(words).toString().encodeToByteArray().size
-    return around + escaped <= MAX_HEADER_BYTES
+    val around = encodeClientEvent(MSG_PROTOCOL, ULong.MAX_VALUE, bare).size - LENGTH_PREFIX_BYTES
+    return around + escapedSize(words) <= MAX_HEADER_BYTES
 }
+
+/** What [words] weigh in a frame's header: their UTF-8 bytes as JSON escapes them, the string's two quotes left out. */
+internal fun escapedSize(words: String): Int = JsonPrimitive(words).toString().encodeToByteArray().size - QUOTES

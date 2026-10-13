@@ -109,7 +109,10 @@ private fun ImagesCard(
     }
 }
 
-/** The card's caption (the canon's `.cap`): the owner's in onInk on the ink, the agent's on its bubble's tone. */
+/**
+ * The card's caption (the canon's `.cap`): the owner's in onInk on the ink, a reply's quote above it (QuotedWords), the
+ * agent's on its bubble's tone.
+ */
 @Composable
 private fun Caption(
     message: ShownMessage,
@@ -126,7 +129,7 @@ private fun Caption(
                 ).then(CAPTION_PADDING),
     ) {
         if (user) {
-            Text(message.text, style = FermixType.body, color = colors.onInk)
+            QuotedWords(message.text, colors.onInk) { Text(it, style = FermixType.body, color = colors.onInk) }
         } else {
             Prose(message.text, false, message.resets, context.text, context.marksIn(message))
         }
@@ -153,7 +156,7 @@ private fun WordsBubble(
                 ),
     ) {
         if (user) {
-            Text(message.text, style = FermixType.body, color = colors.onInk)
+            QuotedWords(message.text, colors.onInk) { Text(it, style = FermixType.body, color = colors.onInk) }
         } else {
             Prose(message.text, false, message.resets, context.text, context.marksIn(message))
         }

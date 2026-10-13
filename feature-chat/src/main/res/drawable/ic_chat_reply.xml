@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The reply glyph a swiped message reveals: not the visual canon's, which has none (its Reply is M52's), drawn as
+     its glyphs are, a 1.8 stroke on the 24 grid; the screen tints it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M9 6l-5 5 5 5M4 11h10a6 6 0 0 1 6 6v2"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FF000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

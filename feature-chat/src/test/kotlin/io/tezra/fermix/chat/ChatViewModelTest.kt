@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import io.tezra.fermix.data.ChatState
+import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.session.OutboxAttachment
@@ -40,9 +41,19 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 /** A minute, as the samples' times count. */
 private const val MINUTE_MS = 60_000L
+
+/** The agent's answer a reply quotes: three lines. */
+private val ANSWERED = agentRow(4, "It timed out at 60 s.\n\nRaised it to 120 s.\nIt finished in 84 s.", minutes = 4)
+
+/** The two-byte character the reply's bound test quotes, so the quote fills its half of a frame. */
+private const val TWO_BYTES = "é"
+
+/** A character three bytes long, of a script whose 2,000 characters a frame does not carry. */
+private const val THREE_BYTES = "क"
 
 /**
  * The chat's ViewModel over a fake session and cache (design sections 13.5 and 13.6): the draft restored,
@@ -99,6 +110,13 @@ class ChatViewModelTest {
                 .get(ChatViewModel::class)
 
         val shown: ChatScreenState get() = checkNotNull(model.state.value) { "the chat shows nothing yet" }
+
+        /** The agent's one message in the list, as a swipe or TalkBack's Reply hands it to the composer. */
+        fun answer(): ShownMessage =
+            shown.items
+                .filterIsInstance<ChatItem.Message>()
+                .single { it.message.sender == Sender.Agent }
+                .message
 
         fun messages(): Map<String?, ShownMessage> =
             shown.items.filterIsInstance<ChatItem.Message>().associate { it.message.clientMsgId to it.message }
@@ -441,6 +459,131 @@ class ChatViewModelTest {
             assertEquals(emptyList<OutboxItem>(), rig.store.outbox.value)
             assertEquals("", rig.model.composer.field.value.text)
             assertEquals(1, rig.log.lines.value.size)
+        }
+
+    @Test
+    fun `a reply sends the quote ahead of the words as one msg, then clears the reply and the field`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(ANSWERED))
+            runCurrent()
+            val answer = rig.answer()
+            rig.model.composer.reply
+                .start(answer)
+            rig.model.composer.edit(TextFieldValue("  Why 60?  "))
+            runCurrent()
+            assertEquals(false, rig.model.composer.tooLong.value)
+            rig.model.composer.send {}
+            runCurrent()
+            val quote = checkNotNull(quoteOf(answer.text))
+            assertEquals(listOf(msg("m1", withQuote(quote, "Why 60?"))), rig.session.sent.value)
+            assertNull(rig.model.composer.reply.held.value)
+            assertEquals("", rig.model.composer.field.value.text)
+        }
+
+    @Test
+    fun `a command typed while replying goes as the command and the reply stays`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(ANSWERED))
+            runCurrent()
+            val answer = rig.answer()
+            rig.model.composer.reply
+                .start(answer)
+            rig.model.composer.edit(TextFieldValue("/model reset"))
+            rig.model.composer.send {}
+            runCurrent()
+            assertEquals(
+                listOf<ClientEvent>(ClientEvent.Command("m1", PROFILE, "model", "reset")),
+                rig.session.sent.value,
+            )
+            assertEquals(
+                quoteOf(answer.text),
+                rig.model.composer.reply.held.value
+                    ?.quote,
+            )
+        }
+
+    @Test
+    fun `a reply whose words no longer fit one message is too long, and nothing is sent`() =
+        runTest(main) {
+            val long = agentRow(4, TWO_BYTES.repeat(QUOTE_MAX_CHARS), minutes = 4)
+            val rig = Rig(this, rows = listOf(long))
+            runCurrent()
+            val words = "w".repeat(QUOTE_MAX_BYTES)
+            rig.model.composer.edit(TextFieldValue(words))
+            runCurrent()
+            assertEquals(false, rig.model.composer.tooLong.value, "the words alone fit")
+            rig.model.composer.reply
+                .start(rig.answer())
+            runCurrent()
+            assertEquals(true, rig.model.composer.tooLong.value)
+            rig.model.composer.send {}
+            runCurrent()
+            assertEquals(emptyList<ClientEvent>(), rig.session.sent.value)
+            assertEquals(words, rig.model.composer.field.value.text)
+            assertEquals(
+                quoteOf(rig.answer().text),
+                rig.model.composer.reply.held.value
+                    ?.quote,
+            )
+        }
+
+    @Test
+    fun `a reply to a long message three bytes a character still sends with its question`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(agentRow(4, THREE_BYTES.repeat(QUOTE_MAX_CHARS), minutes = 4)))
+            runCurrent()
+            val answer = rig.answer()
+            rig.model.composer.reply
+                .start(answer)
+            rig.model.composer.edit(TextFieldValue("यह क्या है?"))
+            runCurrent()
+            assertEquals(false, rig.model.composer.tooLong.value)
+            rig.model.composer.send {}
+            runCurrent()
+            val quote = checkNotNull(quoteOf(answer.text))
+            assertEquals(listOf(msg("m1", withQuote(quote, "यह क्या है?"))), rig.session.sent.value)
+            assertNull(rig.model.composer.reply.held.value)
+        }
+
+    @Test
+    fun `dropping the reply sends the words alone`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(ANSWERED))
+            runCurrent()
+            rig.model.composer.reply
+                .start(rig.answer())
+            rig.model.composer.edit(TextFieldValue("Why 60?"))
+            rig.model.composer.reply
+                .drop()
+            rig.model.composer.send {}
+            runCurrent()
+            assertEquals(listOf(msg("m1", "Why 60?")), rig.session.sent.value)
+            assertNull(rig.model.composer.reply.held.value)
+        }
+
+    @Test
+    fun `a streaming bubble and a message with no words take no reply`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(ANSWERED))
+            runCurrent()
+            val answer = rig.answer()
+            assertThrows<IllegalArgumentException> {
+                rig.model.composer.reply
+                    .start(answer.copy(streaming = true))
+            }
+            assertThrows<IllegalArgumentException> {
+                rig.model.composer.reply
+                    .start(answer.copy(text = " \n> "))
+            }
+            assertNull(rig.model.composer.reply.held.value)
+            rig.model.composer.reply
+                .start(answer)
+            val first = rig.model.composer.reply.held.value
+            rig.model.composer.reply
+                .start(answer)
+            val again = checkNotNull(rig.model.composer.reply.held.value)
+            assertEquals(checkNotNull(first).revision + 1, again.revision, "each reply started is a new one")
+            assertEquals(Sender.Agent to 4uL, again.sender to again.seq)
         }
 
     @Test

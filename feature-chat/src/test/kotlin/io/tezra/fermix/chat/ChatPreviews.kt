@@ -24,7 +24,8 @@ import java.time.LocalDate
 // cards; answers made only of a card, a job's table and a command; the outbox's queued and failed bubbles; the
 // error cards; the centred lines and a job's delivery; three messages selected, a job's report, a refused
 // message of the owner's and an answer with a link; the empty chat; the composer's six lines and its palette;
-// the banners. Each list is scrolled so that what its preview shows is in view at every window.
+// the owner's reply with its quote and a reply held over a draft; the banners. Each list is scrolled so that what
+// its preview shows is in view at every window.
 
 /** The indicator's clock in every preview; each card's turn started its elapsed time before it. */
 private const val NOW_MONO = 100_000L
@@ -395,6 +396,35 @@ fun DraftPreview() {
 fun PalettePreview() {
     val palette = ui(EARLIER).copy(field = TextFieldValue("/", TextRange(1)), palette = true)
     FermixPreviewTheme { ChatScreen(palette, NO_ACTIONS) }
+}
+
+/** The agent's answer in four lines: the owner's reply below quotes it, three of its lines drawn, the last marked. */
+private val ANSWERED =
+    said(
+        "r7",
+        Sender.Agent,
+        "It timed out at 60 s, the job's default.\nRaised it to 120 s and re-ran it.\nIt finished in 84 s.\n" +
+            "The CSV holds 1,284 rows.",
+        minutes = 41,
+    )
+
+/** The owner's reply to [ANSWERED], as the daemon got it: the quote, a blank line, the question. */
+private val REPLIED =
+    said("r8", Sender.User, withQuote(checkNotNull(quoteOf(ANSWERED.message.text)), "Why was 60 s the default?"), 42)
+
+@FermixPreviews
+@Composable
+fun RepliesPreview() {
+    // The owner's reply, its quote above the question in their bubble, and a reply to the morning's backup held
+    // over the composer, "Replying to" the Fermix, over the next question typed under it.
+    val typed = "Did any of them fail to copy?"
+    val held = ReplyDraft(Sender.Agent, checkNotNull(quoteOf("Done. 2,184 photos are on the NAS.")), 3uL, null, 1)
+    val replying =
+        ui(listOf(REPLIED, ANSWERED, ASKED) + EARLIER).copy(
+            field = TextFieldValue(typed, TextRange(typed.length)),
+            reply = replyUiOf(held, sample().title),
+        )
+    FermixPreviewTheme { ChatScreen(replying, NO_ACTIONS) }
 }
 
 @FermixPreviews

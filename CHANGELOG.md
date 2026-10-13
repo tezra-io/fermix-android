@@ -228,6 +228,11 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **A few of the app's screens are in the repository.** `docs/screenshots/` holds eight screens, light and
   dark (Welcome, Verify, Paired, the Chats list, a chat, the thinking card, an approval, the Instance screen),
   copied from a green record as a reader's reference; every other screenshot stays out of git.
+- **Reply to a message.** Swipe a message, yours or your Fermix's, toward the right (the left in a right-to-left
+  language) until you feel a tick, and let go: its words wait above the box you type in, "Replying to" your
+  Fermix or your own message, with a button to drop them. What you send next carries them as a quote ahead of
+  your question, so your Fermix reads the two together, and your message shows the quote above what you asked.
+  With TalkBack, Reply is an action on each message; with reduced motion, the message stays still.
 
 ### Changed
 

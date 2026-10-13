@@ -117,6 +117,7 @@ internal fun Dock(
                     chip = state.model,
                     media = ui.media,
                     written = ui.written,
+                    reply = ui.reply,
                 )
             Composer(ui.field, look, actions.composer, inSheet = ui.palette)
         }

@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test
 
 // Design section 13.1, "Haptics": four meanings (act, refuse, arrive, threshold), and the table of
 // uses and constants; Copy is section 13.5's code card ("Copy (toast + CONFIRM)"), and MarkLands the M51 update's 3.5
-// ("CLOCK_TICK at 380 ms as the dot lands, the 'arrive' meaning").
+// ("CLOCK_TICK at 380 ms as the dot lands, the 'arrive' meaning"); ReplyThreshold is the app's (the owner's reply of
+// 2026-10-11, no design section), a threshold felt as the mic's are.
 class HapticsTest {
     @Test
     fun `each use has the design's meaning and constant`() {
@@ -23,6 +24,7 @@ class HapticsTest {
                 HapticUse.QrDecoded to (Haptic.Act to HapticFeedbackConstants.CONFIRM),
                 HapticUse.Copy to (Haptic.Act to HapticFeedbackConstants.CONFIRM),
                 HapticUse.MarkLands to (Haptic.Arrive to HapticFeedbackConstants.CLOCK_TICK),
+                HapticUse.ReplyThreshold to (Haptic.Threshold to HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE),
             )
         assertEquals(expected, HapticUse.entries.associateWith { it.meaning to it.feedbackConstant })
     }

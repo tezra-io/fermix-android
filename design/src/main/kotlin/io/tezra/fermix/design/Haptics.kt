@@ -7,8 +7,8 @@ import android.view.View
 enum class Haptic { Act, Refuse, Arrive, Threshold }
 
 /**
- * Every place the app plays a haptic (design section 13.1, "Haptics"; Copy is section 13.5's code card, and MarkLands
- * the M51 update's 3.5),
+ * Every place the app plays a haptic (design section 13.1, "Haptics"; Copy is section 13.5's code card, MarkLands
+ * the M51 update's 3.5, and ReplyThreshold the app's own),
  * with its meaning and the platform constant that plays it. A meaning may sound through more than one
  * constant (an arrival ticks a clock for the final bubble and a segment for each SAS digit), so a screen
  * names the use, never a constant.
@@ -35,6 +35,12 @@ enum class HapticUse(
      * optional and the owner's to cut if it feels like noise on first launch.
      */
     MarkLands(Haptic.Arrive, HapticFeedbackConstants.CLOCK_TICK),
+
+    /**
+     * A swipe on a message crosses the line past which it replies, once per crossing outward: the app's (the owner's
+     * reply of 2026-10-11, which no design section draws), a threshold felt as the mic's are.
+     */
+    ReplyThreshold(Haptic.Threshold, HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE),
 }
 
 /** The one place a haptic is played. */
