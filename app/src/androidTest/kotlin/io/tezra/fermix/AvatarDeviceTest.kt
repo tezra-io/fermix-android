@@ -6,12 +6,14 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -112,16 +114,13 @@ class AvatarDeviceTest {
                 .setComponent(ComponentName(app, MainActivity::class.java))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
-        // The Chats row, and then the chat's bar, whose avatar and name are one button too.
+        // The lone Fermix's chat, which the app opens in (the owner, 2026-10-13): its bar's avatar and name are one
+        // button. Then, back, the Chats row beneath it, a button too.
         val named = hasText(HOST) and hasClickAction()
-        rule.waitUntil("the Chats row", STEP_MILLIS) { rule.onAllNodes(named).fetchSemanticsNodes().isNotEmpty() }
-        rule.waitUntil("the photo on the Chats row", STEP_MILLIS) { covers(rule.onNode(named), AvatarSize.ROW) }
-        rule.onNode(named).performClick()
-        rule.waitUntil("the chat alone", STEP_MILLIS) {
-            rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() &&
-                rule.onAllNodes(named).fetchSemanticsNodes().size == 1
-        }
+        chatAlone(named)
         rule.waitUntil("the photo in the chat's bar", STEP_MILLIS) { covers(rule.onNode(named), AvatarSize.SMALL) }
+        backToTheRow(named)
+        rule.waitUntil("the photo on the Chats row", STEP_MILLIS) { covers(rule.onNode(named), AvatarSize.ROW) }
     }
 
     /**
@@ -142,7 +141,8 @@ class AvatarDeviceTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         val named = hasText(HOST) and hasClickAction()
-        rule.waitUntil("the Chats row", STEP_MILLIS) { rule.onAllNodes(named).fetchSemanticsNodes().isNotEmpty() }
+        chatAlone(named)
+        backToTheRow(named)
         assertEquals("Wink", runBlocking { records.instances.first() }.single().eyes)
         rule.waitUntil("the wink on the Chats row", STEP_MILLIS) { winks(rule.onNode(named)) }
     }
@@ -172,6 +172,23 @@ class AvatarDeviceTest {
             }
         } finally {
             shared.delete()
+        }
+    }
+
+    /** The lone Fermix's chat, the screen the app starts in, alone: its composer, and [named] its bar's button. */
+    private fun chatAlone(named: SemanticsMatcher) {
+        rule.waitUntil("the chat alone", STEP_MILLIS) {
+            rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() &&
+                rule.onAllNodes(named).fetchSemanticsNodes().size == 1
+        }
+    }
+
+    /** Back from the chat to the Chats list beneath it, alone: no composer, and [named] the row's button. */
+    private fun backToTheRow(named: SemanticsMatcher) {
+        rule.onNodeWithContentDescription("Back").performClick()
+        rule.waitUntil("the Chats row alone", STEP_MILLIS) {
+            rule.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty() &&
+                rule.onAllNodes(named).fetchSemanticsNodes().size == 1
         }
     }
 

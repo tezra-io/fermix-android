@@ -318,3 +318,6 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   each time a reply streams in or a message lands; five seconds after you leave it, it waits, and as you come back it
   shows everything that came meanwhile from its first frame, an answer that came while you were away arriving
   without a tick. A long conversation's list is also put together faster.
+- **With one Fermix, the app opens in its chat.** When only one Fermix is paired, opening the app shows its
+  chat, with the Chats list one Back away for "+" and the menu; with two or more, the app opens on the list, or
+  in the chat you were in when you left. A notification, a shortcut or a share still opens the chat it names.

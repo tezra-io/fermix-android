@@ -273,8 +273,9 @@ class ShareDeviceTest {
             start(shareIntent(Intent.ACTION_SEND, "text/plain").putExtra(Intent.EXTRA_TEXT, WORDS))
             shows("Fermix is locked")
             rule.waitUntil(STEP_MILLIS) { services.lockGate.sight.value == Sight.LOCKED }
-            // The share waits behind the lock: no chat, no sheet, no words.
-            assertEquals(emptyList<NavKey>(), above())
+            // The share waits behind the lock: no sheet, no words, and no chat but the one the launch opened, the lone
+            // Fermix's (the owner, 2026-10-13).
+            assertEquals(listOf(ChatKey(a.id, MAIN_PROFILE)), above())
             assertTrue(rule.onAllNodesWithText(WORDS).fetchSemanticsNodes().isEmpty())
             assertTrue(rule.onAllNodesWithText(ASKS).fetchSemanticsNodes().isEmpty())
             unlockWithPin()

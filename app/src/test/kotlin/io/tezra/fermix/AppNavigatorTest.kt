@@ -3,6 +3,7 @@ package io.tezra.fermix
 import io.tezra.fermix.data.AppSettingsStore
 import io.tezra.fermix.data.ChatRef
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.data.MAIN_PROFILE
 import io.tezra.fermix.instance.Link
 import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.Dispatchers
@@ -143,6 +144,54 @@ class AppNavigatorTest {
 
             settings.setLastChat(ChatRef(first.id, "main"))
             val before = AppNavigator(settings, MutableStateFlow(listOf(first, second)))
+            before.showPaired(shared)
+            before.restore(link = null)
+            assertEquals(listOf(shared), before.above.value)
+        }
+
+    @Test
+    fun `a lone Fermix's chat is restored though none was kept`() =
+        runTest(main) {
+            val navigator = AppNavigator(settings(), MutableStateFlow(listOf(first)))
+            navigator.restore(link = null)
+            assertEquals(listOf(ChatKey(first.id, MAIN_PROFILE)), navigator.above.value)
+        }
+
+    @Test
+    fun `two Fermixes restore only the chat kept, or nothing`() =
+        runTest(main) {
+            val records = MutableStateFlow(listOf(first, second))
+            val none = AppNavigator(settings(), records)
+            none.restore(link = null)
+            assertEquals(emptyList<Any>(), none.above.value)
+
+            val settings = settings("kept.json")
+            settings.setLastChat(ChatRef(second.id, "main"))
+            val kept = AppNavigator(settings, records)
+            kept.restore(link = null)
+            assertEquals(listOf(ChatKey(second.id, "main")), kept.above.value)
+        }
+
+    @Test
+    fun `a lone Fermix's chat is not restored over a kept one of another profile`() =
+        runTest(main) {
+            val settings = settings()
+            settings.setLastChat(ChatRef(first.id, "work"))
+            val navigator = AppNavigator(settings, MutableStateFlow(listOf(first)))
+            navigator.restore(link = null)
+            assertEquals(listOf(ChatKey(first.id, "work")), navigator.above.value)
+        }
+
+    @Test
+    fun `a link, and a share shown, still win over the lone Fermix's chat`() =
+        runTest(main) {
+            val records = MutableStateFlow(listOf(first))
+            val linked = AppNavigator(settings(), records)
+            linked.restore(link = ChatKey(first.id, "work"))
+            assertEquals(listOf(ChatKey(first.id, "work")), linked.above.value)
+
+            val shared = ChatKey(first.id, "shared")
+            val before = AppNavigator(settings("shared.json"), records)
             before.showPaired(shared)
             before.restore(link = null)
             assertEquals(listOf(shared), before.above.value)

@@ -40,10 +40,11 @@ private const val SCREENS = "screens"
  * The back stack: the root, Welcome, or the Chats list once a record exists or a Fermix a restore dropped
  * waits to be paired again, the app's screens above it and onboarding's on top. Nothing shows until the
  * launch check has run, the records are read and the settings have said whether the app lock is on, so
- * the root never flickers from Welcome to Chats and never shows before the lock; then the last chat is
- * restored, or the one an intent names. While the lock holds, the screens are not drawn at all, so nothing
- * of them shows under "Fermix is locked" or reaches TalkBack, and what they keep for a rotation they keep
- * across the lock. Another app's share waits behind the lock too, then asks "Send to which Fermix?" or lands.
+ * the root never flickers from Welcome to Chats and never shows before the lock; then the chat an intent
+ * names is restored, or else the last chat, or else, with one Fermix paired, its chat, over the list. While
+ * the lock holds, the screens are not drawn at all, so nothing of them shows under "Fermix is locked" or
+ * reaches TalkBack, and what they keep for a rotation they keep across the lock. Another app's share waits
+ * behind the lock too, then asks "Send to which Fermix?" or lands.
  */
 @Composable
 internal fun FermixApp(
@@ -104,7 +105,7 @@ private fun shareModel(
 ): ShareModel =
     ShareModel(services.lockGate.sight, chats.ui.map { shareTargetsOf(it?.rows) }, services.shares, ::logShare)
 
-/** Restores the last chat once the records are known, then acts on each intent as it comes. */
+/** Restores a chat once the records are known (AppNavigator.restore), then acts on each intent as it comes. */
 @Composable
 private fun FollowIntents(
     known: Boolean?,

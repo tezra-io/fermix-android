@@ -6,6 +6,7 @@ import androidx.navigation3.runtime.NavKey
 import io.tezra.fermix.data.AppSettingsStore
 import io.tezra.fermix.data.ChatRef
 import io.tezra.fermix.data.Instance
+import io.tezra.fermix.data.MAIN_PROFILE
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -115,20 +116,23 @@ class AppNavigator(
     }
 
     /**
-     * Once per ViewModel: the chat [link] names, or else the chat open when the owner last left, if its
-     * instance is still paired, unless a share put its chat on top as the records and the settings were read, or
-     * before; then the chat on top is kept from here on.
+     * Once per ViewModel: the first of the chat [link] names, the chat open when the owner last left and, with one
+     * Fermix paired, its main chat (the owner, 2026-10-13), if that first one's instance is still paired (a link or a
+     * kept chat of a Fermix gone leaves the list, not the lone one's chat), unless a share put its chat on top as the
+     * records and the settings were read, or before; then the chat on top is kept from here on.
      */
     suspend fun restore(link: ChatKey?) {
         if (restored) return
         restored = true
-        val ids = records.first().map { it.id }.toSet()
+        val paired = records.first()
+        val ids = paired.map { it.id }.toSet()
         val last =
             settings.settings
                 .first()
                 .lastChat
                 ?.let { ChatKey(it.instanceId, it.profileId) }
-        val chat = (link ?: last)?.takeIf { it.instanceId in ids }
+        val lone = paired.singleOrNull()?.let { ChatKey(it.id, MAIN_PROFILE) }
+        val chat = (link ?: last ?: lone)?.takeIf { it.instanceId in ids }
         if (chat != null && !shareShown) aboveState.value = listOf(chat)
         viewModelScope.launch {
             aboveState
