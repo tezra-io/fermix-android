@@ -1737,8 +1737,9 @@ a modal sheet at 60 % of the window: the chips Camera · Files · Paste, never t
 Picker (androidx.photopicker, SDK extension 15 or later), its picks numbered in order, at most ten, each grant
 a pick and each revocation an un-pick, or, where it cannot draw, a tile that opens the system Photo Picker
 (`PickMultipleVisualMedia`), allowed what the tray's other items leave of the ten (a pick past the ten is
-left out and logged); the first item past `caps.max_media_bytes` inline ("{name} is {size} — the limit
-is {max}."); the caption, which is the composer's words; "Send as files"; and "Send {n}". Files is the
+left out and logged); the first item past `caps.max_media_bytes`, or the app's own 128 MiB before the daemon
+states it, inline ("{name} is {size} — the limit is {max}.", or "{name} is over the {max} limit." where its size
+reads as the limit); the caption, which is the composer's words; "Send as files"; and "Send {n}". Files is the
 documents UI (`OpenMultipleDocuments`), Camera the chat's own CameraX capture once the app may use the camera
 ("Camera is off for Fermix" when refused), Paste the clipboard's first item (`ChatClip`), and the keyboard's
 images come through the field's content receiver (IME `commitContent`). None of them needs a media
@@ -2062,9 +2063,10 @@ owner to settle:
 - Paths outside the landing that another app or the wire sizes, swept in Task 14c and not yet bounded by the app: at
   Send, a Photo Picker or Files pick that goes as its own bytes is copied into its staged file no further than the
   daemon's limit and a byte more, and one past it is refused before it is hashed or staged (`PhoneMedia.prepare`,
-  M65's security review, F-03), but that limit is the daemon's alone, with no bound of the app's own, and there is
-  none at all while the chat's record is unread or its daemon has sent no caps, before its first `hello_ack`
-  (`sendLimitOf` then says `Long.MAX_VALUE`); a provider that stalls holds the one send a chat runs at a time, with no
+  M65's security review, F-03), but that limit, once the daemon has stated it, is the daemon's alone, above 128 MiB
+  or below, with no bound of the app's own; while the chat's record is unread or its daemon has sent no caps, before
+  its first `hello_ack`, a send and the tray's line hold to the app's own 128 MiB, `LANDING_MAX_BYTES`, the owner's
+  choice of 2026-10-11 (`sendLimitOf`); a provider that stalls holds the one send a chat runs at a time, with no
   time bound of the app's own, until the chat closes, which lets the send go, cancels the open and closes the stream,
   though a provider that heeds neither holds the copy's thread on `io` until it answers, as a landing's does, while an
   image that goes as a JPEG is decoded from its provider's stream with no time bound either, and a stall there holds

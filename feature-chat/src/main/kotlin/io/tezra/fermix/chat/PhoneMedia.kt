@@ -360,7 +360,7 @@ internal fun copyAtMost(
     var copied = 0L
     var idle = 0L
     while (copied <= max) {
-        // What the bound leaves, and one more, counted without overflow when the limit is Long.MAX_VALUE (no caps).
+        // What the bound leaves, and one more, counted without overflow at a daemon's limit of Long.MAX_VALUE.
         val left = max - copied
         val read = from.read(buffer, 0, if (left < buffer.size) left.toInt() + 1 else buffer.size)
         if (read < 0) break

@@ -104,7 +104,7 @@ class BoundedCopyTest {
     }
 
     @Test
-    fun `with no limit, a record whose daemon gave no caps, a stream is copied whole`() {
+    fun `with the largest limit a daemon may state, a stream is copied whole`() {
         val bytes = ByteArray(200_000) { (it % 251).toByte() }
         val into = ByteArrayOutputStream()
         assertEquals(200_000L, copyAtMost(ByteArrayInputStream(bytes), into, Long.MAX_VALUE))

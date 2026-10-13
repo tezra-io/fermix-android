@@ -18,7 +18,9 @@ import java.io.IOException
  * chat's record says: the phone's storage is the phone's, and a daemon may state a limit up to Long.MAX_VALUE, or none
  * before its first `hello_ack`. A file's copy holds the daemon's limit when it is lower; an image's holds this much
  * whatever the limit, as it goes as a JPEG made from the copy at Send, held to the limit as it is made, as a picked
- * image is. The design names no such bound; the number is the owner's to settle.
+ * image is. Until the daemon has stated its limit, a send and the tray are held to this too, the owner's choice of
+ * 2026-10-11; once it has, its limit alone holds them, above this or below. The design names no such bound for a
+ * landing; that number is still the owner's to settle.
  */
 const val LANDING_MAX_BYTES = 128L * 1024 * 1024
 

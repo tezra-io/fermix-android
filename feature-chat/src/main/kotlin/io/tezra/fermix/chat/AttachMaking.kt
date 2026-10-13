@@ -18,7 +18,7 @@ sealed interface Made {
         val attachments: List<OutboxAttachment>,
     ) : Made
 
-    /** One came out past the daemon's limit: nothing goes, and the sheet says which. */
+    /** One came out past the send's bound, the daemon's limit or the app's own: nothing goes, the sheet says which. */
     data class TooBigMade(
         val tooBig: TooBig,
     ) : Made
@@ -39,10 +39,10 @@ private class Ready(
 /**
  * Makes a send's attachments (design section 8.5, "Images"): each picked item made ready in a scratch file
  * (MediaPipeline.prepare: an image a JPEG at most its long-edge cap, without its EXIF; anything else its own
- * bytes, at most the daemon's [maxBytes] as the send began and a byte more), held as it is made to the smaller of that
- * and the daemon's limit then, then hashed and staged by a new `attach_id`, an image's JPEG kept in the media cache
- * first, so its row draws without a fetch. Every scratch file is deleted when the send stops short, and every file
- * staged for it let go.
+ * bytes, at most [maxBytes] as the send began, the daemon's limit or the app's own until it states one, and a byte
+ * more), held as it is made to the smaller of that and [maxBytes] then, then hashed and staged by a new `attach_id`,
+ * an image's JPEG kept in the media cache first, so its row draws without a fetch. Every scratch file is deleted when
+ * the send stops short, and every file staged for it let go.
  */
 internal class AttachMaker(
     private val parts: ChatParts,
@@ -74,7 +74,7 @@ internal class AttachMaker(
 
     /**
      * [chosen] made ready one after another into [ready], each copied at most the [limit] the send began with and held
-     * as it is made to the smaller of that and the daemon's limit then ([maxBytes]), so caps that arrive as the send
+     * as it is made to the smaller of that and the bound then ([maxBytes]), so caps that arrive as the send
      * goes apply and a limit that rises never lets a cut copy through; then staged. The first past it stops the send
      * before it is hashed, its line saying the bytes made of it, and those after it are never made.
      */

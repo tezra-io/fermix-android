@@ -68,7 +68,11 @@ data class Picked(
     val from: PickedFrom,
 )
 
-/** An item past the daemon's limit (design section 13.9): "{name} is {size} — the limit is {max}." */
+/**
+ * An item past the bound that holds it ([maxBytes]), the daemon's limit or the app's own LANDING_MAX_BYTES (design
+ * section 13.9): "{name} is {size} — the limit is {max}.", or "{name} is over the {max} limit." where its size reads
+ * as the limit (AttachSheet's TooBigLine).
+ */
 data class TooBig(
     val name: String,
     val sizeBytes: Long,
@@ -121,7 +125,8 @@ fun attachKindOf(
 
 /**
  * The first of [picked] too big to go: one that goes as its own bytes past [maxBytes], the daemon's
- * `caps.max_media_bytes`. An image that goes as a JPEG is held to the limit as it is made, at most a few MB.
+ * `caps.max_media_bytes` or, until it states one, the app's own LANDING_MAX_BYTES. An image that goes as a JPEG is
+ * held to the limit as it is made, at most a few MB.
  */
 fun tooBigOf(
     picked: List<Picked>,
@@ -145,7 +150,7 @@ fun withPicked(
     more: List<Picked>,
 ): List<Picked> = (held + more).distinctBy { it.uri }.take(MAX_ATTACHMENTS)
 
-/** The sheet and tray as they read from [picked], [asFiles] and the daemon's [maxBytes]. */
+/** The sheet and tray as they read from [picked], [asFiles] and [maxBytes], the daemon's limit or the app's own. */
 fun attachUiOf(
     picked: List<Picked>,
     sheet: Boolean,

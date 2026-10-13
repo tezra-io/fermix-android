@@ -191,11 +191,14 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **A file that goes on past the limit does not fill the phone.** A document, a video or a photo sent as a file is
   copied for Send no further than a byte past the computer's size limit, once the computer has said it, so one whose
   app says it is small, or says nothing of its size, and then hands over more is refused as too big, with nothing of
-  it sent and nothing of it kept on the phone; one at the limit or under it still goes, its size said or not. A send
-  that waits on an app that stopped handing its file over is let go when the chat closes, though an app that ignores
-  that can keep the copy's thread waiting until it answers. A file whose app hands it over in fits, with nothing to
-  read for a moment, is waited for, a minute at most between its bytes, as it is sent and as it lands from a paste,
-  the keyboard or a share.
+  it sent and nothing of it kept on the phone; one at the limit or under it still goes, its size said or not. Before
+  the phone has heard the computer's limit, a file over 128 MB is held back as too big rather than copied whole;
+  once it has heard it, the computer's limit holds, over 128 MB or under. A line Send gave, or one from a paste, the
+  keyboard or a share, goes once a send begun while it showed goes, and one Send gave goes once the computer's limit
+  changes, rather than name a limit that no longer holds. A send that waits on an app that stopped handing its file
+  over is let go when the chat closes, though an app that ignores that can keep the copy's thread waiting until it
+  answers. A file whose app hands it over in fits, with nothing to read for a moment, is waited for, a minute at most
+  between its bytes, as it is sent and as it lands from a paste, the keyboard or a share.
 - **A device test that hangs fails by its name.** Every instrumented test has three minutes, and the wait for the
   screen to settle after a rotation or a fold has fifteen seconds, so a run that would hang fails the test instead.
 - **Who is paired and whether the app is locked are read as written.** Anything that reads the paired Fermix

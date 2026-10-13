@@ -464,7 +464,7 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   that never answers, a string past one frame. On the device the other app is the test APK's own provider
   (`EndlessProvider`), written in Java: the platform runs it in the test APK's own process, which has no Kotlin
   runtime, as the build leaves it out of the test APK. The paths this rule does not yet hold are listed for the owner
-  in README (Task 14c): Send's copy of a Photo Picker or Files pick, held to the daemon's limit alone
+  in README (Task 14c): Send's copy of a Photo Picker or Files pick, held to the daemon's limit alone once stated
   (`PhoneMedia.prepare`), a fetched blob's size past its `media_begin`'s own word, a bubble's image read whole into
   memory and decoded with no bound on its pixels, a provider's thumbnail of a pick (`ContentResolver.loadThumbnail`),
   the field's and the draft's length, the ids from the wire a screen saves across a rotation (a selection's, the

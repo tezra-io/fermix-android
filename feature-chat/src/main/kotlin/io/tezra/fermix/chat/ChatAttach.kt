@@ -29,15 +29,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the files, the clipboard ([paste]), the keyboard and another app's share, at most [MAX_ATTACHMENTS] in order, a
  * paste's, the keyboard's and a share's copied as they land, since their read grant ends long before Send; whether
  * the sheet shows; whether images go as files; and Send, which makes and stages each item (AttachMaker) and sends
- * one `msg` with the composer's words as its caption. An item past the daemon's `caps.max_media_bytes` ([limit],
- * none until the chat's record is read) stays in the tray with its line and never goes; one made past it, a JPEG over
- * a small limit or a file whose provider hands over more than it said, copied no further than a byte past the limit,
- * stops the send with that line; and one a paste, the keyboard or a share brings past what its landing copy may hold
- * (Landings' landingBound) is never copied whole, and shows as that line alone. Another app's landings run one at a
- * time ([landings]), so the tray's room is counted once those before have landed, each waiting its turn and then
- * landing within [LANDING_WAIT_MILLIS]; the owner's own picks wait behind none of them. The items whose files the chat
- * made are kept in the chat's [saved] state as the tray changes, so a process death keeps them, and come back as the
- * chat opens again while their files are there.
+ * one `msg` with the composer's words as its caption. An item past the daemon's `caps.max_media_bytes` ([limit]), or
+ * the app's own [LANDING_MAX_BYTES] until the daemon has stated one, stays in the tray with its line and never goes;
+ * one made past it, a JPEG over a small limit or a file whose provider hands over more than it said, copied no further
+ * than a byte past the limit, stops the send with that line ([refused]), shown while that limit is the bound; and one
+ * a paste, the keyboard or a share brings past what its landing copy may hold (Landings' landingBound) is never copied
+ * whole, and shows as that line alone ([leftOut]) whatever the limit does after. Neither line outlives a send begun
+ * while it showed that the session takes. Another app's landings run one at a time ([landings]), so the tray's room
+ * is counted once those before have landed, each waiting its turn and then landing within [LANDING_WAIT_MILLIS]; the
+ * owner's own picks wait behind none of them. The items whose files the chat made are kept in the chat's [saved]
+ * state as the tray changes, so a process death keeps them, and come back as the chat opens again while their files
+ * are there.
  */
 class ChatAttach(
     private val parts: ChatParts,
@@ -53,18 +55,32 @@ class ChatAttach(
     private val sheet = MutableStateFlow(false)
     private val asFiles = MutableStateFlow(false)
 
-    /** The first item too big to go that the tray does not hold: a JPEG made past the limit, or one landing past it. */
+    /**
+     * The first item a landing brought past what its copy may hold, which the tray does not hold: never copied, its
+     * line stays whatever the limit does after, until an item is removed or unpicked, "Send as files" turns, or a send
+     * begun while it showed is taken.
+     */
     private val leftOut = MutableStateFlow<TooBig?>(null)
+
+    /**
+     * The item Send last stopped at, made past the limit as it went: a JPEG over a small limit, or a file whose
+     * provider handed over more than it said. Its line names that limit, so it shows only while that is the bound.
+     */
+    private val refused = MutableStateFlow<TooBig?>(null)
     private val sending = AtomicBoolean(false)
-    private val maker = AttachMaker(parts, { sendLimitOf(limit) }, io)
+    private val maker = AttachMaker(parts, { sendLimitOf(limit.value) }, io)
 
     /** Another app's landings one at a time: each counts the tray's room once those before it have landed. */
     private val landings = Mutex()
 
     val ui: StateFlow<AttachUi> =
-        combine(picked, sheet, asFiles, limit, leftOut) { items, open, files, read, out ->
-            val ui = attachUiOf(items, open, files, read?.maxBytes ?: Long.MAX_VALUE)
-            if (ui.tooBig == null && out != null) ui.copy(tooBig = out) else ui
+        combine(picked, sheet, asFiles, limit, combine(refused, leftOut, ::Pair)) { items, open, files, read, out ->
+            val (sent, landed) = out
+            val bound = sendLimitOf(read)
+            val ui = attachUiOf(items, open, files, bound)
+            // A send's line names the limit it was made under; a landing's stays.
+            val line = sent?.takeIf { it.maxBytes == bound } ?: landed
+            if (ui.tooBig == null && line != null) ui.copy(tooBig = line) else ui
         }.stateIn(scope, SharingStarted.Eagerly, AttachUi())
 
     init {
@@ -89,6 +105,7 @@ class ChatAttach(
     fun sendAsFiles(on: Boolean) {
         asFiles.value = on
         leftOut.value = null
+        refused.value = null
     }
 
     /**
@@ -112,7 +129,10 @@ class ChatAttach(
             if (queued && !inTurn(landings, uris.size, parts.log)) return@launch
             try {
                 val landing = landingOf(parts, uris, from, limit) { picked.value.size }
-                landing.tooBig?.let { leftOut.value = it }
+                landing.tooBig?.let {
+                    leftOut.value = it
+                    refused.value = null
+                }
                 val kept = trayWith(picked.value, landing.landed, parts.log)
                 picked.value = kept
                 forget(landing.landed - kept.toSet())
@@ -138,6 +158,7 @@ class ChatAttach(
         val gone = uris.toSet()
         picked.update { items -> items.filterNot { it.from == PickedFrom.PHOTOS && it.uri in gone } }
         leftOut.value = null
+        refused.value = null
     }
 
     /** The tray's ✕: [id] leaves, its file with it when the chat made it. */
@@ -145,6 +166,7 @@ class ChatAttach(
         val gone = picked.value.filter { it.id == id }
         picked.update { items -> items.filterNot { it.id == id } }
         leftOut.value = null
+        refused.value = null
         forget(gone)
     }
 
@@ -183,19 +205,22 @@ class ChatAttach(
      * the reply stay (ChatComposer.tooLong says why).
      */
     fun send(onTaken: () -> Unit) {
-        val chosen = sendableOf(picked.value, asFiles.value, sendLimitOf(limit))
+        val chosen = sendableOf(picked.value, asFiles.value, sendLimitOf(limit.value))
         val words = composer.field.value.text
         val held = replyWith(words, composer.reply.held.value, composer.commands())
         val caption = composedOf(held, words)
         if (chosen.isEmpty() || !requests.carries(caption) || !sending.compareAndSet(false, true)) return
         val files = asFiles.value
+        val before = leftOut.value
         scope.launch {
             try {
                 val made = maker.make(chosen, files)
-                if (made is Made.TooBigMade) leftOut.value = made.tooBig
+                if (made is Made.TooBigMade) refused.value = made.tooBig
                 val staged = (made as? Made.Staged)?.attachments ?: return@launch
                 if (!sentStaged(parts, requests, staged, caption.trim())) return@launch
                 picked.update { it - chosen.toSet() }
+                leftOut.compareAndSet(before, null)
+                refused.value = null
                 sheet.value = false
                 forget(chosen)
                 composer.emptyIf(words, held)
@@ -266,8 +291,11 @@ private suspend fun inTurn(
     return turn != null
 }
 
-/** What a send is held to: the daemon's limit ([limit]), none while it has sent none, which refuses past its own. */
-private fun sendLimitOf(limit: StateFlow<MediaLimit?>): Long = limit.value?.maxBytes ?: Long.MAX_VALUE
+/**
+ * What a send and the tray hold an item to, one bound for both: the daemon's limit as [read] states it, above
+ * [LANDING_MAX_BYTES] or below, or that bound of the app's own until it has stated one (the owner, 2026-10-11).
+ */
+private fun sendLimitOf(read: MediaLimit?): Long = read?.maxBytes ?: LANDING_MAX_BYTES
 
 /** The tray [held] with [landed] after it, the first ten in all (withPicked); how many came past is told to [log]. */
 private fun trayWith(

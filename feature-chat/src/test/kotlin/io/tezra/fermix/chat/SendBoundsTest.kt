@@ -29,7 +29,7 @@ private const val OVERRUN = 4 * DAEMON_LIMIT
 private fun sha(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).toHexString()
 
 /** Another app's stream of [size] zeros, which counts what it [handed] over and ends past [size]. */
-private class Zeros(
+internal class Zeros(
     private val size: Long,
 ) : InputStream() {
     var handed = 0L
@@ -182,8 +182,9 @@ class SendBoundsTest {
     @Test
     fun `a copy holds to the limit its send began with, and each item to the smaller of it and the limit then`() =
         runTest {
-            // Caps that arrive as the send goes, a first hello_ack's, are applied to the item made under them.
-            val arriving = ArrayDeque(listOf(Long.MAX_VALUE, LIMIT))
+            // Caps that arrive as the send goes, a first hello_ack's, are applied to the item made under them: the send
+            // began held to the app's own bound alone, as one does before the daemon has stated its limit.
+            val arriving = ArrayDeque(listOf(LANDING_MAX_BYTES, LIMIT))
             val first = Rig(this) { arriving.removeFirst() }
             first.pipeline.streams = mapOf("content://docs/a.pdf" to { Zeros(5_000) })
             val capped = first.maker.make(listOf(document("a.pdf")), asFiles = false)

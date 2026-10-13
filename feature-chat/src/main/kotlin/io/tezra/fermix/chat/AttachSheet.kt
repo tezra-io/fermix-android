@@ -207,19 +207,24 @@ private fun SheetChip(
     }
 }
 
-/** "{name} is {size} — the limit is {max}." (design section 13.9), under the grid. */
+/**
+ * "{name} is {size} — the limit is {max}." (design section 13.9), under the grid, or "{name} is over the {max}
+ * limit." where the size reads as the limit, a copy cut a byte past it or a size that rounds to it, so the line
+ * never says an item past the limit is the limit's size (the owner, 2026-10-11).
+ */
 @Composable
 private fun TooBigLine(
     tooBig: TooBig,
     locale: Locale,
 ) {
+    val size = sizeText(tooBig.sizeBytes, locale)
+    val max = sizeText(tooBig.maxBytes, locale)
     val words =
-        stringResource(
-            R.string.chat_too_big,
-            tooBig.name,
-            sizeText(tooBig.sizeBytes, locale),
-            sizeText(tooBig.maxBytes, locale),
-        )
+        if (size == max) {
+            stringResource(R.string.chat_over_limit, tooBig.name, max)
+        } else {
+            stringResource(R.string.chat_too_big, tooBig.name, size, max)
+        }
     InlineLine(words)
 }
 
