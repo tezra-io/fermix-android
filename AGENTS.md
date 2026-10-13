@@ -242,6 +242,13 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   system prompt among it: its field takes the focus while the prompt still slides in, and a PIN it matches before
   the slide ends comes back as a cancel, so `ShareDeviceTest` types once the focused field has held still (Task
   14c).
+- What closes a scope at a test's end waits, bounded, for its coroutines to end: a cancel stops a coroutine only
+  where it next suspends, and blocking work runs on into Robolectric's reset of what its shadows hold for the whole
+  process, a canvas's registry among them, and throws into a later test as `UncaughtExceptionsBeforeTest` (Task
+  24's conversation icon, drawn on after its test ended, failed MainActivityTest's first test in CI's build job).
+  `AppServices.close` cancels, then waits for every coroutine of the services, at most `CLOSE_WAIT_MILLIS`, and
+  throws past it; a hop to the main thread, which the closing thread may be, lives in a scope of its own that no
+  close waits for.
 - Screenshots: git tracks none (the owner, 2026-10-05: "git ignore those images") but the hand-picked few in
   `docs/screenshots/` (the owner, 2026-10-11: "a selected few, to give a reference for the Android app"), each a
   preview's compact light and dark image copied from `docs/app-shots` by the change that moves that preview, named

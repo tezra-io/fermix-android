@@ -3,6 +3,9 @@ package io.tezra.fermix
 import android.app.Application
 import android.net.ConnectivityManager
 import androidx.test.core.app.ApplicationProvider
+import io.tezra.fermix.attest.AttestedKey
+import io.tezra.fermix.attest.DeviceKeyFacade
+import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.session.Session
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,10 +29,56 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowConnectivityManager
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
 
 /** How long, in real time, a closed store may take to refuse a write; a write it holds instead is never refused. */
 private const val REFUSAL_MILLIS = 10_000L
+
+/**
+ * How long, in real time, a test lets a close run while it holds the services' work, which the close must not return
+ * within, and how long a close given only that gives up after.
+ */
+private const val HOLD_MILLIS = 500L
+
+/** How long, in real time, the Keystore answers within once the test lets it, and a close returns within after that. */
+private const val SETTLE_MILLIS = 10_000L
+
+/**
+ * A Keystore whose every key is there, whose answer to [exists] waits, on the services' own thread, until the test lets
+ * it go ([let]), bounded: the work a test's services are doing as they are closed. [asked] returns once one waits.
+ */
+private class HeldKeys : DeviceKeyFacade {
+    private val begun = CountDownLatch(1)
+    private val released = CountDownLatch(1)
+
+    override fun exists(alias: String): Boolean {
+        begun.countDown()
+        check(released.await(SETTLE_MILLIS, TimeUnit.MILLISECONDS)) { "the Keystore's answer was never let go" }
+        return true
+    }
+
+    fun asked() =
+        check(begun.await(SETTLE_MILLIS, TimeUnit.MILLISECONDS)) { "the launch check never asked the Keystore" }
+
+    fun let() = released.countDown()
+
+    override fun generate(
+        alias: String,
+        challenge: ByteArray,
+    ): AttestedKey = error("the services make no key here")
+
+    override fun delete(alias: String) = error("the services delete no key here")
+
+    override fun staticKey(alias: String): StaticKey = error("no session opens here")
+}
+
+/** [close] run on a thread of its own, which the test waits on, bounded. */
+private fun closing(close: () -> Unit): FutureTask<Unit> = FutureTask(close).also { Thread(it, "closing").start() }
 
 /**
  * A main thread that runs nothing it is handed, as Robolectric's runs nothing its test left it once the test has
@@ -134,12 +183,46 @@ class AppServicesTest {
             assertTrue("$unset", refusal(unset))
         }
 
+    @Test
+    fun `a close returns only once the work its services were doing has ended, a launch check asking the Keystore`() =
+        runTest {
+            // As Robolectric ends each test's application, and then resets what its shadows hold for the whole
+            // process: a conversation's icon still drawn after the close drew on a canvas the reset had dropped.
+            val keys = HeldKeys()
+            val services = AppServices(ApplicationProvider.getApplicationContext(), keys = keys)
+            services.instances.upsert(record(1))
+            services.start()
+            keys.asked()
+            val closed = closing { services.close() }
+            assertThrows("a close returned while its services still ran", TimeoutException::class.java) {
+                closed.get(HOLD_MILLIS, TimeUnit.MILLISECONDS)
+            }
+            keys.let()
+            closed.get(SETTLE_MILLIS, TimeUnit.MILLISECONDS)
+        }
+
+    @Test
+    fun `a close waits no longer than it is given for work that runs on, says so, and the next close waits again`() =
+        runTest {
+            val keys = HeldKeys()
+            val services = AppServices(ApplicationProvider.getApplicationContext(), keys = keys)
+            services.instances.upsert(record(1))
+            services.start()
+            keys.asked()
+            val outlived =
+                assertThrows(IllegalStateException::class.java) { services.close(wait = HOLD_MILLIS.milliseconds) }
+            assertTrue("${outlived.message}", "still ran" in outlived.message.orEmpty())
+            keys.let()
+            closing { services.close() }.get(SETTLE_MILLIS, TimeUnit.MILLISECONDS)
+        }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun `services closed refuse a write while the app lock's setting still waits for the main thread`() =
         runTest {
-            // The setting handed to the lock gate waits for good on a main thread that runs nothing, and the
-            // services' scope, which it runs in, never ends; the stores, in a scope of their own, end all the same.
+            // The setting handed to the lock gate waits for good on a main thread that runs nothing, and the scope
+            // it runs in, its own, never ends; the close waits for every other coroutine of the services, and the
+            // stores, in a scope of their own, end all the same.
             val main = StalledMain()
             Dispatchers.setMain(main)
             try {

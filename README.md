@@ -2258,11 +2258,16 @@ Robolectric through the application convention, over the app's own services and 
 test's services ended as it ends (`FermixApplication.onTerminate`, which Robolectric calls after each test,
 which a phone never does): Robolectric makes an application per test in one process and keeps the
 notification manager's state for the whole process, so services left running wrote into the next test's. The
-records' and the settings' stores run in a scope of their own, so they refuse every write once the services
-are closed, even while the app lock's setting still waits for a main thread that Robolectric no longer runs;
+close returns only once the services' coroutines have ended, at most `CLOSE_WAIT_MILLIS` (10 s), past which it
+throws: a cancel stops a coroutine only where it next suspends, and a conversation's icon still being drawn as
+its test ended drew on past Robolectric's reset of its shadows, its canvas gone from the reset registry, and threw
+into the next test. The records' and the settings' stores run in a scope of their own, so they refuse every write
+once the services are closed, and the app lock's setting goes to the main thread from a scope of its own too,
+which the close cancels and never waits for, as Robolectric's main thread runs nothing a test left it;
 services end started or not, an end that comes again does nothing, and their coroutines and stores end even
 when the system will not release the network watch (`AppServicesTest`, which ends the app's own application
-twice); the profile databases stay open until the process ends.
+twice, and holds a launch check's Keystore call through a close); the profile databases stay open until the
+process ends.
 They cover the supervisor's one session per instance, its grace and its timer, a return within the grace never
 suspending a session, nothing opened out of sight, a removal with the session closed before it runs and
 run only once the store call the session's run was making has returned, "Unpair" sending `unpair` and waiting for

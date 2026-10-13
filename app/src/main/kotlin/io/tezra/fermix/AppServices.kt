@@ -65,11 +65,16 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val TAG = "Fermix"
 
@@ -77,6 +82,9 @@ private const val TAG = "Fermix"
 private const val RECORDS_FILE = "instances.json"
 private const val SETTINGS_FILE = "settings.json"
 private const val INSTANCES_DIRECTORY = "instances"
+
+/** How long a close waits, in real time, for the services' coroutines to end once it has cancelled them. */
+private const val CLOSE_WAIT_MILLIS = 10_000L
 
 /**
  * What the app's services run on: blocking work, the files and the Keystore, on [io]; a ceremony and the sessions
@@ -118,10 +126,18 @@ class AppServices(
     private val sessionScope = CoroutineScope(SupervisorJob() + work)
 
     /**
-     * The records' and the settings' stores' own: nothing else runs in it, so they end as [close] ends it, while a
-     * coroutine of [scope] may still wait for the main thread.
+     * The records' and the settings' stores' own: nothing else runs in it, so they end as [close] ends it, whatever the
+     * app lock's hop ([lockHop]) still waits for.
      */
     private val storeScope = CoroutineScope(SupervisorJob() + io)
+
+    /**
+     * Where the app lock's setting is handed to the lock gate, which is the main thread's: [close] cancels it and
+     * never waits for it, as a close on the main thread (FermixApplication.onTerminate) would wait on itself, and
+     * Robolectric's main thread runs nothing a test left it. Cancelled, the hop does nothing should the main thread
+     * ever run it.
+     */
+    private val lockHop = CoroutineScope(SupervisorJob() + io)
     internal val databases = ProfileDatabases(context, File(context.noBackupFilesDir, INSTANCES_DIRECTORY))
     val instances =
         InstanceStore(File(context.noBackupFilesDir, RECORDS_FILE), storeScope, databases)
@@ -241,7 +257,8 @@ class AppServices(
      * Starts reading the network, then, off the main thread, drops the records whose keys a restore left
      * behind (data's launchCheck), and only then follows the records with the sessions and the
      * conversations, whose names carry each one's agent, the app lock and each chat's previews with the
-     * notifications showing, and the settings with the app lock. Once, and never after [close].
+     * notifications showing, and the settings with the app lock, on the main thread ([lockHop]). Once, and never
+     * after [close].
      */
     fun start() {
         check(scope.isActive) { "the services are closed" }
@@ -259,6 +276,9 @@ class AppServices(
                     set.appLock to chats.mapValues { it.value.previews }
                 }
             launch { looks.distinctUntilChanged().collect { notifications.restyled() } }
+        }
+        lockHop.launch {
+            checked.first { it }
             settings.settings.collect { withContext(Dispatchers.Main) { lockGate.lockSetting(it.appLock) } }
         }
     }
@@ -277,21 +297,31 @@ class AppServices(
     /**
      * Ends the services, started or not: the network watch [start] registered, every coroutine they run, the
      * supervisor's and the sessions' among them, and the records' and the settings' stores, which refuse every write
-     * from then on, even while a coroutine of the services still waits for the main thread to end (as the one handing
-     * the app lock its setting does on Robolectric, which runs nothing a test left its main thread). The coroutines
-     * and the stores end even when the system will not release the watch, whose refusal is thrown on. A second call
-     * does nothing, as a Closeable's does. The profile databases stay open until the process ends: ProfileDatabases
-     * closes one only as its instance is removed. A phone's process ends with the services; an emulated one's
-     * application ends them as it ends (FermixApplication.onTerminate), Robolectric's after each test.
+     * from then on. It returns only once those coroutines have ended, as a cancel stops a coroutine only where it next
+     * suspends: one drawing a conversation's icon draws on until it is done, and on Robolectric, which ends the
+     * application after each test and then resets what its shadows hold for the whole process, such a drawing ran on
+     * past the reset and threw into the next test (its canvas gone from the reset registry). It waits [wait] at most,
+     * in real time, and then throws, the watch's refusal suppressed in it. The one coroutine it never waits for hands
+     * the app lock its setting on the main thread ([lockHop]): cancelled, it waits only for a thread that may be this
+     * close's own. The coroutines and the stores end even when the system will not release the watch, whose refusal
+     * is thrown on. A second call ends nothing more, as a Closeable's. The profile databases stay open until the
+     * process ends: ProfileDatabases closes one only as its instance is removed. A phone's process ends with the
+     * services; an emulated one's application ends them as it ends (FermixApplication.onTerminate), Robolectric's
+     * after each test. Call it off the services' own threads, which it waits for.
      */
-    fun close() {
-        try {
-            if (watching.getAndSet(false)) network.stop()
-        } finally {
-            sessionScope.cancel()
-            scope.cancel()
-            storeScope.cancel()
+    fun close(wait: Duration = CLOSE_WAIT_MILLIS.milliseconds) {
+        require(wait.isPositive()) { "a wait of $wait" }
+        val released = runCatching { if (watching.getAndSet(false)) network.stop() }
+        lockHop.cancel()
+        val running = listOf(sessionScope, scope, storeScope)
+        running.forEach { it.cancel() }
+        val ended = runBlocking { withTimeoutOrNull(wait) { running.forEach { it.coroutineContext.job.join() } } }
+        if (ended == null) {
+            val outlived = IllegalStateException("the services' coroutines still ran $wait after their close")
+            released.exceptionOrNull()?.let(outlived::addSuppressed)
+            throw outlived
         }
+        released.getOrThrow()
     }
 
     /** The App lock switch: the settings say it, and the gate hears it from them. */
