@@ -2,6 +2,7 @@ package io.tezra.fermix
 
 import io.tezra.fermix.data.NotifiedEntry
 import io.tezra.fermix.data.ProfileDatabase
+import io.tezra.fermix.data.persist
 import io.tezra.fermix.session.Announcement
 import io.tezra.fermix.session.Announcer
 import io.tezra.fermix.session.TimelineRow

@@ -3,6 +3,7 @@ package io.tezra.fermix
 import io.tezra.fermix.chat.ChatClock
 import io.tezra.fermix.chat.ChatLive
 import io.tezra.fermix.chat.Moment
+import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.SessionEvent
 import io.tezra.fermix.session.SessionState
@@ -41,7 +42,7 @@ class ChatFolds(
         require(instanceId.isNotBlank()) { "an event names its instance" }
         val effect = (event as? SessionEvent.Turn)?.effect
         val placed =
-            event is SessionEvent.Server ||
+            (event as? SessionEvent.Server)?.event is ServerEvent.Notice ||
                 event is SessionEvent.Approval ||
                 event is SessionEvent.ModelChanged ||
                 effect is TurnEffect.TurnEnded ||

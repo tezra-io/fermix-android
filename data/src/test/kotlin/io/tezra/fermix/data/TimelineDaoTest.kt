@@ -116,6 +116,47 @@ class TimelineDaoTest {
         }
 
     @Test
+    fun `the newest seq held is the newest row's, none in an empty cache, the largest a column holds among them`() =
+        runTest {
+            assertNull(timeline.newestSeq())
+            assertEquals(newestRowSeq(), timeline.newestSeq())
+            listOf(9uL, 5uL, 12uL).forEach { persist(it, "row $it") }
+            assertEquals(12uL, timeline.newestSeq())
+            assertEquals(newestRowSeq(), timeline.newestSeq())
+            // A seq past Long.MAX_VALUE never reaches the column (toColumn refuses it), so this is the largest held.
+            val largest = Long.MAX_VALUE.toULong()
+            persist(largest, "the largest")
+            assertEquals(largest, timeline.newestSeq())
+            assertEquals(newestRowSeq(), timeline.newestSeq())
+            listOf(largest + 1u, ULong.MAX_VALUE).forEach { past ->
+                val refused = runCatching { persist(past, "past the column") }.exceptionOrNull()
+                assertTrue(refused is IllegalArgumentException, "seq $past was stored: $refused")
+            }
+            assertEquals(largest, timeline.newestSeq())
+        }
+
+    /** The newest row's seq as the chat's first page reads it, its row decoded. */
+    private suspend fun newestRowSeq(): ULong? =
+        timeline
+            .newest(1)
+            .first()
+            .firstOrNull()
+            ?.serverSeq
+
+    @Test
+    fun `the rows of many seqs are read together, past one query's worth, and a seq the cache lacks is left out`() =
+        runTest {
+            assertEquals(emptyList<TimelineRow>(), timeline.rows(emptyList()))
+            val held = (1uL..(ROWS_QUERY_CHUNK + 2).toULong()).map { message(it, "row $it") }
+            timeline.persistAll(held)
+            val missing = (ROWS_QUERY_CHUNK + 10).toULong()
+            val read = timeline.rows(listOf(missing) + held.map { it.serverSeq })
+            assertEquals(held.size, read.size)
+            assertEquals(held.associateBy { it.serverSeq }, read.associateBy { it.serverSeq })
+            assertEquals(listOf(timeline.row(3uL)), timeline.rows(listOf(3uL)))
+        }
+
+    @Test
     fun `search finds the cached rows by word or by the start of one, newest first and at most the limit`() =
         runTest {
             persist(1uL, "The café on Main Street opens at nine")

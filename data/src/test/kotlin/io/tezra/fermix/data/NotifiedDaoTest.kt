@@ -106,6 +106,22 @@ class NotifiedDaoTest {
         }
 
     @Test
+    fun `the unread count follows the puts and the read frontier, and is the unread rows' number`() =
+        runTest {
+            assertEquals(0, notified.rowCount().first())
+            listOf(3uL, 5uL, 6uL, 9uL).forEach { seq -> notified.put(NotifiedEntry.Row(seq), NOW) }
+            notified.put(NotifiedEntry.Approval("approval-1"), NOW)
+            notified.put(NotifiedEntry.TurnFailed("turn-1"), NOW)
+            assertEquals(4, notified.rowCount().first())
+            assertEquals(notified.serverSeqs().first().size, notified.rowCount().first())
+            notified.removeReadUpTo(5uL)
+            assertEquals(2, notified.rowCount().first())
+            assertEquals(notified.serverSeqs().first().size, notified.rowCount().first())
+            notified.removeReadUpTo(9uL)
+            assertEquals(0, notified.rowCount().first())
+        }
+
+    @Test
     fun `clear empties the set`() =
         runTest {
             notified.put(NotifiedEntry.Row(1uL), NOW)

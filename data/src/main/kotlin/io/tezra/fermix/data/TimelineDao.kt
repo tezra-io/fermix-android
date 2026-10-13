@@ -15,6 +15,12 @@ import kotlinx.coroutines.flow.map
 private val WHITESPACE = Regex("\\s+")
 
 /**
+ * The most seqs one query of [rows] names: well under SQLite's limit on a statement's variables, 32,766 since
+ * 3.32 and 999 before it.
+ */
+internal const val ROWS_QUERY_CHUNK = 500
+
+/**
  * The profile's timeline cache, keyed by `server_seq`. [persist] is the app's Announcer's first step for a
  * new row: persist, then show or notify, then answer (core-session's Announcer, onboarding gotcha 14).
  * [persistAll] keeps an older page (`SessionEvent.OlderLoaded`), whose rows are not new and never reach the
@@ -23,10 +29,8 @@ private val WHITESPACE = Regex("\\s+")
  */
 @Dao
 abstract class TimelineDao(
-    private val database: RoomDatabase,
+    internal val database: RoomDatabase,
 ) {
-    suspend fun persist(row: TimelineRow) = persistAll(listOf(row))
-
     /** Every row of [rows] as [persist] keeps it, in one transaction. */
     @Transaction
     open suspend fun persistAll(rows: List<TimelineRow>) {
@@ -46,24 +50,6 @@ abstract class TimelineDao(
         return newestEntities(limit).map { rows -> rows.map { it.toRow() } }
     }
 
-    /**
-     * The local full-text search of design section 13.7, for when the daemon cannot search: the cached rows
-     * holding every word of [query], each word or the start of one, newest first, at most [limit]. The index's
-     * own tokenizer splits each word into its terms, so the query reads every character as the index does,
-     * by Unicode 6.1's tables and not the JVM's: punctuation on a word is a separator, an emoji after 6.1 is
-     * a term, and a word of which the tokenizer makes no term is left out.
-     */
-    suspend fun search(
-        query: String,
-        limit: Int,
-    ): List<TimelineRow> {
-        require(limit > 0) { "a limit of $limit rows" }
-        val words = query.split(WHITESPACE).filter { it.isNotEmpty() }
-        val terms = database.useReaderConnection { connection -> words.map { word -> terms(connection, word) } }
-        val match = ftsMatch(terms) ?: return emptyList()
-        return matching(match, limit).map { it.toRow() }
-    }
-
     @Query("SELECT * FROM timeline WHERE server_seq = :serverSeq")
     internal abstract suspend fun entity(serverSeq: Long): TimelineEntity?
 
@@ -72,6 +58,9 @@ abstract class TimelineDao(
 
     @Query("SELECT MIN(server_seq) FROM timeline")
     internal abstract suspend fun oldestColumn(): Long?
+
+    @Query("SELECT * FROM timeline WHERE server_seq IN (:serverSeqs)")
+    internal abstract suspend fun entities(serverSeqs: List<Long>): List<TimelineEntity>
 
     @Insert
     internal abstract suspend fun insert(entity: TimelineEntity)
@@ -85,6 +74,10 @@ abstract class TimelineDao(
     @Query("SELECT * FROM timeline ORDER BY server_seq DESC LIMIT :limit")
     internal abstract fun newestEntities(limit: Int): Flow<List<TimelineEntity>>
 
+    // In newestEntities' order, so the seq is the one its first row holds.
+    @Query("SELECT server_seq FROM timeline ORDER BY server_seq DESC LIMIT 1")
+    internal abstract suspend fun newestColumn(): Long?
+
     @Query(
         "SELECT timeline.* FROM timeline JOIN timeline_fts ON timeline.server_seq = timeline_fts.rowid " +
             "WHERE timeline_fts MATCH :match ORDER BY timeline.server_seq DESC LIMIT :limit",
@@ -93,6 +86,29 @@ abstract class TimelineDao(
         match: String,
         limit: Int,
     ): List<TimelineEntity>
+}
+
+// persist and search live beside the DAO, as row and the others at the end of the file do, so the class keeps to
+// detekt's eleven functions with the queries rows and newestSeq read by.
+
+suspend fun TimelineDao.persist(row: TimelineRow) = persistAll(listOf(row))
+
+/**
+ * The local full-text search of design section 13.7, for when the daemon cannot search: the cached rows
+ * holding every word of [query], each word or the start of one, newest first, at most [limit]. The index's
+ * own tokenizer splits each word into its terms, so the query reads every character as the index does,
+ * by Unicode 6.1's tables and not the JVM's: punctuation on a word is a separator, an emoji after 6.1 is
+ * a term, and a word of which the tokenizer makes no term is left out.
+ */
+suspend fun TimelineDao.search(
+    query: String,
+    limit: Int,
+): List<TimelineRow> {
+    require(limit > 0) { "a limit of $limit rows" }
+    val words = query.split(WHITESPACE).filter { it.isNotEmpty() }
+    val terms = database.useReaderConnection { connection -> words.map { word -> terms(connection, word) } }
+    val match = ftsMatch(terms) ?: return emptyList()
+    return matching(match, limit).map { it.toRow() }
 }
 
 /** The terms the full-text index's tokenizer makes of [word], in order, through [QUERY_TOKENS]. */
@@ -123,6 +139,17 @@ internal fun ftsMatch(words: List<List<String>>): String? {
     return if (phrases.isEmpty()) null else phrases.joinToString(" ") { "\"${it.joinToString(" ")}*\"" }
 }
 
+/**
+ * The cached rows of [serverSeqs], in no order, each seq the cache does not hold left out: one query for each
+ * [ROWS_QUERY_CHUNK] of them, never one per row.
+ */
+suspend fun TimelineDao.rows(serverSeqs: List<ULong>): List<TimelineRow> =
+    serverSeqs
+        .map { it.toColumn() }
+        .chunked(ROWS_QUERY_CHUNK)
+        .flatMap { entities(it) }
+        .map { it.toRow() }
+
 /** The cached row [serverSeq], none when the cache does not hold it. */
 suspend fun TimelineDao.row(serverSeq: ULong): TimelineRow? = entity(serverSeq.toColumn())?.toRow()
 
@@ -131,3 +158,6 @@ suspend fun TimelineDao.countFrom(serverSeq: ULong): Int = countFromColumn(serve
 
 /** The oldest row the cache holds, none when it holds none: where the next older page starts below it. */
 suspend fun TimelineDao.oldest(): ULong? = oldestColumn()?.toSeq()
+
+/** The newest row the cache holds, none when it holds none: [TimelineDao.newest]'s first row's seq, no row read. */
+suspend fun TimelineDao.newestSeq(): ULong? = newestColumn()?.toSeq()

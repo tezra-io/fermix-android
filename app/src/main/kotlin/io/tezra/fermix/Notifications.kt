@@ -8,7 +8,8 @@ import io.tezra.fermix.data.ProfileDatabase
 import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
 import io.tezra.fermix.data.removeExpired
-import io.tezra.fermix.data.row
+import io.tezra.fermix.data.removeReadUpTo
+import io.tezra.fermix.data.rows
 import io.tezra.fermix.session.SessionEvent
 import io.tezra.fermix.session.TimelineRow
 import kotlinx.coroutines.flow.StateFlow
@@ -170,7 +171,9 @@ class Notifications(
     /**
      * The conversation's notification from [profile]'s set and cache, none when the set holds no row. The rows
      * at or below the stored read frontier leave the set first: this phone's own read is stored before the
-     * session says it, so a row read here is never listed again while that word is on its way.
+     * session says it, so a row read here is never listed again while that word is on its way. The lock and the
+     * previews switch are read once, before any row, and that one reading decides both whether the rows are read
+     * and what the notification writes: a notification that will show no word reads no row.
      */
     private suspend fun built(
         record: Instance,
@@ -182,14 +185,21 @@ class Notifications(
         val seqs = profile.notified().serverSeqs().first()
         if (seqs.isEmpty()) return null
         val chat = profile.chat().state().first()
+        val locked = locked()
         val nowMs = now()
         val lines =
-            seqs.map { seq ->
-                val words = profile.timeline().row(seq)?.let(::rowWords) ?: pushedWords[record.id to seq]
-                NotifiedLine(seq, words ?: copy.newMessage, nowMs)
+            if (chat.previews && !locked) {
+                // Every unread row the cache holds, in one go; one it lacks takes its push's words or "New message".
+                val held = profile.timeline().rows(seqs).associateBy { it.serverSeq }
+                seqs.map { seq ->
+                    val words = held[seq]?.let(::rowWords) ?: pushedWords[record.id to seq]
+                    NotifiedLine(seq, words ?: copy.newMessage, nowMs)
+                }
+            } else {
+                seqs.map { NotifiedLine(it, copy.newMessage, nowMs) }
             }
         val facts = facts(record, profileId, chat.agentName)
-        return messagesNotification(facts, lines, chat.previews, locked(), copy).copy(onlyAlertOnce = quiet)
+        return messagesNotification(facts, lines, chat.previews, locked, copy).copy(onlyAlertOnce = quiet)
     }
 }
 

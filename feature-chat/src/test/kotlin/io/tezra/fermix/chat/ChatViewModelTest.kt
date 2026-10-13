@@ -1,5 +1,6 @@
 package io.tezra.fermix.chat
 
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
@@ -10,6 +11,10 @@ import io.tezra.fermix.data.ChatState
 import io.tezra.fermix.design.Sender
 import io.tezra.fermix.protocol.AttachKind
 import io.tezra.fermix.protocol.ClientEvent
+import io.tezra.fermix.protocol.LENGTH_PREFIX_BYTES
+import io.tezra.fermix.protocol.MAX_HEADER_BYTES
+import io.tezra.fermix.protocol.encodeClientEvent
+import io.tezra.fermix.session.MAX_ATTACHMENTS
 import io.tezra.fermix.session.OutboxAttachment
 import io.tezra.fermix.session.OutboxItem
 import io.tezra.fermix.session.RequestFailure
@@ -54,6 +59,9 @@ private const val TWO_BYTES = "é"
 
 /** A character three bytes long, of a script whose 2,000 characters a frame does not carry. */
 private const val THREE_BYTES = "क"
+
+/** An id as the phone makes them, a UUID's 36 characters. */
+private val ID = "0".repeat(36)
 
 /**
  * The chat's ViewModel over a fake session and cache (design sections 13.5 and 13.6): the draft restored,
@@ -585,6 +593,43 @@ class ChatViewModelTest {
             assertEquals(checkNotNull(first).revision + 1, again.revision, "each reply started is a new one")
             assertEquals(Sender.Agent to 4uL, again.sender to again.seq)
         }
+
+    @Test
+    fun `a selection-only edit leaves tooLong where it was and weighs nothing`() =
+        runTest(main) {
+            val store = FakeChatStore()
+            val session = MutableStateFlow<ChatSession?>(FakeChatSession(store))
+            val requests = ChatRequests(session, backgroundScope, PROFILE, { "m1" }, FakeLog().log)
+            // Each weighing asks for the daemon's commands once (replyWith), so the asks count the weighings.
+            var weighed = 0
+            val composer =
+                ChatComposer(requests, store, backgroundScope, backgroundScope) {
+                    weighed += 1
+                    emptyList()
+                }
+            val most = "a".repeat(MAX_HEADER_BYTES - envelopeBytes(PROFILE))
+            for ((words, tooLong) in listOf(most to false, "${most}a" to true)) {
+                composer.edit(TextFieldValue(words))
+                runCurrent()
+                assertEquals(tooLong, composer.tooLong.value, "${words.length} letters")
+                val asked = weighed
+                composer.edit(TextFieldValue(words, TextRange(3)))
+                composer.edit(TextFieldValue(words, TextRange(1, 4)))
+                composer.edit(TextFieldValue(words, TextRange(words.length), composition = TextRange(0, 2)))
+                runCurrent()
+                assertEquals(tooLong, composer.tooLong.value, "${words.length} letters")
+                assertEquals(asked, weighed, "a caret, a selection or a composition weighed the draft again")
+            }
+        }
+
+    @Test
+    fun `a msg's envelope is weighed as the one bound always weighed it`() {
+        val bare = ClientEvent.Msg(ID, PROFILE, "", List(MAX_ATTACHMENTS) { ID }, retryOf = ID)
+        assertEquals(
+            encodeClientEvent(MSG_PROTOCOL, ULong.MAX_VALUE, bare).size - LENGTH_PREFIX_BYTES,
+            envelopeBytes(PROFILE),
+        )
+    }
 
     @Test
     fun `Remove of an item written meanwhile leaves it in the outbox and says so in the log`() =

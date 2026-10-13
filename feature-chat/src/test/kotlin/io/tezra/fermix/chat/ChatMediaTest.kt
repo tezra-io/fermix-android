@@ -84,6 +84,23 @@ private class AfterFirstBlock(
     }
 }
 
+/**
+ * [store] and [files], counting the reads that brought a blob's bytes ([bytesRead]) and keeping each answer to whether
+ * the cache holds one ([held]), in order.
+ */
+private class ReadsCounted(
+    private val store: FakeChatStore,
+    private val files: FakeChatFiles,
+) : ChatStore by store,
+    ChatFiles by files {
+    var bytesRead = 0
+    val held = mutableListOf<Boolean>()
+
+    override suspend fun media(sha256: String): ByteArray? = store.media(sha256)?.also { bytesRead += 1 }
+
+    override suspend fun hasMedia(sha256: String): Boolean = files.hasMedia(sha256).also { held += it }
+}
+
 /** The chat's blobs over [session] and [store], its scratch files from [scratch], its log [log]. */
 private fun TestScope.blobsOf(
     session: FakeChatSession,
@@ -240,6 +257,31 @@ class ChatMediaTest {
             assertEquals(listOf(THUMB), session.fetched.value, "the second ask fetched it again")
             assertTrue(brought.fetched, "the ask the daemon brought it for")
             assertFalse(found.fetched, "the ask that found it cached once its turn came")
+        }
+
+    @Test
+    fun `a waiter for a blob another ask fetched finds it cached without reading its bytes`() =
+        runTest {
+            val store = FakeChatStore()
+            val session = FakeChatSession(store).apply { blobs = mapOf(THUMB to BYTES) }
+            val counted = ReadsCounted(store, FakeChatFiles(store))
+            val parts =
+                fakeParts(sample(), session, store, backgroundScope)
+                    .copy(
+                        store = counted,
+                        files = counted,
+                        scratch = { File.createTempFile("fetch", null, dir) },
+                        io = StandardTestDispatcher(testScheduler),
+                    )
+            val blobs = ChatBlobs(MutableStateFlow(session), parts)
+            val image = ShownMedia(THUMB, THUMB, MediaShape.IMAGE, "image/png", BYTES.size.toLong(), null)
+            val first = async { blobs.bytes(image) }
+            val second = async { blobs.bytes(image) }
+            assertArrayEquals(BYTES, (first.await() as Blob.Bytes).bytes)
+            assertArrayEquals(BYTES, (second.await() as Blob.Bytes).bytes)
+            assertEquals(listOf(THUMB), session.fetched.value)
+            assertEquals(listOf(false, true), counted.held, "the second ask did not wait for the first's fetch")
+            assertEquals(2, counted.bytesRead, "one read of the blob's bytes for each ask's Blob, and no other")
         }
 
     @Test

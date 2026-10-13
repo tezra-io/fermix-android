@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Bundle
 import android.service.notification.StatusBarNotification
+import androidx.room.execSQL
+import androidx.room.useWriterConnection
 import androidx.test.core.app.ApplicationProvider
 import io.tezra.fermix.chat.rowWords
 import io.tezra.fermix.data.InstanceStore
@@ -182,6 +184,52 @@ class NotificationsTest {
             locked = false
             rig.notifications.restyled()
             assertEquals(emptyList<StatusBarNotification>(), posted())
+        }
+
+    @Test
+    fun `a locked app's notification reads no row`() =
+        runTest {
+            val rig = rig()
+            rig.socket.announce(row(5, "the secret plan"))
+            // A read of the row would fail on it now: the rebuild shows the lock reads none.
+            unreadable(5)
+            locked = true
+            rig.notifications.restyled()
+            assertEquals("New message", posted().single().notification.title())
+        }
+
+    @Test
+    fun `previews off reads no row`() =
+        runTest {
+            val rig = rig()
+            rig.socket.announce(row(5, "the secret plan"))
+            unreadable(5)
+            databases.open(miniId, MAIN_PROFILE).chat().setPreviews(false)
+            rig.notifications.restyled()
+            val shown = posted().single().notification
+            assertEquals("mini", shown.title())
+            assertEquals("New message", shown.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString())
+        }
+
+    @Test
+    fun `previews on reads the unread rows, a row the cache lacks taking its push's words or New message`() =
+        runTest {
+            val rig = rig()
+            rig.socket.announce(row(5, "the backup finished"))
+            rig.socket.announce(row(6, "the tests passed"))
+            val notified = databases.open(miniId, MAIN_PROFILE).notified()
+            listOf(7uL, 8uL).forEach { notified.put(NotifiedEntry.Row(it), NOW_MS) }
+            assertTrue(rig.notifications.postMessages(mini.record, MAIN_PROFILE, pushed = 7uL to "the deploy is live"))
+            assertEquals(
+                listOf("the backup finished", "the tests passed", "the deploy is live", "New message"),
+                posted().single().notification.messages(),
+            )
+        }
+
+    /** Row [seq]'s JSON in the cache made unreadable, so whatever reads the row fails on it. */
+    private suspend fun unreadable(seq: Int) =
+        databases.open(miniId, MAIN_PROFILE).useWriterConnection {
+            it.execSQL("UPDATE timeline SET row_json = '{' WHERE server_seq = $seq")
         }
 
     @Test

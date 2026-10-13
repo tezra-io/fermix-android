@@ -63,6 +63,8 @@ class FakeChatFiles(
         into.writeBytes(bytes)
         return true
     }
+
+    override suspend fun hasMedia(sha256: String): Boolean = sha256 in store.media.value
 }
 
 /**

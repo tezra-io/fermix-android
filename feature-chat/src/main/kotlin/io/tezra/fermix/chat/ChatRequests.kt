@@ -31,6 +31,9 @@ class ChatRequests(
     private val sentRequests = MutableStateFlow<Map<String, ClientEvent>>(emptyMap())
     private val withdrawnIds = MutableStateFlow<Set<String>>(emptySet())
 
+    // What a `msg` of the profile weighs around its words, the same for every draft weighed (envelopeBytes).
+    private val envelope = envelopeBytes(profileId)
+
     val sent: StateFlow<Map<String, ClientEvent>> = sentRequests.asStateFlow()
     val withdrawn: StateFlow<Set<String>> = withdrawnIds.asStateFlow()
 
@@ -58,7 +61,7 @@ class ChatRequests(
      * the one fitsOneMsg weighs, with ten attachments' ids and a `retry_of`. What goes is weighed again as the session
      * encodes it ([send], [retry]).
      */
-    fun carries(words: String): Boolean = fitsOneMsg(words.trim(), profileId)
+    fun carries(words: String): Boolean = fitsOneMsg(words.trim(), envelope)
 
     /** The request the composer's [words] make, by the daemon's [commands] (requestOf); none for blank words. */
     fun of(

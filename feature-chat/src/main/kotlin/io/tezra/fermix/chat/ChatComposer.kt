@@ -147,11 +147,12 @@ class ChatComposer(
     /**
      * Whether what Send would send holds more than one message carries (ChatRequests.carries), as a message, a command
      * or a caption alike: a command's words as typed, a message's or a caption's under the held reply's quote
-     * (replyWith, composedOf). Send then sends nothing, and the line over the composer says why.
+     * (replyWith, composedOf). Send then sends nothing, and the line over the composer says why. Weighed as the words
+     * or the reply change, never as the caret, a selection or the keyboard's composition alone moves.
      */
     val tooLong: StateFlow<Boolean> =
-        combine(text, reply.held) { value, held ->
-            !requests.carries(composedOf(replyWith(value.text, held, commands()), value.text))
+        combine(text.map { it.text }.distinctUntilChanged(), reply.held) { words, held ->
+            !requests.carries(composedOf(replyWith(words, held, commands()), words))
         }.distinctUntilChanged()
             .stateIn(scope, SharingStarted.Eagerly, false)
 
@@ -288,24 +289,28 @@ fun withSharedWords(
 ): String {
     val head = if (field.isEmpty() || field.endsWith('\n')) field else "$field\n"
     val points = words.codePoints().toArray()
-    val fits = if (fitsOneMsg(head + words, profileId)) points.size else fittingPrefix(head, points, profileId)
+    val envelope = envelopeBytes(profileId)
+    val fits = if (fitsOneMsg(head + words, envelope)) points.size else fittingPrefix(head, points, envelope)
     return if (fits == 0) field else head + String(points, 0, fits)
 }
 
-/** How many of [points] one `msg` of [profileId] still carries after [head], none when [head] alone is too much. */
+/**
+ * How many of [points] one `msg` whose header weighs [envelope] around its words still carries after [head], none
+ * when [head] alone is too much.
+ */
 private fun fittingPrefix(
     head: String,
     points: IntArray,
-    profileId: String,
+    envelope: Int,
 ): Int {
-    if (!fitsOneMsg(head, profileId)) return 0
+    if (!fitsOneMsg(head, envelope)) return 0
     // The first `fits` characters go and the first `fails` do not: halve between them.
     var fits = 0
     var fails = points.size
     repeat(MAX_CUTS) {
         if (fails - fits <= 1) return@repeat
         val middle = (fits + fails) / 2
-        if (fitsOneMsg(head + String(points, 0, middle), profileId)) fits = middle else fails = middle
+        if (fitsOneMsg(head + String(points, 0, middle), envelope)) fits = middle else fails = middle
     }
     check(fails - fits <= 1) { "the cut of ${points.size} characters did not settle in $MAX_CUTS halvings" }
     return fits
@@ -318,10 +323,22 @@ private fun fittingPrefix(
 fun fitsOneMsg(
     words: String,
     profileId: String,
-): Boolean {
+): Boolean = fitsOneMsg(words, envelopeBytes(profileId))
+
+/** Whether [words], as JSON escapes them, fit one `msg` whose header weighs [envelope] around them (envelopeBytes). */
+internal fun fitsOneMsg(
+    words: String,
+    envelope: Int,
+): Boolean = envelope + escapedSize(words) <= MAX_HEADER_BYTES
+
+/**
+ * What a `msg` of [profileId] weighs around its words, which [fitsOneMsg] adds them to: its header at the largest seq,
+ * with ten attachments and a `retry_of`, every id as the phone makes them, and no words. It depends on the profile
+ * alone, so a caller weighs it once for as many words as it holds to the bound (ChatRequests, withSharedWords).
+ */
+internal fun envelopeBytes(profileId: String): Int {
     val bare = ClientEvent.Msg(ID_SIZED, profileId, "", List(MAX_ATTACHMENTS) { ID_SIZED }, retryOf = ID_SIZED)
-    val around = encodeClientEvent(MSG_PROTOCOL, ULong.MAX_VALUE, bare).size - LENGTH_PREFIX_BYTES
-    return around + escapedSize(words) <= MAX_HEADER_BYTES
+    return encodeClientEvent(MSG_PROTOCOL, ULong.MAX_VALUE, bare).size - LENGTH_PREFIX_BYTES
 }
 
 /** What [words] weigh in a frame's header: their UTF-8 bytes as JSON escapes them, the string's two quotes left out. */

@@ -115,8 +115,9 @@ class ChatsViewModel(
                 combine(
                     database.chat().state(),
                     database.timeline().newest(NEWEST_ROWS),
-                    database.notified().serverSeqs(),
-                ) { chat, newest, notified -> Triple(chat, newest, notified.size) }
+                    database.notified().rowCount(),
+                    ::Triple,
+                )
             }
         return combine(linkFor(instanceId), thinkingOf(instanceId), stored) { link, thinking, (chat, newest, unread) ->
             RowFacts(link, thinking, chat, newest, unread)

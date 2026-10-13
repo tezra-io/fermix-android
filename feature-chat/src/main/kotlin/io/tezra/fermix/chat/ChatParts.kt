@@ -8,6 +8,7 @@ import io.tezra.fermix.data.countFrom
 import io.tezra.fermix.data.oldest
 import io.tezra.fermix.data.releaseStagedUploads
 import io.tezra.fermix.data.row
+import io.tezra.fermix.data.search
 import io.tezra.fermix.data.voiceDraft
 import io.tezra.fermix.data.withStagedUploads
 import io.tezra.fermix.protocol.ClientEvent
@@ -299,8 +300,8 @@ class RoomChatStore(
 
 /**
  * A chat's files beside its database (design section 8.5): each attachment's file staged until its item leaves the
- * outbox, and a cached blob copied out to a file a player or another app opens. The profile's for the app, a fake
- * for the tests.
+ * outbox, and a cached blob copied out to a file a player or another app opens, or asked after without a read. The
+ * profile's for the app, a fake for the tests.
  */
 interface ChatFiles {
     /** Moves [file] in as [attachId]'s staged source: the path the outbox item names; none once the chat is gone. */
@@ -320,6 +321,9 @@ interface ChatFiles {
         sha256: String,
         into: File,
     ): Boolean
+
+    /** Whether the media cache holds the blob [sha256], marked used; false once the chat is gone. */
+    suspend fun hasMedia(sha256: String): Boolean
 
     /**
      * The file the chat's voice note records into and its unsent draft stays in, beside its staged uploads, so a
@@ -358,6 +362,9 @@ class RoomChatFiles(
             }
         return (copied as? Use.Ran)?.value == true
     }
+
+    override suspend fun hasMedia(sha256: String): Boolean =
+        (profiles.withMediaCache(instanceId, profileId) { it.get(sha256) != null } as? Use.Ran)?.value == true
 
     override suspend fun voiceDraft(): File? = (profiles.voiceDraft(instanceId, profileId) as? Use.Ran)?.value
 }

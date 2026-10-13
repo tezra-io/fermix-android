@@ -309,3 +309,8 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   everywhere the avatar shows, the conversation shortcut's icon included; a new Fermix's eyes are open. The six
   muted colours are now eight brighter ones (Coral, Amber, Olive, Teal, Sky, Iris, Rose and Slate), and a Fermix
   keeps the hue it had: Sage becomes Olive, Clay Coral, Plum Iris, Ocean Sky and Sand Amber.
+- **The app repeats less work, and nothing you see changes.** Moving the cursor or selecting words in the message
+  box no longer weighs your draft again, a picture another view just fetched is found in the cache without being
+  read twice, the app watches each Fermix's chat once where it watched it twice, a Chats row's unread count and a
+  chat's newest message are asked for as numbers, and a notification that hides its words, with the app lock on or
+  previews off, reads none of your messages, while one that shows them reads them all in one go.

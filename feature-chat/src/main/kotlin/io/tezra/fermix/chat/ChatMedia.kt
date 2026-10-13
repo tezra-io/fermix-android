@@ -147,7 +147,7 @@ class ChatBlobs(
         name: String,
     ): Fetch =
         one.withLock {
-            val cached = isMediaName(name) && parts.store.media(name) != null
+            val cached = isMediaName(name) && parts.files.hasMedia(name)
             val chat = session.value
             when {
                 cached -> Fetch.Cached(name, streamed = false)

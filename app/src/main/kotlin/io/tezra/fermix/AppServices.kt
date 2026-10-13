@@ -31,6 +31,7 @@ import io.tezra.fermix.data.ProfileDatabases
 import io.tezra.fermix.data.Use
 import io.tezra.fermix.data.avatarSource
 import io.tezra.fermix.data.launchCheck
+import io.tezra.fermix.data.newestSeq
 import io.tezra.fermix.data.ownsProvider
 import io.tezra.fermix.instance.AvatarPictureCache
 import io.tezra.fermix.instance.InstanceParts
@@ -63,6 +64,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
@@ -269,11 +271,13 @@ class AppServices(
             checkedState.value = true
             supervisor.start(io, uploadingOf)
             launch { supervisor.inSight.filter { it }.collect { registrations.refresh() } }
-            val agents = chatsOf().map { (listed, chats) -> listed to chats.mapValues { it.value.agentName } }
+            // One watch of each chat for both collectors below, started with the first of them.
+            val chats = chatsOf().shareIn(this, SharingStarted.WhileSubscribed(), replay = 1)
+            val agents = chats.map { (listed, held) -> listed to held.mapValues { it.value.agentName } }
             launch { agents.distinctUntilChanged().collect { (listed, named) -> conversations.sync(listed, named) } }
             val looks =
-                combine(settings.settings, chatsOf()) { set, (_, chats) ->
-                    set.appLock to chats.mapValues { it.value.previews }
+                combine(settings.settings, chats) { set, (_, held) ->
+                    set.appLock to held.mapValues { it.value.previews }
                 }
             launch { looks.distinctUntilChanged().collect { notifications.restyled() } }
         }
@@ -417,15 +421,7 @@ class AppServices(
 
     /** The newest row [instanceId]'s main profile keeps, 0 when none or once it is removed. */
     private suspend fun newestKept(instanceId: String): ULong {
-        val newest =
-            databases.withDatabase(instanceId, MAIN_PROFILE) { profile ->
-                profile
-                    .timeline()
-                    .newest(1)
-                    .first()
-                    .firstOrNull()
-                    ?.serverSeq
-            }
+        val newest = databases.withDatabase(instanceId, MAIN_PROFILE) { it.timeline().newestSeq() }
         return when (newest) {
             is Use.Ran -> newest.value ?: 0uL
 

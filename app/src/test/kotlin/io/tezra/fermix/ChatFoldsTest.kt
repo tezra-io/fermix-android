@@ -64,6 +64,23 @@ class ChatFoldsTest {
         }
 
     @Test
+    fun `a server event that places no line asks for no newest row, and a notice still does`() =
+        runTest {
+            var asked = 0
+            val folds =
+                ChatFolds(TestClock) {
+                    asked += 1
+                    7uL
+                }
+            val session = idleSession(backgroundScope)
+            folds.take(id, session, SessionEvent.Server(ServerEvent.ReadState("main", 4uL)))
+            assertEquals(0, asked, "a read_state places no line")
+            folds.take(id, session, SessionEvent.Server(ServerEvent.Notice("info", "Compacted.")))
+            assertEquals(1, asked)
+            session.close()
+        }
+
+    @Test
     fun `a bubble opens after the newest row the chat kept, so an image that landed before it took the card's place`() =
         runTest {
             val folds = ChatFolds(TestClock) { 5uL }

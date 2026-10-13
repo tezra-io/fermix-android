@@ -111,9 +111,6 @@ abstract class NotifiedDao {
     /** The rows announced and not yet read, oldest first: what the conversation's notification shows. */
     fun serverSeqs(): Flow<List<ULong>> = rowSeqs().map { seqs -> seqs.map { it.toSeq() } }
 
-    /** Removes the rows at or below the read frontier [seq]. */
-    suspend fun removeReadUpTo(seq: ULong) = deleteRowsUpTo(seq.toColumn())
-
     @Query("DELETE FROM notified")
     abstract suspend fun clear()
 
@@ -133,12 +130,22 @@ abstract class NotifiedDao {
     @Query("SELECT CAST(ref AS INTEGER) AS seq FROM notified WHERE kind = '$KIND_ROW' ORDER BY seq")
     internal abstract fun rowSeqs(): Flow<List<Long>>
 
+    /** How many rows were announced and not yet read, those [serverSeqs] lists: the Chats row's unread count. */
+    @Query("SELECT COUNT(*) FROM notified WHERE kind = '$KIND_ROW'")
+    abstract fun rowCount(): Flow<Int>
+
     @Query("DELETE FROM notified WHERE kind = '$KIND_ROW' AND CAST(ref AS INTEGER) <= :seq")
     internal abstract suspend fun deleteRowsUpTo(seq: Long)
 
     @Query("DELETE FROM notified WHERE kind IN ('$KIND_APPROVAL', '$KIND_TURN') AND added_at < :cutoffMs")
     internal abstract suspend fun deleteIdsPutBefore(cutoffMs: Long)
 }
+
+// removeReadUpTo lives beside the DAO, as removeExpired does, so the class keeps to detekt's eleven functions with
+// rowCount.
+
+/** Removes the rows at or below the read frontier [seq]. */
+suspend fun NotifiedDao.removeReadUpTo(seq: ULong) = deleteRowsUpTo(seq.toColumn())
 
 /**
  * Removes the approvals and failed turns put more than [NOTIFIED_ID_RETENTION_MS] before [nowMs], in Unix
