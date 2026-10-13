@@ -58,7 +58,8 @@ fun chatItems(inputs: ChatInputs): List<ChatItem> {
     val ascending = inputs.rows.sortedBy { it.serverSeq }
     val times = rowTimes(ascending, inputs.live)
     val media = turnMedia(ascending, inputs.live)
-    val rowItems = ascending.mapNotNull { row -> rowItem(row, times[row.serverSeq], inputs, media) }
+    val keys = sealedKeys(inputs.live, media)
+    val rowItems = ascending.mapNotNull { row -> rowItem(row, times[row.serverSeq], inputs, media, keys) }
     val rowSeqs = ascending.map { it.serverSeq }.toSet()
     val ordered =
         merged(rowItems, extras(inputs, ascending, rowSeqs)) +
@@ -67,6 +68,24 @@ fun chatItems(inputs: ChatInputs): List<ChatItem> {
             outboxItems(inputs)
     val laidOut = grouped(withDays(withUnread(ordered, inputs.unreadAt), inputs), inputs.nowWall)
     return laidOut.asReversed()
+}
+
+/**
+ * Each sealed bubble's key ([liveBubbleKey]) by the row it was sealed as, found once for every row: the turns in
+ * order, each turn's bubbles in order, and a seq two bubbles claim keyed by the first.
+ */
+internal fun sealedKeys(
+    live: ChatLive,
+    media: TurnMedia,
+): Map<ULong, String> {
+    val keys = mutableMapOf<ULong, String>()
+    for (turn in live.turns) {
+        for (bubble in turn.bubbles) {
+            val seq = bubble.sealedSeq ?: continue
+            keys.getOrPut(seq) { liveBubbleKey(turn.turnId, bubble, media) }
+        }
+    }
+    return keys
 }
 
 /**

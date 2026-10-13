@@ -314,3 +314,7 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   read twice, the app watches each Fermix's chat once where it watched it twice, a Chats row's unread count and a
   chat's newest message are asked for as numbers, and a notification that hides its words, with the app lock on or
   previews off, reads none of your messages, while one that shows them reads them all in one go.
+- **A chat out of sight costs nothing to keep up.** A chat you opened and left no longer puts its list together again
+  each time a reply streams in or a message lands; five seconds after you leave it, it waits, and as you come back it
+  shows everything that came meanwhile from its first frame, an answer that came while you were away arriving
+  without a tick. A long conversation's list is also put together faster.

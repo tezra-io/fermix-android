@@ -45,7 +45,8 @@ internal fun rowItem(
     row: TimelineRow,
     wallMs: Long?,
     inputs: ChatInputs,
-    media: TurnMedia = TurnMedia.NONE,
+    media: TurnMedia,
+    keys: Map<ULong, String>,
 ): Placed? {
     val message =
         when (row) {
@@ -54,7 +55,7 @@ internal fun rowItem(
         }
     val empty = message.text.isBlank() && message.media.isEmpty()
     if (empty || isQuietRow(row)) return null
-    return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, inputs.live, media), message))
+    return Placed(row.serverSeq, 0, ChatItem.Message(rowKey(row, message, keys, media), message))
 }
 
 /**
@@ -106,22 +107,18 @@ internal fun replyOf(
 
 /**
  * A row's key: the owner's message keeps its outbox item's, so the bubble stays as `accepted` and then its
- * row replace the item; a reply keeps its live bubble's, so a sealed bubble stays as its row lands; a picture of a
- * remembered turn takes the card's it came under ([media]).
+ * row replace the item; a reply keeps its live bubble's ([keys], sealedKeys), so a sealed bubble stays as its row
+ * lands; a picture of a remembered turn takes the card's it came under ([media]).
  */
 internal fun rowKey(
     row: TimelineRow,
     message: ShownMessage,
-    live: ChatLive,
+    keys: Map<ULong, String>,
     media: TurnMedia = TurnMedia.NONE,
 ): String {
     val clientMsgId = message.clientMsgId
     if (message.sender == Sender.User && clientMsgId != null) return outboxKey(clientMsgId)
-    val sealed =
-        live.turns.firstNotNullOfOrNull { turn ->
-            turn.bubbles.firstOrNull { it.sealedSeq == row.serverSeq }?.let { liveBubbleKey(turn.turnId, it, media) }
-        }
-    return sealed ?: media.keyOf(row.serverSeq) ?: "row:${row.serverSeq}"
+    return keys[row.serverSeq] ?: media.keyOf(row.serverSeq) ?: "row:${row.serverSeq}"
 }
 
 internal fun outboxKey(clientMsgId: String): String = "out:$clientMsgId"

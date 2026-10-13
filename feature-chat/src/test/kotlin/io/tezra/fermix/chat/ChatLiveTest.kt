@@ -149,7 +149,8 @@ class ChatLiveTest {
         assertEquals(cardKey(turn, 1), held.key)
         assertEquals(listOf("Reading the logs"), (held as ChatItem.Thinking).card.headings)
         assertEquals(emptyList<ChatItem>(), turnBubbles(shown, rowSeqs = setOf(7uL)))
-        assertEquals(cardKey(turn, 1), rowKey(agentRow(7, "The worker restarts"), agentMessage(), live))
+        val keys = sealedKeys(live, TurnMedia.NONE)
+        assertEquals(cardKey(turn, 1), rowKey(agentRow(7, "The worker restarts"), agentMessage(), keys))
     }
 
     @Test

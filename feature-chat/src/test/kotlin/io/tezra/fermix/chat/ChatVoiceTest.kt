@@ -10,6 +10,7 @@ import io.tezra.fermix.protocol.ClientEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -74,6 +75,11 @@ class ChatVoiceTest {
         val viewModels = ViewModelStore()
         val model: ChatViewModel = modelIn(viewModels)
         val voice: VoiceUi get() = model.voice.ui.value
+
+        init {
+            // The screen's stand-in: the chat's media are worked out while collected, as ChatRoute collects them.
+            scope.backgroundScope.launch { model.media.collect {} }
+        }
 
         /** The chat opened again over the same profile, its files included, as the next visit opens it. */
         fun reopened(): ChatViewModel = modelIn(ViewModelStore())

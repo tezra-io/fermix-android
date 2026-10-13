@@ -39,6 +39,13 @@ const val PAGE_ROWS = 60
 /** Rows the list holds at most: past them the owner searches (Task 12) rather than scrolls. */
 const val MAX_ROWS = 3_000
 
+/**
+ * How long a chat's list and media are still worked out once no screen shows them: a rotation, or the app sent home
+ * and brought straight back, finds them running. Past it they are let go, and a screen shown again draws once they are
+ * worked out anew from what the chat holds then.
+ */
+const val STATE_GRACE_MS = 5_000L
+
 /** What the list is made of, besides the facts of the bar. */
 private data class Held(
     val rows: List<TimelineRow>,
@@ -84,7 +91,11 @@ private data class OlderAsked(
  * session's link, the phone's network, the cache's rows newest first and its outbox, and the app's fold of the
  * session's events; its [composer]; the [requests] the owner's hand makes. There is no state until the cache
  * has returned its first page, so the first one the screen draws already holds the rows, and the answers among
- * them that arrived before it opened. The unread divider's row is chosen once, from that first page, empty or
+ * them that arrived before it opened. The [state] and the [media] are worked out only while a screen collects them,
+ * and let go [STATE_GRACE_MS] after the last one stops, so a chat shown again has none until they are worked out
+ * anew, as one that just opened; what they are made of runs on whether or not a screen shows the chat (the rows, the
+ * outbox, the live fold, the banner's wait, the composer, the tray, the voice note). The unread divider's row is
+ * chosen once, from that first page, empty or
  * not, and the read frontier as the chat opened, and does not move while it is open; reaching the bottom marks
  * the newest row read once the session took it, never backwards. The screen
  * reports the newest row it lists while it is on screen ([listed]), so the announcer answers ON_SCREEN only
@@ -118,6 +129,12 @@ class ChatViewModel(
     private val live = parts.live.stateIn(viewModelScope, SharingStarted.Eagerly, ChatLive())
     private val link: StateFlow<Link> =
         session.flatMapLatest(::linkFlowOf).stateIn(viewModelScope, SharingStarted.Eagerly, Link.NotOpen)
+
+    // The banner's wait is the chat's own: a state worked out anew finds it as long as the link has been down.
+    private val banner = delayedBanner(link, parts.network).stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    // The state and the media go once no screen has shown them for the grace, their last value with them.
+    private val whileShown = SharingStarted.WhileSubscribed(STATE_GRACE_MS, replayExpirationMillis = 0)
     private var readUpTo = 0uL
 
     val requests = ChatRequests(session, viewModelScope, parts.profileId, parts.newId, parts.log)
@@ -174,11 +191,11 @@ class ChatViewModel(
             combine(voice.bars, playback.bars, voice.lengths, playback.lengths, ::Notes),
         ) { attached, recording, playing, colours, notes ->
             MediaUi(attached, recording, playing, colours, notes.read + notes.bars, notes.played + notes.recorded)
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, MediaUi())
+        }.stateIn(viewModelScope, whileShown, MediaUi())
 
     val state: StateFlow<ChatScreenState?> =
         combine(
-            factsOf(record, link, delayedBanner(link, parts.network), live),
+            factsOf(record, link, banner, live),
             combine(rows, outbox, bridged, live, opened, ::heldOf),
             link,
             combine(requests.sent, seenUpTo, olderAsked, uploads, ::Asked),
@@ -189,7 +206,7 @@ class ChatViewModel(
             val inputs = inputsOf(parts, held, link is Link.Up, asked).copy(transcripts = transcripts)
             val state = chatScreenState(facts, inputs, asked.seen, limit.value, loadingOlder = asked.older != null)
             state.copy(switchPending = switching && state.turnRuns)
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        }.stateIn(viewModelScope, whileShown, null)
 
     init {
         // The frontier the chat opened on, then the unread divider's row from the first page the cache returned,

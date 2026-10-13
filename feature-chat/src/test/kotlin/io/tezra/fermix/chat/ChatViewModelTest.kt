@@ -27,12 +27,14 @@ import io.tezra.fermix.transport.Candidate
 import io.tezra.fermix.transport.NetworkFacts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -82,10 +84,11 @@ class ChatViewModelTest {
     /**
      * The chat over the fakes: its session is there as it opens unless a test takes it out of [sessions] first
      * (the supervisor may open it later); [cache] is the store the ViewModel reads, the fake itself unless a
-     * test slows it as a slow database is (SlowStore).
+     * test slows it as a slow database is (SlowStore). The chat is shown from the start: its state and media are
+     * collected as ChatRoute collects them while it is on screen, until [leave], and again from [show].
      */
     private class Rig(
-        scope: TestScope,
+        private val scope: TestScope,
         rows: List<TimelineRow> = emptyList(),
         draft: String? = null,
         frontier: ULong = 0uL,
@@ -117,7 +120,32 @@ class ChatViewModelTest {
                 .create(viewModels, viewModelFactory { initializer { ChatViewModel(parts, SavedStateHandle()) } })
                 .get(ChatViewModel::class)
 
+        /** The screen's collection of the state and the media while it shows the chat. */
+        private var screen: Job? = null
+
+        init {
+            show()
+        }
+
         val shown: ChatScreenState get() = checkNotNull(model.state.value) { "the chat shows nothing yet" }
+
+        /** The chat on screen: its state and media collected, as ChatRoute does while it is at least started. */
+        fun show() {
+            screen =
+                scope.backgroundScope.launch {
+                    launch { model.media.collect {} }
+                    model.state.collect {}
+                }
+        }
+
+        /** The chat off screen: ChatRoute's collection ended, as below STARTED or once the screen is gone. */
+        fun leave() {
+            checkNotNull(screen) { "the chat is not shown" }.cancel()
+            screen = null
+        }
+
+        /** The words of the messages the list shows, newest first. */
+        fun texts(): List<String> = shown.items.mapNotNull { (it as? ChatItem.Message)?.message?.text }
 
         /** The agent's one message in the list, as a swipe or TalkBack's Reply hands it to the composer. */
         fun answer(): ShownMessage =
@@ -630,6 +658,82 @@ class ChatViewModelTest {
             envelopeBytes(PROFILE),
         )
     }
+
+    @Test
+    fun `a chat nobody shows stops working its list out and lets it go, and shown again shows what came meanwhile`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(agentRow(1, "Hello from suj-mbp.")))
+            runCurrent()
+            assertEquals(listOf("Hello from suj-mbp."), rig.texts())
+            rig.leave()
+            advanceTimeBy(STATE_GRACE_MS + 1)
+            runCurrent()
+            assertNull(rig.model.state.value)
+            rig.store.rows.update { listOf(agentRow(2, "The worker restarts.", minutes = 1)) + it }
+            runCurrent()
+            assertNull(rig.model.state.value)
+            rig.show()
+            runCurrent()
+            assertEquals(listOf("The worker restarts.", "Hello from suj-mbp."), rig.texts())
+        }
+
+    @Test
+    fun `the outbox, the draft, the live fold and the banner's clock move on while nothing shows the chat`() =
+        runTest(main) {
+            val rig = Rig(this)
+            runCurrent()
+            rig.store.outbox.value = listOf(OutboxItem(msg("q1", "check the disk"), written = true))
+            runCurrent()
+            val asked = rig.messages().getValue("q1")
+            rig.leave()
+            advanceTimeBy(STATE_GRACE_MS + 1)
+            runCurrent()
+            // accepted takes the item out before its row comes, the turn it asked for runs and ends, the owner types,
+            // and the daemon has been out of reach for the banner's 2 s, all while the chat is not on screen.
+            rig.store.outbox.value = emptyList()
+            val moment = Moment(0L, wallAt(1), Candidate.Scope.LAN, 0uL)
+            rig.live.value =
+                listOf(
+                    SessionEvent.Accepted("q1", duplicate = false),
+                    SessionEvent.Turn(TurnEffect.CardShown("turn-q1"), daemonSpeaking = false),
+                    SessionEvent.Turn(TurnEffect.TurnEnded("turn-q1", TurnOutcome.Completed), daemonSpeaking = false),
+                ).fold(ChatLive()) { live, event -> live.after(event, moment) }
+            rig.model.composer.edit(TextFieldValue("and the cache"))
+            rig.session.state.value = SessionState.CannotReach
+            advanceTimeBy(BANNER_DELAY_MS + DRAFT_DEBOUNCE_MS)
+            runCurrent()
+            assertNull(rig.model.state.value)
+            assertTrue(rig.model.info(asked).turn != null, "Info reads the fold the chat kept off screen")
+            assertEquals(
+                "and the cache",
+                rig.store.drafts.value
+                    .last(),
+            )
+            rig.show()
+            runCurrent()
+            assertEquals(Delivery.DELIVERED, rig.messages().getValue("q1").delivery)
+            assertEquals(Banner.UNREACHABLE, rig.shown.banner)
+        }
+
+    @Test
+    fun `a screen gone and back within the grace, as a rotation is, finds the list still worked out`() =
+        runTest(main) {
+            val rig = Rig(this, rows = listOf(agentRow(1, "Hello from suj-mbp.")))
+            runCurrent()
+            rig.leave()
+            advanceTimeBy(STATE_GRACE_MS - 1)
+            runCurrent()
+            // Still worked out with no screen: the row that lands is in the state already.
+            rig.store.rows.update { listOf(agentRow(2, "The worker restarts.", minutes = 1)) + it }
+            runCurrent()
+            assertEquals(listOf("The worker restarts.", "Hello from suj-mbp."), rig.texts())
+            val seen = mutableListOf<ChatScreenState?>()
+            backgroundScope.launch { rig.model.state.collect { seen += it } }
+            advanceTimeBy(STATE_GRACE_MS)
+            runCurrent()
+            assertTrue(seen.isNotEmpty() && seen.none { it == null }, "the state went back to none and came again")
+            assertEquals(listOf("The worker restarts.", "Hello from suj-mbp."), rig.texts())
+        }
 
     @Test
     fun `Remove of an item written meanwhile leaves it in the outbox and says so in the log`() =

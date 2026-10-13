@@ -31,14 +31,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /** A screen's lifecycle the test moves, from its own thread. */
-private class MovedLifecycle : LifecycleOwner {
+internal class MovedLifecycle : LifecycleOwner {
     val registry: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)
 
     override val lifecycle: Lifecycle get() = registry
 }
 
 /** The window as [real] says, but whether it has the focus, which [focused] says. */
-private class FocusedWindow(
+internal class FocusedWindow(
     real: WindowInfo,
     private val focused: () -> Boolean,
 ) : WindowInfo by real {

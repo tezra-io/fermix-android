@@ -20,6 +20,7 @@ import io.tezra.fermix.transport.Candidate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
@@ -90,6 +91,11 @@ class MessageBoundTest {
             ViewModelProvider
                 .create(ViewModelStore(), viewModelFactory { initializer { ChatViewModel(parts, SavedStateHandle()) } })
                 .get(ChatViewModel::class)
+
+        init {
+            // The screen's stand-in: the chat's state is worked out while it is collected, as ChatRoute collects it.
+            scope.backgroundScope.launch { model.state.collect {} }
+        }
 
         fun type(words: String) = model.composer.edit(TextFieldValue(words))
 

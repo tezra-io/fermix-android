@@ -1521,6 +1521,11 @@ most, then `loadOlder` from the oldest), the outbox, and the app's fold of the s
 morph into it in 300 ms on the emphasized easing and which stands in for it while a bare `text_done` waits
 for its row, the live bubbles, `accepted`,
 each turn's ending (an error card by `turn_error` code, or "Stopped"), and the notices and model lines.
+It works the list and the media out only while a screen collects them, and lets both go `STATE_GRACE_MS` (5 s)
+after the last one left, so a rotation finds them running and a chat shown again later draws once they are worked
+out anew, as one that just opened; what they are made of (the rows, the outbox, the fold, the banner's wait, the
+composer, the tray and the voice note) runs on unseen. Each row's key comes from one index of the sealed bubbles'
+keys, built once per list (`sealedKeys`), never from a search of every turn's bubbles for each row.
 The bar's subtitle keeps section 13.5's order (`chatLine`); the banner shows once its condition has held
 2 s, Offline without a network and "Can't reach {host} — is it on and awake?" once every candidate has
 failed for 30 s, whose tap (48 dp tall) opens the Instance screen; the screen draws nothing until the cache
@@ -2093,6 +2098,11 @@ owner to settle:
 - The reply held is not part of the draft: a rotation keeps it, a process death drops it. A voice note takes no
   quote. Edit on a queued reply puts its words back in the field with their quote, as the markdown they were sent
   as, and a reply held then quotes ahead of them.
+- A chat's list and media are let go 5 s after no screen shows them (`STATE_GRACE_MS`, the app's number; the
+  sections name none): a rotation, or the app sent home and brought straight back, comes back inside it, and past it
+  the chat shown again draws nothing until its list is worked out anew, a frame or so, as a chat that just opened
+  waits for its first page, so what came meanwhile is in its first frame and an answer that came then arrives
+  unplayed.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the

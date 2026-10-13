@@ -80,6 +80,47 @@ class ChatTimelineTest {
     private val making =
         LiveCard(0L, listOf("Reading what you asked"), listOf(LiveChip("generate_image", true, null)), speaking = true)
 
+    /**
+     * A history at the list's bound: [MAX_ROWS] rows, the owner's every eighth from the first, and the
+     * [MAX_REMEMBERED_TURNS] turns the fold keeps, eight sealed bubbles each, the first from its card; every eighth
+     * row is some bubble's, and the bubbles past the 375 such rows seal the earliest of them again.
+     */
+    private fun longHistory(): ChatInputs {
+        val rows =
+            (1..MAX_ROWS).map { seq ->
+                val minutes = seq / 10L
+                if (seq % 8 == 1) userRow(seq, "Q $seq", minutes, "c$seq") else agentRow(seq, "A $seq", minutes)
+            }
+        val turns =
+            (0 until MAX_REMEMBERED_TURNS).map { turn ->
+                val bubbles =
+                    (1..8).map { index ->
+                        val seq = ((turn * 8 + index - 1) % (MAX_ROWS / 8) + 1) * 8
+                        LiveBubble(index, "A $seq", 0, index == 1, seq.toULong(), wallAt(seq / 10L))
+                    }
+                val ending = TurnEnding(TurnOutcome.Completed, 1L, wallAt(300), MAX_ROWS.toULong())
+                liveTurn("turn-t$turn", ending, bubbles)
+            }
+        return inputs(rows = rows, live = ChatLive(turns = turns)).copy(nowWall = wallAt(300))
+    }
+
+    /** A row's key as rowKey found it before Task 27: every turn's bubbles searched for the row's seq. */
+    private fun searchedKey(
+        row: TimelineRow,
+        message: ShownMessage,
+        live: ChatLive,
+        media: TurnMedia,
+    ): String {
+        val clientMsgId = message.clientMsgId
+        if (message.sender == Sender.User && clientMsgId != null) return outboxKey(clientMsgId)
+        val sealed =
+            live.turns.firstNotNullOfOrNull { turn ->
+                val bubble = turn.bubbles.firstOrNull { it.sealedSeq == row.serverSeq }
+                bubble?.let { liveBubbleKey(turn.turnId, it, media) }
+            }
+        return sealed ?: media.keyOf(row.serverSeq) ?: "row:${row.serverSeq}"
+    }
+
     @Test
     fun `a day header comes first, and one sender's messages within two minutes group`() {
         val items =
@@ -351,5 +392,26 @@ class ChatTimelineTest {
         val again = turn.copy(bubbles = listOf(streaming.copy(sealedSeq = 3uL)), card = making)
         val next = oldestFirst(inputs(rows = rows, live = ChatLive(turns = listOf(again)))).map { it.key }
         assertEquals("card:turn-m9:2.1", next.last())
+    }
+
+    @Test
+    fun `a seq two bubbles claim keys by the first, in turn order and then bubble order`() {
+        val claims = listOf(LiveBubble(2, "Done.", 0, true, 2uL), LiveBubble(3, "Done.", 0, false, 2uL))
+        val again = listOf(LiveBubble(1, "Done.", 0, false, 2uL))
+        val live = ChatLive(turns = listOf(liveTurn("turn-a", bubbles = claims), liveTurn("turn-b", bubbles = again)))
+        assertEquals(mapOf(2uL to "card:turn-a:2"), sealedKeys(live, TurnMedia.NONE))
+        val shown = chatItems(inputs(rows = listOf(agentRow(2, "Done.")), live = live))
+        assertEquals(listOf("card:turn-a:2"), shown.filterIsInstance<ChatItem.Message>().map { it.key })
+    }
+
+    @Test
+    fun `the keys of a long history match row for row those every turn's bubbles were searched for`() {
+        val inputs = longHistory()
+        val ascending = inputs.rows.sortedBy { it.serverSeq }
+        val media = turnMedia(ascending, inputs.live)
+        val searched =
+            ascending.map { row -> searchedKey(row, messageOf(row as TimelineRow.Message, null), inputs.live, media) }
+        assertEquals(MAX_ROWS / 8, searched.count { !it.startsWith("row:") && !it.startsWith("out:") })
+        assertEquals(searched, oldestFirst(inputs).filterIsInstance<ChatItem.Message>().map { it.key })
     }
 }
