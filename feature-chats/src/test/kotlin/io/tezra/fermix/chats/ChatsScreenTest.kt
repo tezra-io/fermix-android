@@ -2,6 +2,7 @@ package io.tezra.fermix.chats
 
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -21,9 +22,9 @@ import org.robolectric.annotation.Config
 private const val MENU_PADDING_DP = 8f
 
 /**
- * The Chats list as the owner meets it, on Robolectric: a row whose link ended on `1002` says so and never
- * that the phone was unpaired (design section 9.4), and a row's long-press menu carries section 13.4's
- * entries in its order, over the held row. JUnit 4, in Roborazzi's activity, on the compact window of
+ * The Chats list as the owner meets it, on Robolectric: its bar names the app in words, a row whose link ended on
+ * `1002` says so and never that the phone was unpaired (design section 9.4), and a row's long-press menu carries
+ * section 13.4's entries in its order, over the held row. JUnit 4, in Roborazzi's activity, on the compact window of
  * @FermixPreviews.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -55,6 +56,16 @@ class ChatsScreenTest {
         onOpen: (ChatRow) -> Unit = {},
         onMoveToTop: (String) -> Unit = {},
     ) = ChatsActions({}, {}, onOpen, onMoveToTop, { _, _ -> }, {}, {}, {}, {})
+
+    // The owner, 2026-10-14: the bar sets the name in the app's own type, as section 13.4 does; the wordmark stays on
+    // Welcome, where it is large enough to hold its cuts (README, the Chats list's departures).
+    @Test
+    fun `the bar names the app in its title, Fermix, as words and not as the wordmark`() {
+        show(listOf(row(Link.Connecting)))
+        rule.onNodeWithText("Fermix").assertExists()
+        val wordmarks = rule.onAllNodesWithContentDescription("Fermix", useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("no node is described as the wordmark: $wordmarks", wordmarks.isEmpty())
+    }
 
     @Test
     fun `a row whose link ended on 1002 says protocol error, and nothing of being unpaired`() {

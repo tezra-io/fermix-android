@@ -325,3 +325,8 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   chat, with the Chats list one Back away for "+" and the menu; with two or more, the app opens on the list, or
   in the chat you were in when you left. A notification, a shortcut or a share still opens the chat it names.
   The chat is the first thing the app draws, with no glimpse of the list before it.
+- **The name in the Chats list's bar, and a new app icon.** The Chats list's bar names the app "Fermix" in the app's
+  own type again, with no blue dots, as the wordmark's fine cuts blurred at that small size; Welcome keeps the Fermix
+  mark and the wordmark, where they are large. The app's icon is the Fermix mark in white on a near-black disc, its
+  visor dark and its eyes white; the themed icon still shows the mark's shape, and the screen shown as the app starts
+  is unchanged.

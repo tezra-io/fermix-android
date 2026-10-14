@@ -5,12 +5,13 @@ A hand-picked few, for a reader of the repository who wants to see the app: each
 `scripts/app_shots.sh` writes from a green `./gradlew recordRoborazziDebug` and which git does not track. The
 whole set, every preview, is CI's `app-shots` artifact on each run. Welcome, Verify and Paired were copied from the
 record at `aca4c1c`, whose screens `7f995e8` left unchanged. The Instance screen's pair, which Task 23 moved, was
-copied from the record of the part that moved it last, the avatar's photo. The Chats list, the chat, the thinking
-card and the approval card were copied from the record of the change that gave the avatar its eyes on the eight
-brighter tints (Task 24), which drew them on each Chats row and in the chat's bar (the thinking card's pair, which
-Task 23 had copied for its verb and halo, moved again with the bar). When a change moves one of these previews, the
-change copies the new image here by the same name, so the few stay the screens as they are (AGENTS.md,
-Screenshots).
+copied from the record of the part that moved it last, the avatar's photo. The chat, the thinking card and the
+approval card were copied from the record of the change that gave the avatar its eyes on the eight brighter tints
+(Task 24), which drew them in the chat's bar (the thinking card's pair, which Task 23 had copied for its verb and
+halo, moved again with the bar). The Chats list's pair was copied from the record of the change that set the name in
+its bar in the app's own type again (Task 29); its rows' eyes and tints are Task 24's. When a change moves one of
+these previews, the change copies the new image here by the same name, so the few stay the screens as they are
+(AGENTS.md, Screenshots).
 
 | Screen | Preview | Light | Dark |
 |---|---|---|---|

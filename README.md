@@ -439,8 +439,8 @@ eyes at `EYE_SHUT`) and Sideways (the pair `AVATAR_LOOK`, 11 mark units, to the 
 its right eye on the disc's centre); `eyeStyleOf(name)` is the style data stores by name, and any other name
 fails loud. `drawAvatarEyes(style, disc, paths)` lays the pair on a disc: from the left eye's left edge to the right
 eye's right edge, about 28.2 mark units, it spans `EYE_SPAN`, 0.46, of the disc's width, centred, its line through
-the disc's centre, in `AVATAR_EYE_INK`, the mark's ink `#0B0B0D` in both modes, as the launcher icon draws the mark
-on its white canvas: a tint is a fixed surface of its own colour. `SpecimenEyes` draws the six at 32, 48 and 72 dp
+the disc's centre, in `AVATAR_EYE_INK`, the mark's ink `#0B0B0D` in both modes, as the mark's own file fills it: a
+tint is a fixed surface of its own colour. `SpecimenEyes` draws the six at 32, 48 and 72 dp
 on Coral, Teal and Slate.
 
 The rest of onboarding's motion (the M51 update's 7.2 and 7.4) is data beside the mark's, one table a moment, in
@@ -474,8 +474,9 @@ its first path the SVG's even-odd path with every number rounded half up to one 
 absolute `M`, then `c`, `m` and `z`, a number's leading zero dropped and a separator only where the path grammar
 needs one, which keeps it under lint's `VectorPath` limit of 3,000 characters); then each eye's `rect` as a rounded
 rectangle's path at its exact numbers, `Mx+r,y Hx+w−r Ar,r 0,0 1,x+w,y+r Vy+h−r Ar,r 0,0 1,x+w−r,y+h Hx+r
-Ar,r 0,0 1,x,y+h−r Vy+r Ar,r 0,0 1,x+r,y Z` without the spaces; the foreground filled in `#0B0B0D`, the splash in
-`@color/mark_ink`. `MarkGeometryTest` and `LauncherIconTest` fail until every value and point matches (the body's
+Ar,r 0,0 1,x,y+h−r Vy+r Ar,r 0,0 1,x+r,y Z` without the spaces; the foreground filled in `#FFFFFF` (the mark reversed
+on the icon's ink), the splash in `@color/mark_ink`. `MarkGeometryTest` and `LauncherIconTest` fail until every
+value and point matches (the body's
 points within 0.05 units) and the icon's farthest point lies inside the safe zone.
 
 The Fermix wordmark (the owner, 2026-10-10) is `FermixWordmark(height)`: the first-party wordmark the Mac and Linux
@@ -502,7 +503,9 @@ test resource directory to the classpath's root and keeps one of two files of on
 `SOURCE.json` would stand for the mark's, which would then be no input of the tests (`MarkGeometryTest` holds the
 classpath's copy of each of the mark's files to the file). A new drawing is re-vendored whole, `SOURCE.json` and
 `WordmarkGeometry.kt` in the same change. `SpecimenWordmark` draws it at 96, 40 and 24 dp, each box in the
-hairline. Welcome's title (40 dp) and the Chats list's bar (24 dp) are the wordmark.
+hairline. Welcome's title (40 dp) is the wordmark. The Chats list's bar drew it at 24 dp from 2026-10-10 and sets the
+name in the app's type again since the owner's 2026-10-14 (the Chats list's departures); the specimen keeps its 24 dp
+drawing as the reference of the wordmark at a bar's size, under its label of then, "24 dp, the Chats list's bar".
 
 The fonts are google/fonts' own files at
 one commit, unmodified, under the SIL Open Font License 1.1: `src/main/res/font/` holds them,
@@ -587,9 +590,9 @@ reads it where it is silent, for the owner to settle:
   focus, a progress arc, a selection or a caret. It measures 5.2 : 1 on the light canvas and 3.8 : 1 on
   the dark one, and `onSignal` on it 5.2 : 1. The owner, on 2026-10-10, gave it one more place: the Fermix
   wordmark's two eye-dots, which are the file's own `#2b5cff` in both modes, as macOS and Linux draw them.
-  They are a mark's size, never text, and lie on the canvas in both places the app draws them, Welcome and
-  the Chats list's bar: 5.2 : 1 on the light canvas and 3.8 : 1 on the dark one, over a mark's 3 : 1,
-  though dark mode's would be under text's 4.5 : 1 (`ContrastTest` measures both).
+  They are a mark's size, never text, and lie on the canvas where the app draws them, on Welcome (the Chats
+  list's bar drew them too until 2026-10-14): 5.2 : 1 on the light canvas and 3.8 : 1 on the dark one, over a
+  mark's 3 : 1, though dark mode's would be under text's 4.5 : 1 (`ContrastTest` measures both).
 - The unread divider is `signal` whole, where M51 drew the accent at 70 %: Fermix blue at 70 % measures
   2.4 : 1 on the dark canvas, under a mark's 3 : 1.
 - 1.2's table gives `textSecondary` on the dark canvas as 7.1 : 1, the figure of its row below; `#A3A6AE`
@@ -625,8 +628,8 @@ reads it where it is silent, for the owner to settle:
   both canvases but Amber, 2.2 : 1 on light mode's canvas, under a mark's 3 : 1, where Sand stood at 2.7: darkening
   it to 3 : 1 (`#C38731`) makes it ochre, so it stays as the owner's set has it and `ContrastTest` pins it. Coral
   and Sky are the proposal's `#E07A5F` and `#5BA4D9` nudged to 3.05 : 1 there, a change no one would see.
-- The avatar's eyes are drawn in the mark's own ink in both modes, as the launcher icon draws the mark on its white
-  canvas, not in the mode's ink: on dark mode's ink only Iris and Slate would reach 3 : 1.
+- The avatar's eyes are drawn in the mark's own ink in both modes, as the mark's own file fills it, not in the
+  mode's ink: on dark mode's ink only Iris and Slate would reach 3 : 1.
 - Where 1.3 names no row, the accent as a fill became the ink with `onInk` on it, and as text or an icon
   the ink: text buttons and dialog actions, Connecting's current step, the SAS ring, the upload bars, the
   approval's Approve and countdown, the model chip's dot and the sheet's check, a Chats row's "thinking…"
@@ -706,8 +709,9 @@ bar, each as Material draws it in the theme), `SpecimenType` (the type scale wit
 `SpecimenShape` (a group of bubbles from each sender between the two control-plane surfaces) and
 `SpecimenFocus` (the focus ring around a pill, a text button, a chip, a card, a switch's row and a plain row
 on the canvas, the agent bubble and the ink, drawn as a preview's ring is, with nothing focused) and
-`SpecimenWordmark` (the Fermix wordmark at 96 dp and at the 40 and 24 dp Welcome and the Chats list's bar draw
-it, each box in the hairline) and `SpecimenEyes` (the avatar's six eye styles at 32, 48 and 72 dp on three tints),
+`SpecimenWordmark` (the Fermix wordmark at 96 dp, at the 40 dp Welcome draws it and at the 24 dp the Chats list's
+bar drew it until 2026-10-14, kept as the wordmark's reference at a bar's size, each box in the hairline) and
+`SpecimenEyes` (the avatar's six eye styles at 32, 48 and 72 dp on three tints),
 each short enough to fit whole in the shortest window at font scale 2.0, so that every token is in all
 twelve images.
 
@@ -1409,10 +1413,9 @@ sheet's content: the tints, the styles and "Remove photo".
 
 `feature-chats` (`io.tezra.fermix.chats`) is design section 13.4's Chats list, section 9.4's trust
 screens, section 13.7's app lock screens and the phone's conversations. `ChatsScreen(ui, actions)` is the
-bar (the Fermix wordmark, 24 dp tall with its own margin where the title's words stood, 16 dp in,
-as Linux heads its sidebar with it and macOS draws it on its welcome; "+"; and the overflow's "App
-lock") over a row per (instance, profile), or, given no row, the mark and "Add Fermix", which the
-app does not reach today (below). A row (`rowOf`, pure) is the avatar with its dot, the title (the
+bar ("Fermix" in the app's type, "+", and the overflow's "App lock") over a row per (instance, profile), or,
+given no row, the mark and "Add Fermix", which the app does not reach today (below). A row (`rowOf`, pure) is
+the avatar with its dot, the title (the
 nickname or the label, with the host-owned agent's name when it is not "Fermix", and the DEV tag), and a
 second line in the canon's order: a link that speaks (a trust state, a protocol error, a connection taken
 over, a daemon too old or too new), "thinking…", "Draft: …", then the newest row's words, the agent's markdown as its plain
@@ -1472,7 +1475,7 @@ owner to settle:
 - An avatar without a photo shows the Fermix mark's two eyes on its tint, in one of six still styles the owner
   picks on "Picture" (the owner, 2026-10-11: "Just different style of eyes is fine"), where the M51 update's 7.3,
   whose reference player draws the Chats row as a plain disc, retired the two-dot mark from it. The eyes are the
-  mark's ink in both modes, as the launcher icon draws the mark. A new pairing's eyes are Open, and the Name step's
+  mark's ink in both modes, as the mark's own file fills it. A new pairing's eyes are Open, and the Name step's
   disc draws them so. The styles' spoken names ("Open eyes", "Happy eyes", "A wink", "Squinting eyes", "Sleepy
   eyes", "Looking sideways") and the eight tints' (Coral, Amber, Olive, Teal, Sky, Iris, Rose, Slate) are not the
   design's words. `AVATAR_LOOK`, Sideways' 11 mark units (about 5.7 dp on the chat bar's 32 dp avatar, the pair's
@@ -1516,10 +1519,19 @@ owner to settle:
   changed. Nothing draws until the restore has chosen, so the chat is the launch's first frame. One thing is the
   owner's to settle: a launch that drops one of two Fermixes (no key under its alias) with no chat kept opens the
   other's chat over the list and its "Re-pair this Fermix" row.
-- The bar's title is the Fermix wordmark, the owner's of 2026-10-10, where section 13.4 and the canon set the
-  words "Fermix" in 22/28 medium: 24 dp tall with the file's own margin, its letters 20.7 dp, near the 22 px
-  Linux's sidebar draws them, 16 dp in as the words were, centred in the 64 dp bar. TalkBack reads it as
-  "Fermix", as it read the words; neither is a heading.
+- The bar's title is the words "Fermix" in the app's type again, and the launcher icon is the mark reversed on the
+  ink, the owner's of 2026-10-14 ("like how Telegram is"). Task 22 had put the Fermix wordmark (the owner's of
+  2026-10-10) in the bar at 24 dp, and Task 18 had drawn the icon as the update's section 2 draws the mark in light
+  mode, the ink on the white canvas; but at 24 dp the wordmark's 45-degree chamfers, its diagonal bar cuts and its
+  two blue dots turn into one- or two-pixel steps, its lowercase i fights the capitals and its X reads lighter than
+  the slab F, E, R and M, its angles speak another language than the soft mark and the app's round pills and
+  avatars, and the black mark on white looked like a placeholder. So the bar sets the name as section 13.4 and the
+  canon do, 22/28 medium in the ink, 16 dp in, with no dots and nothing else in the bar changed; Welcome keeps the
+  mark and the wordmark, which holds at 40 dp; and the icon is the mark in white (`canvas`) on an ink disc
+  (`#0B0B0D`, light mode's ink), the visor showing the disc through its cut and the eyes white in it, the themed
+  icon's monochrome layer the same drawing, and the splash unchanged. White on that ink is light mode's `onInk` on
+  its ink, which `ContrastTest` measures at 19.7 : 1. TalkBack reads the title as "Fermix", as it read the
+  wordmark; neither the words nor the wordmark is a heading.
 
 `feature-chat` (`io.tezra.fermix.chat`) is design section 13.5's Chat screen, with section 13.6's composer
 and section 13.7's message actions. `ChatViewModel` builds its `ChatScreenState` in pure, tested functions
@@ -2327,9 +2339,11 @@ one typed would be, that command once Send is tapped. Nothing is sent until the 
 flight, a rotation and a process death after the copy keep the tray.
 
 The launcher icon is adaptive (`mipmap-anydpi/ic_launcher.xml`, and `ic_launcher_round.xml` as the manifest's
-`roundIcon`): the canvas white background, the Fermix mark from `design/mark/fermix-mark.svg` in light mode's
-ink as the foreground, and that same drawing as the monochrome layer that Android 13's themed icons draw, which
-read its alpha alone and draw it in the wallpaper's colour. The mark is 57 dp across, its centre the icon's, its farthest point 31.6 dp from it, inside the 66 dp circle
+`roundIcon`): light mode's ink, `#0B0B0D`, as the background, the Fermix mark from `design/mark/fermix-mark.svg`
+reversed on it as the foreground, its body and eyes white and its visor the ink through the cut (the owner,
+2026-10-14; the Chats list's departures), and that same drawing as the monochrome layer that Android 13's themed
+icons draw, which read its alpha alone and draw it in the wallpaper's colour. The mark is 57 dp across, its centre
+the icon's, its farthest point 31.6 dp from it, inside the 66 dp circle
 every launcher's mask leaves whole. Its body's numbers are the SVG's to one decimal and relative, as lint's
 `VectorPath` refuses a path over 3,000 characters; the eyes are the SVG's exactly (the design module's paragraph
 says how a new drawing is written in). minSdk 35 reads only the
@@ -3174,8 +3188,9 @@ repository does not track, so these files are not on GitHub:
   of 2026-10-04 to M51, for monochrome colour, the Fermix mark and onboarding's motion. Where the two
   disagree the update wins, over section 13.1's colour above all; the app departs from it in Fermix
   blue's use, the owner's of 2026-10-05 and 2026-10-10, and in the Fermix wordmark, the owner's of
-  2026-10-10, which Welcome and the Chats list draw where the design sets the name in words (the design
-  module, above). It is in the owner's design-docs repository, under `fermix/`, and not yet in an engine
+  2026-10-10, which Welcome draws where the design sets the name in words (the design module, above; the
+  Chats list's bar, which drew it too, sets the words again since the owner's 2026-10-14). It is in the owner's
+  design-docs repository, under `fermix/`, and not yet in an engine
   checkout's `docs/design/`.
 - `MILESTONE_51_ANDROID_APP_PUBLISHING_CHECKLIST.md`: getting to Play.
 

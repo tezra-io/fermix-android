@@ -256,10 +256,10 @@ private fun kotlinSources(): List<File> =
 /**
  * The app's icon (design section 13.1, as the M51 update's 3.6 changes it): the launcher's adaptive icon and its round
  * one, each with its background, its foreground and the themed icon's monochrome layer, each layer a resource the app
- * declares; the foreground the vendored Fermix mark in the ink on white, inside the safe zone every mask leaves, and
- * the monochrome layer that same drawing, whose alpha alone the themed icon reads; the system's splash the mark on the
- * canvas in each mode, with no library and nothing holding it; the notification's small icon still the two-dot mark in
- * one colour; and the design's own colours, never the wallpaper's.
+ * declares; the foreground the vendored Fermix mark in white on the ink (the owner, 2026-10-14), inside the safe zone
+ * every mask leaves, and the monochrome layer that same drawing, whose alpha alone the themed icon reads; the system's
+ * splash the mark on the canvas in each mode, with no library and nothing holding it; the notification's small icon
+ * still the two-dot mark in one colour; and the design's own colours, never the wallpaper's.
  */
 class LauncherIconTest {
     @Test
@@ -285,9 +285,9 @@ class LauncherIconTest {
     }
 
     @Test
-    fun `the foreground is the vendored mark in the light ink on the white background, inside the safe zone`() {
-        assertEquals(FermixColors.Light.canvas, colorValue("values", "@color/ic_launcher_background"))
-        assertDrawsTheMark("ic_launcher_foreground") { assertEquals(FermixColors.Light.ink, colorOf(it)) }
+    fun `the foreground is the vendored mark in white on the ink background, inside the safe zone`() {
+        assertEquals(FermixColors.Light.ink, colorValue("values", "@color/ic_launcher_background"))
+        assertDrawsTheMark("ic_launcher_foreground") { assertEquals(FermixColors.Light.canvas, colorOf(it)) }
     }
 
     @Test

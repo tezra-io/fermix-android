@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The light canvas (design section 13.1), which the Fermix mark sits on in the light ink. -->
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The light ink (the M51 update's 1.2), which the Fermix mark sits on reversed, in white (the owner,
+         2026-10-14). -->
+    <color name="ic_launcher_background">#0B0B0D</color>
 </resources>
