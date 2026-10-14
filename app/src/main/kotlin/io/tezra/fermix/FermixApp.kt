@@ -39,12 +39,13 @@ private const val SCREENS = "screens"
 /**
  * The back stack: the root, Welcome, or the Chats list once a record exists or a Fermix a restore dropped
  * waits to be paired again, the app's screens above it and onboarding's on top. Nothing shows until the
- * launch check has run, the records are read and the settings have said whether the app lock is on, so
- * the root never flickers from Welcome to Chats and never shows before the lock; then the chat an intent
- * names is restored, or else the last chat, or else, with one Fermix paired, its chat, over the list. While
- * the lock holds, the screens are not drawn at all, so nothing of them shows under "Fermix is locked" or
- * reaches TalkBack, and what they keep for a rotation they keep across the lock. Another app's share waits
- * behind the lock too, then asks "Send to which Fermix?" or lands.
+ * launch check has run, the records are read, the settings have said whether the app lock is on and the
+ * restore has chosen its chat, so the root never flickers from Welcome to Chats, never shows before the lock
+ * and draws its first frame with that chat on top: the chat an intent names, or else the last chat, or else,
+ * with one Fermix paired, its chat, over the list. While the lock holds, the screens are not drawn at all, so
+ * nothing of them shows under "Fermix is locked" or reaches TalkBack, and what they keep for a rotation they
+ * keep across the lock. Another app's share waits behind the lock too, then asks "Send to which Fermix?" or
+ * lands.
  */
 @Composable
 internal fun FermixApp(
@@ -65,12 +66,13 @@ internal fun FermixApp(
     val chats by rootFlow.collectAsState(initial = null)
     val locked by services.lockGate.locked.collectAsState()
     val known = chats.takeIf { checked && lockKnown }
+    val restored by models.navigator.restored.collectAsState()
     FollowIntents(known, models, hooks.intents)
     FollowLockSetting(remember(services) { services.settings.settings.map { it.appLock } }, hooks.recents)
     val saved = rememberSaveableStateHolder()
     val canvas = LocalFermixColors.current.canvas
     Box(modifier = Modifier.fillMaxSize().background(canvas)) {
-        if (known != null) {
+        if (known != null && restored) {
             val above by models.navigator.above.collectAsState()
             val onboarding by models.onboarding.stack.collectAsState()
             val stack = appBackStack(known, ChatsKey, if (known) above else emptyList(), onboarding)
@@ -105,7 +107,10 @@ private fun shareModel(
 ): ShareModel =
     ShareModel(services.lockGate.sight, chats.ui.map { shareTargetsOf(it?.rows) }, services.shares, ::logShare)
 
-/** Restores a chat once the records are known (AppNavigator.restore), then acts on each intent as it comes. */
+/**
+ * Restores a chat once the records are known (AppNavigator.restore, whose work outlives this effect when an intent
+ * restarts it), then acts on each intent as it comes.
+ */
 @Composable
 private fun FollowIntents(
     known: Boolean?,

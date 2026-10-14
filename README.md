@@ -1513,11 +1513,9 @@ owner to settle:
   13.4 restores only the last open chat and design D10, which keeps the list the root, set aside "Open into the chat
   when one instance is paired". The list stays the root, one Back away with "+" and the overflow; a link from a
   notification or a shortcut, a share and the chat kept still come first, and with two or more paired nothing
-  changed. Two things are the owner's to settle. The chat comes over the list as a restored chat always has: the
-  list draws first and the chat fades in over it once the records and the settings are read, about 0.75 s on the
-  emulator, which only a launch that draws nothing until the restore has chosen would hide. And a launch that drops
-  one of two Fermixes (no key under its alias) with no chat kept opens the other's chat over the list and its
-  "Re-pair this Fermix" row.
+  changed. Nothing draws until the restore has chosen, so the chat is the launch's first frame. One thing is the
+  owner's to settle: a launch that drops one of two Fermixes (no key under its alias) with no chat kept opens the
+  other's chat over the list and its "Re-pair this Fermix" row.
 - The bar's title is the Fermix wordmark, the owner's of 2026-10-10, where section 13.4 and the canon set the
   words "Fermix" in 22/28 medium: 24 dp tall with the file's own margin, its letters 20.7 dp, near the 22 px
   Linux's sidebar draws them, 16 dp in as the words were, centred in the 64 dp bar. TalkBack reads it as
@@ -2160,9 +2158,11 @@ App lock setting), and onboarding's on top. A screen whose instance is gone leav
 kept and restored when the app starts again, unless an intent names another. With one Fermix paired and no
 chat kept, the app starts in its main chat, the list beneath it (the owner, 2026-10-13), so Back shows the list
 with "+" and the overflow; with two or more it starts on the list. The restore runs once for each start of the
-activity, once the records and the lock's setting are read, and behind the lock: Home and a return from Recents
-or the launcher show where the owner left the app, as Android does, while Back from the list ends the activity,
-so the next start, as one after the process was stopped, opens the lone Fermix's chat again. The intents it acts on
+activity, once the records and the lock's setting are read, and behind the lock, on the navigator's own scope, so an
+intent that lands as it reads cancels none of it, and no screen draws until it has chosen: the first frame has its
+chat on top, no list before it and no change into it. Home and a return from Recents or the launcher show where the
+owner left the app, as Android does, while Back from the list ends the activity, so the next start, as one after
+the process was stopped, opens the lone Fermix's chat again. The intents it acts on
 are a chat's deep link, `fermix://chat/{instanceId}/{profileId}`, which notifications and conversation
 shortcuts send, and the static shortcut's "Add Fermix"; another app's share reaches it from the share entry
 (below), in the process, never on its intent. No filter declares the link, but the activity is exported for the
@@ -2365,8 +2365,10 @@ for its own failure; the announcer's answers, about its own chat alone, each row
 kept, and one after a removal writing nothing, the Instance screen of a removed Fermix doing nothing, a row's unread count, each dropped Fermix's "Re-pair this Fermix" row kept by its id whatever its
 title, and the Notifications switch's policy; the lock's gate, a rotation and a phone that cannot lock
 among them; the recents preview hidden until the lock's setting is read (`FollowLockSettingTest`); the trust
-screens' keys; the navigator's restore, a lone Fermix's chat among it, a share's chat it leaves on top, its deep
-links and its pruning; a cold start's first screen, one Fermix's chat over the list and two Fermixes' list; the window's
+screens' keys; the navigator's restore, a lone Fermix's chat among it, a share's chat it leaves on top, a caller
+cancelled as it reads, its deep links and its pruning; a cold start's first screen, one Fermix's chat over the list
+as the first frame drawn, frame by frame, Welcome with none, two Fermixes' list, and a link landing as the restore
+reads; the window's
 flag on Welcome and on the Instance screen, its clearing on the Chats list and its return when the lock
 holds, with the list gone and the prompt up; a dropped Fermix's "Re-pair this Fermix" row as the root; a
 paired Fermix as a row with its long-press menu; the intents the activity takes, and a chat's link

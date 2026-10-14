@@ -21,7 +21,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -115,8 +117,12 @@ class AppNavigatorTest {
             linked.restore(link = ChatKey(second.id, "main"))
             assertEquals(listOf(ChatKey(second.id, "main")), linked.above.value)
 
+            // Waiting on the restore's choice lets the linked navigator's watch run, which keeps second's chat in
+            // settings, and second stays paired; so the chat kept of a Fermix gone is kept in a store of its own.
+            val gone = AppSettingsStore(File(directory, "gone.json"), backgroundScope)
+            gone.setLastChat(ChatRef(first.id, "main"))
             records.value = listOf(second)
-            val restored = AppNavigator(settings, records)
+            val restored = AppNavigator(gone, records)
             restored.restore(link = null)
             assertEquals(emptyList<Any>(), restored.above.value)
             restored.showChat(ChatKey(first.id, "main"))
@@ -147,6 +153,42 @@ class AppNavigatorTest {
             before.showPaired(shared)
             before.restore(link = null)
             assertEquals(listOf(shared), before.above.value)
+        }
+
+    @Test
+    fun `a restore whose caller is cancelled while it reads still chooses, and the next call waits for the choice`() =
+        runTest(main) {
+            val settings = settings()
+            val linked = ChatKey(second.id, "main")
+            // The records as the app's DataStore reads them: not there yet as the restore asks for them.
+            val read = MutableStateFlow<List<Instance>?>(null)
+            val navigator = AppNavigator(settings, read.filterNotNull())
+            // FollowIntents' effect, restarted by an intent that lands while the restore reads, cancels its call.
+            val cancelled = launch { navigator.restore(link = linked) }
+            runCurrent()
+            cancelled.cancel()
+            runCurrent()
+            assertFalse(navigator.restored.value)
+            val next = launch { navigator.restore(link = ChatKey(first.id, "main")) }
+            runCurrent()
+            assertTrue(next.isActive, "the next call waits for the choice")
+            read.value = listOf(first, second)
+            next.join()
+            // The choice is the first call's, its link's chat, and the chat on top is kept from then on.
+            assertTrue(navigator.restored.value)
+            assertEquals(listOf(linked), navigator.above.value)
+            val kept = settings.settings.first { it.lastChat != null }.lastChat
+            assertEquals(ChatRef(second.id, "main"), kept)
+        }
+
+    @Test
+    fun `restored is false until the choice and true after, with nothing to choose too`() =
+        runTest(main) {
+            val navigator = AppNavigator(settings(), MutableStateFlow(emptyList<Instance>()))
+            assertFalse(navigator.restored.value)
+            navigator.restore(link = null)
+            assertTrue(navigator.restored.value)
+            assertEquals(emptyList<Any>(), navigator.above.value)
         }
 
     @Test

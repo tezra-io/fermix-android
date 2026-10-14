@@ -324,3 +324,4 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
 - **With one Fermix, the app opens in its chat.** When only one Fermix is paired, opening the app shows its
   chat, with the Chats list one Back away for "+" and the menu; with two or more, the app opens on the list, or
   in the chat you were in when you left. A notification, a shortcut or a share still opens the chat it names.
+  The chat is the first thing the app draws, with no glimpse of the list before it.

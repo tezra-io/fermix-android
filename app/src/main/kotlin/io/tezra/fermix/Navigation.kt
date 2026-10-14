@@ -7,6 +7,7 @@ import io.tezra.fermix.data.AppSettingsStore
 import io.tezra.fermix.data.ChatRef
 import io.tezra.fermix.data.Instance
 import io.tezra.fermix.data.MAIN_PROFILE
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -101,7 +102,13 @@ class AppNavigator(
 ) : ViewModel() {
     private val aboveState = MutableStateFlow<List<NavKey>>(emptyList())
     val above: StateFlow<List<NavKey>> = aboveState.asStateFlow()
-    private var restored = false
+    private val restoredState = MutableStateFlow(false)
+
+    /** Whether the restore has chosen its chat, or none: the activity draws its screens only from then on. */
+    val restored: StateFlow<Boolean> = restoredState.asStateFlow()
+
+    /** The restore, started by its first call, on this ViewModel's scope. */
+    private var restoring: Job? = null
 
     /** Whether a share put its chat on top, which the restore then leaves there (showPaired). */
     private var shareShown = false
@@ -119,11 +126,18 @@ class AppNavigator(
      * Once per ViewModel: the first of the chat [link] names, the chat open when the owner last left and, with one
      * Fermix paired, its main chat (the owner, 2026-10-13), if that first one's instance is still paired (a link or a
      * kept chat of a Fermix gone leaves the list, not the lone one's chat), unless a share put its chat on top as the
-     * records and the settings were read, or before; then the chat on top is kept from here on.
+     * records and the settings were read, or before; then the chat on top is kept from here on, and [restored] says
+     * so. The first call starts that on this ViewModel's scope, with its [link], and the work outlives its caller: a
+     * caller cancelled as it waits, as an intent that lands meanwhile restarts the activity's effect, cancels only
+     * its wait. Every call returns once the choice is made, a later one's [link] being its caller's to apply.
      */
     suspend fun restore(link: ChatKey?) {
-        if (restored) return
-        restored = true
+        val started = restoring ?: viewModelScope.launch { choose(link) }.also { restoring = it }
+        started.join()
+    }
+
+    /** The restore's reading and its choice, then the watch that keeps the chat on top (restore). */
+    private suspend fun choose(link: ChatKey?) {
         val paired = records.first()
         val ids = paired.map { it.id }.toSet()
         val last =
@@ -140,6 +154,7 @@ class AppNavigator(
                 .distinctUntilChanged()
                 .collect { top -> settings.setLastChat(top?.let { ChatRef(it.instanceId, it.profileId) }) }
         }
+        restoredState.value = true
     }
 
     fun open(key: NavKey) {
