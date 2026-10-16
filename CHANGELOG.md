@@ -330,3 +330,8 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   mark and the wordmark, where they are large. The app's icon is the Fermix mark in white on a near-black disc, its
   visor dark and its eyes white; the themed icon still shows the mark's shape, and the screen shown as the app starts
   is unchanged.
+
+### Fixed
+
+- **A message you send no longer closes the app.** For a moment as your Fermix took a message, the chat could hold it
+  twice, once as sent and once as delivered, and the app stopped; it is now shown once, as far along as it has got.

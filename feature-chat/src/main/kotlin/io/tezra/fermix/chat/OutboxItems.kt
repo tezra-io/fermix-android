@@ -10,10 +10,16 @@ import io.tezra.fermix.session.isApprovalAnswer
 /**
  * The outbox at the bottom, in enqueue order: a refused item with its error card under it; one never written
  * queued behind a running turn, or waiting for a connection; any other on its way, with the clock. An
- * approval's answer is not drawn, nor a model pick on its way (MODEL_PICK_PREFIX).
+ * approval's answer is not drawn, nor a model pick on its way (MODEL_PICK_PREFIX), nor the bubble of an item that a
+ * source further along draws already, its row among [rows] or its bridge from `accepted` (chatItems); a refused
+ * one's card still shows, as no other source tells of the refusal.
  */
-internal fun outboxItems(inputs: ChatInputs): List<ChatItem> {
+internal fun outboxItems(
+    inputs: ChatInputs,
+    rows: List<Placed>,
+): List<ChatItem> {
     val turnRuns = inputs.live.turns.any { it.live }
+    val further = ownMessages(rows) + inputs.bridged.map { it.clientMsgId }
     return inputs.outbox.filterNot(::undrawn).flatMap { item ->
         val delivery =
             when {
@@ -25,9 +31,17 @@ internal fun outboxItems(inputs: ChatInputs): List<ChatItem> {
             }
         val message = ChatItem.Message(outboxKey(item.clientMsgId), outboxMessage(item, delivery, inputs))
         val notSent = item.failure?.let { ChatItem.Error("refused:${item.clientMsgId}", notSentError(item)) }
-        listOfNotNull(message, notSent)
+        listOfNotNull(message.takeIf { item.clientMsgId !in further }, notSent)
     }
 }
+
+/** The owner's messages [rows] draw, by their client_msg_id, each under its outbox item's key (rowKey). */
+private fun ownMessages(rows: List<Placed>): Set<String> =
+    rows
+        .mapNotNull { (it.item as? ChatItem.Message)?.message }
+        .filter { it.sender == Sender.User }
+        .mapNotNull { it.clientMsgId }
+        .toSet()
 
 /**
  * Whether [item] has no bubble: an approval's answer, whose route holds the card's token and whose card says where

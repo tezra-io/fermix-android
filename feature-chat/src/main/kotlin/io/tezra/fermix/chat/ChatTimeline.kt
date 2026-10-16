@@ -52,7 +52,12 @@ internal data class Placed(
  * a turn's "Stopped" or error card); then the requests `accepted` took whose rows have not come yet; then
  * the turns that run, their bubbles and their card; then the outbox. A picture of a turn stands under the key of
  * the card it came under (TurnMedia). Day headers, the unread divider placed as the chat opened, and the groups
- * within two minutes are laid over that.
+ * within two minutes are laid over that. The inputs are read each on its own, so for a frame the owner's message can
+ * stand in two or three of them (its outbox item, its bridge from `accepted`, its row): it is drawn once, by its id,
+ * from the source furthest along, its row before its bridge before its outbox item, as the list refuses a key twice.
+ * The bridge yields to any owner's row that has come (userRequest), the outbox item's bubble only to a row the list
+ * draws (rowItems leaves out a quiet one), so a refused model pick whose quiet row has come keeps its bubble and
+ * its card.
  */
 fun chatItems(inputs: ChatInputs): List<ChatItem> {
     val ascending = inputs.rows.sortedBy { it.serverSeq }
@@ -65,7 +70,7 @@ fun chatItems(inputs: ChatInputs): List<ChatItem> {
         merged(rowItems, extras(inputs, ascending, rowSeqs)) +
             bridgedItems(inputs, ascending) +
             liveItems(inputs, rowSeqs, ascending, media) +
-            outboxItems(inputs)
+            outboxItems(inputs, rowItems)
     val laidOut = grouped(withDays(withUnread(ordered, inputs.unreadAt), inputs), inputs.nowWall)
     return laidOut.asReversed()
 }

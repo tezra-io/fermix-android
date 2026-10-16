@@ -294,6 +294,34 @@ class ChatViewModelTest {
         }
 
     @Test
+    fun `a sent message is one item in every state the chat shows, whether its row or accepted comes first`() =
+        runTest(main) {
+            val rig = Rig(this)
+            val states = mutableListOf<ChatScreenState>()
+            backgroundScope.launch { rig.model.state.collect { state -> state?.let(states::add) } }
+            runCurrent()
+            // The demo daemon writes the owner's row as it answers accepted, and the cache's flows tell the two in
+            // either order: here the row lands while the outbox still holds the item.
+            rig.store.outbox.value = listOf(OutboxItem(msg("q1", "check the disk"), written = true))
+            runCurrent()
+            rig.store.rows.update { listOf(userRow(1, "check the disk", clientMsgId = "q1")) + it }
+            runCurrent()
+            rig.store.outbox.value = emptyList()
+            runCurrent()
+            // And here accepted takes the item out first, which bridges it, and then its row lands.
+            rig.store.outbox.value = listOf(OutboxItem(msg("q2", "empty the trash"), written = true))
+            runCurrent()
+            rig.store.outbox.value = emptyList()
+            runCurrent()
+            rig.store.rows.update { listOf(userRow(2, "empty the trash", clientMsgId = "q2")) + it }
+            runCurrent()
+            val keys = states.map { state -> state.items.map { it.key } }
+            assertEquals(emptyList<List<String>>(), keys.filter { it.distinct() != it })
+            assertEquals(1uL, rig.messages().getValue("q1").seq)
+            assertEquals(2uL, rig.messages().getValue("q2").seq)
+        }
+
+    @Test
     fun `a failed turn is never run again on its own, only by Run again, under a new id`() =
         runTest(main) {
             val rig = Rig(this, rows = listOf(userRow(1, "export it", clientMsgId = "m9")))

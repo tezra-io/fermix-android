@@ -1545,7 +1545,11 @@ It works the list and the media out only while a screen collects them, and lets 
 after the last one left, so a rotation finds them running and a chat shown again later draws once they are worked
 out anew, as one that just opened; what they are made of (the rows, the outbox, the fold, the banner's wait, the
 composer, the tray and the voice note) runs on unseen. Each row's key comes from one index of the sealed bubbles'
-keys, built once per list (`sealedKeys`), never from a search of every turn's bubbles for each row.
+keys, built once per list (`sealedKeys`), never from a search of every turn's bubbles for each row. The outbox,
+what `accepted` took out of it and the rows are read each on its own, so for a frame the owner's message can stand in
+two of them; the list draws its bubble once, by its id, from the source furthest along (its row, then its bridge from
+`accepted`, then its outbox item), as a LazyColumn refuses a key it is given twice, and a refused item's card stays
+(Task 31).
 The bar's subtitle keeps section 13.5's order (`chatLine`); the banner shows once its condition has held
 2 s, Offline without a network and "Can't reach {host} — is it on and awake?" once every candidate has
 failed for 30 s, whose tap (48 dp tall) opens the Instance screen; the screen draws nothing until the cache

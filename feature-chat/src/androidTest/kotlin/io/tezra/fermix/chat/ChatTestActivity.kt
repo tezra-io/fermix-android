@@ -45,13 +45,17 @@ internal val APPROVAL =
 internal fun threadWords(seq: Int): String =
     if (seq == FENCED_ROW) "row $seq\n\n```kotlin\nprintln(\"row $seq\")\n```" else "row $seq"
 
-/** The host's thread, a row a minute from [MORNING], newest last. */
+/**
+ * The host's thread, a row a minute from [MORNING], newest last. The owner's rows carry ids "row-<seq>", which the
+ * rig's sends ("m1", "m2", …) never share, as a phone's UUIDs never share a row's, so a sent bubble is never taken
+ * for a landed one.
+ */
 internal val THREAD =
     (1..THREAD_ROWS).map { seq ->
         if (seq % 2 ==
             1
         ) {
-            userRow(seq, threadWords(seq), seq.toLong())
+            userRow(seq, threadWords(seq), seq.toLong(), clientMsgId = "row-$seq")
         } else {
             agentRow(seq, threadWords(seq), seq.toLong())
         }
