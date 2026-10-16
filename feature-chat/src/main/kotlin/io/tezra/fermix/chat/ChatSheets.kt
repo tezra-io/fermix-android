@@ -84,6 +84,7 @@ private fun pathOf(scope: Candidate.Scope): String =
     when (scope) {
         Candidate.Scope.LAN -> stringResource(R.string.chat_path_lan)
         Candidate.Scope.TAILNET -> stringResource(R.string.chat_path_tailnet)
+        Candidate.Scope.REMOTE -> stringResource(R.string.chat_path_remote)
     }
 
 /** A time to the second in the owner's own form, as Info shows it. */

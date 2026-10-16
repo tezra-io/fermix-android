@@ -1,7 +1,8 @@
 """check_release_policy.sh's check 10: nothing of the debug app's demo (README, "The demo") is in a release, no class
 of io.tezra.fermix.demo in any dex, no name of it in the merged manifest and no resource named as the demo's are;
 and, given R8's mapping of the release, the mapping is the APK's own and maps no class of the package, whatever name
-R8 gave it.
+R8 gave it. And check 7's search for the vectors' keys inside an entry, a native library as the release's iroh library
+is one: a key's hex anywhere, and the hex of a key of one repeated byte only as a run of its own length.
 
 Each APK is made for its test with the SDK's own tools: a manifest linked by aapt2, and a dex that d8 makes of one
 class javac compiles, or that R8 makes in release mode, with its mapping, as the release build does. An APK this
@@ -9,8 +10,10 @@ small fails the other nine checks, whose proof is the policy job's on the real r
 why), so these tests read check 10's own lines alone, and each refusal they expect, the clean APK's included, is
 planted beside a near miss: a package whose name starts as the demo's does.
 """
+import json
 import pathlib
 import unittest
+import zipfile
 
 from support import PACKAGE, ROOT, ScriptTest, build_tool, checked, java_tool, platform_jar
 
@@ -19,6 +22,10 @@ DEMO = "io.tezra.fermix.demo"
 NEAR_MISS = "io.tezra.fermix.demonstration"
 # A string that starts as the demo's resources are named and is not one of them.
 NEAR_MISS_STRING = "demonstration"
+# The vectors whose keys check 7 searches every entry for, and the native library a test plants them in.
+VECTORS = ROOT / "contracts" / "mobile"
+LIBRARY = "lib/arm64-v8a/libplanted.so"
+KEYS_FOUND = "check_release_policy: test material: expected none, found entries holding a key of the vendored vectors:"
 
 
 class ReleaseDemoCheckTest(ScriptTest):
@@ -238,6 +245,66 @@ class ReleaseDemoCheckTest(ScriptTest):
             [f"check_release_policy: demo: expected the app's code in classes*.dex to search for {DEMO}, found no dex"],
             self.demo_lines(result),
         )
+
+
+class ReleaseVectorKeyCheckTest(ScriptTest):
+    def apk_holding(self, name, library):
+        """An APK of [PACKAGE] with an application and nothing else but [LIBRARY], whose bytes are [library]."""
+        work = self.scratch / name
+        work.mkdir()
+        (work / "manifest.xml").write_text(
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android" '
+            f'package="{PACKAGE}"><application/></manifest>\n'
+        )
+        apk = self.scratch / f"{name}.apk"
+        checked([
+            build_tool("aapt2"), "link", "-I", platform_jar(), "-o", apk, "--manifest", work / "manifest.xml",
+            "--min-sdk-version", "35", "--target-sdk-version", "36",
+        ])
+        with zipfile.ZipFile(apk, "a") as archive:
+            archive.writestr(LIBRARY, library)
+        return apk
+
+    def material_lines(self, apk):
+        """What check 7 said: its violations and the entries under them, which every other check's lines end. The
+        other checks refuse an APK this small, so the script exits 1 whatever check 7 found."""
+        result = self.script("check_release_policy.sh", apk)
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        said, inside = [], False
+        for line in (result.stdout + result.stderr).splitlines():
+            if line.startswith("check_release_policy: "):
+                inside = line.startswith("check_release_policy: test material: ")
+            if inside:
+                said.append(line)
+        return said
+
+    @staticmethod
+    def vectors(name):
+        return json.loads((VECTORS / name).read_text())
+
+    def test_a_library_holding_a_keys_hex_is_refused(self):
+        key = self.vectors("push_vectors.json")["vector"]["push_key"]
+        apk = self.apk_holding("hex", b"\x7fELF\x02\x01" + key.encode() + b"\x00\x13\x37")
+
+        self.assertEqual([KEYS_FOUND, f"{LIBRARY} holds push_vectors.json:vector.push_key"], self.material_lines(apk))
+
+    def test_a_key_of_one_repeated_byte_is_refused_as_a_run_of_its_own_length(self):
+        psk = self.vectors("noise_vectors.json")["vectors"][1]["psk"]
+        self.assertEqual("55" * 32, psk, "the plant is the noise vectors' psk, 32 bytes of 0x55")
+        apk = self.apk_holding("run", b"\x7fELF\x02\x01" + psk.encode() + b"\x00\x13\x37")
+
+        self.assertEqual([KEYS_FOUND, f"{LIBRARY} holds noise_vectors.json:vectors.1.psk"], self.material_lines(apk))
+
+    def test_a_longer_run_of_a_repeated_keys_digits_holds_no_key(self):
+        # iroh-android 1.1.0's arm64 library holds 111 fives in a row in its .rodata, which hold the psk's hex: a
+        # table of iroh's, not a key. So does a run one digit longer than a key, at either end, of every such key.
+        private = self.vectors("noise_vectors.json")["vectors"][0]["init_static_private"]
+        salt = self.vectors("push_vectors.json")["vector"]["apns_key_salt"]
+        self.assertEqual(("11" * 32, "73" * 32), (private, salt), "the plants run on these keys' digits")
+        runs = [b"5" * 111, b"5" * 65, b"1" * 65, (salt + "7").encode(), ("3" + salt).encode()]
+        apk = self.apk_holding("longer", b"\x7fELF\x02\x01" + b"\x00".join(runs) + b"\x00\x13\x37")
+
+        self.assertEqual([], self.material_lines(apk))
 
 
 if __name__ == "__main__":

@@ -73,7 +73,8 @@ internal fun planUpsert(
     paired: Instance,
 ): Replacement {
     val index = current.indexOfFirst { it.id == paired.id }
-    if (index >= 0) return replaceAt(current, index, paired)
+    // The same daemon: an approval that names no route leaves the one the record holds (PROTOCOL.md "Remote reach").
+    if (index >= 0) return replaceAt(current, index, paired.copy(route = paired.route ?: current[index].route))
     requireFreeNickname(paired.nickname, paired.id, current)
     return Replacement(current + paired, null)
 }

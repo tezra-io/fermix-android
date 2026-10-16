@@ -46,16 +46,17 @@ private const val NORMAL_CLOSURE = 1000
 internal const val TEST_TIMEOUT_MILLIS = 20_000L
 
 /**
- * How the app makes what talks to a daemon: each instance's session, over the link [dialerFor] dials for its
- * port and pin (its pinned WebSocket, but in the debug app's demo) with its Keystore key, its main profile's
- * store and the [announcer] made for it over the same database, racing the candidate the record kept from the
- * last `hello` first; a pairing's parts; and the Instance screen's connection test. Opening a session reads the
- * Keystore and opens the database, so the supervisor calls it off the main thread. A session, its store and its
- * announcer, holds its database for its life, outside ProfileDatabases' count of readers: the supervisor closes
- * each session it keeps before its instance is removed (SessionSupervisor.remove), and the close returns only once
- * the session's run and every request made before it have ended (Session.close). A pairing's session is the
- * supervisor's only once handed over (SessionSupervisor.adopt); before that nothing orders it against a removal
- * of the same daemon. "Pair again" merges only into a row in a trust state, whose session's run is over.
+ * How the app makes what talks to a daemon: each instance's session, over the link [dialerFor] dials for its port and
+ * pin (its pinned WebSocket to a host, but in the debug app's demo, and the iroh rail to its route) with its Keystore
+ * key, its main profile's store and the [announcer] made for it over the same database, racing its hosts and its route,
+ * the candidate the record kept from the last `hello` first, and saying in each `hello` the revision of the route its
+ * record holds; a pairing's parts; and the Instance screen's connection test. Opening a session reads the Keystore and
+ * opens the database, so the supervisor calls it off the main thread. A session, its store and its announcer, holds its
+ * database for its life, outside ProfileDatabases' count of readers: the supervisor closes each session it keeps before
+ * its instance is removed (SessionSupervisor.remove), and the close returns only once the session's run and every
+ * request made before it have ended (Session.close). A pairing's session is the supervisor's only once handed over
+ * (SessionSupervisor.adopt); before that nothing orders it against a removal of the same daemon. "Pair again" merges
+ * only into a row in a trust state, whose session's run is over.
  */
 internal class AppSessions(
     private val databases: ProfileDatabases,
@@ -64,22 +65,32 @@ internal class AppSessions(
     private val network: StateFlow<NetworkFacts>,
     private val announcer: (instanceId: String, database: Lazy<ProfileDatabase>) -> Announcer,
     private val appVersion: () -> String,
-) : SessionOpener {
-    override fun open(
+) {
+    /**
+     * [instance]'s session, in [scope]: its hosts and its route raced, each `hello` naming the route revision
+     * [relayListRev] reads from the stored record (design M62 section 2, "Wire"): what the phone has saved, never
+     * what a `hello_ack` said before it was. Throws [SessionUnavailable] when it cannot have one now.
+     */
+    fun open(
         instance: Instance,
         scope: CoroutineScope,
+        relayListRev: suspend () -> String?,
     ): Session {
-        if (instance.candidates.isEmpty()) throw SessionUnavailable("${instance.id} has no route to race")
-        val parts = sessionParts(instance)
+        if (instance.raced.isEmpty()) throw SessionUnavailable("${instance.id} has no route to race")
+        val parts = sessionParts(instance, relayListRev)
         val paired = PairedInstance(instance.deviceId, MAIN_PROFILE, instance.gatewayPublicKey())
-        return Session.open(paired, instance.candidates, parts, scope, lastSuccessful = instance.lastCandidate)
+        return Session.open(paired, instance.raced, parts, scope, lastSuccessful = instance.lastCandidate)
     }
 
     /**
-     * What [instance]'s session runs on: its Keystore key, its pinned WebSocket, its main profile's store and
-     * announcer, and the full pull FCM's dropped messages asked for. It reads the Keystore and opens the database.
+     * What [instance]'s session runs on: its Keystore key, its dialer, its main profile's store and
+     * announcer, the full pull FCM's dropped messages asked for, and [relayListRev], the stored route's revision
+     * each `hello` names. It reads the Keystore and opens the database.
      */
-    internal fun sessionParts(instance: Instance): SessionParts {
+    internal fun sessionParts(
+        instance: Instance,
+        relayListRev: suspend () -> String?,
+    ): SessionParts {
         val key = staticKey(instance.keyAlias)
         val database = mainProfile(instance.id)
         return SessionParts(
@@ -91,6 +102,7 @@ internal class AppSessions(
             network = network,
             // FCM dropped pushes for this phone: an empty cache pulls every row, not the newest page.
             fullPull = instance.historyPullDue,
+            relayListRev = relayListRev,
         )
     }
 
@@ -99,12 +111,15 @@ internal class AppSessions(
      * announcer, both opening their database at first use, off the main thread the pairing starts on, the
      * [keystore] dispatcher it reads the Keystore on, and [sessionScope], the supervisor's, for the session
      * the approval hands over. That session reads its store before the record is written, so its open lets
-     * the daemon's files be opened again first, as a removal of it earlier in this process refuses them.
+     * the daemon's files be opened again first, as a removal of it earlier in this process refuses them. It
+     * lives on as the instance's session, so each of its `hello`s names the route revision [relayListRev] reads
+     * for the link's daemon from the stored record, as a session [open] makes does.
      */
     fun pairingParts(
         link: PairingLink,
         keystore: CoroutineDispatcher,
         sessionScope: CoroutineScope,
+        relayListRev: suspend (instanceId: String) -> String?,
     ): PairingParts {
         val instanceId = instanceIdOf(link.gatewayPublicKey)
         val database =
@@ -120,13 +135,17 @@ internal class AppSessions(
             network = network,
             keystore = keystore,
             sessionScope = sessionScope,
+            relayListRev = { relayListRev(instanceId) },
         )
     }
 
-    /** "Test connection": one race over [instance]'s candidates, as a session's, over the dialer its session dials. */
+    /**
+     * "Test connection": one race over [instance]'s hosts and route, as a session's, over the dialer its session
+     * dials.
+     */
     suspend fun test(instance: Instance): TestOutcome {
         val dialer = dialerFor(instance.port, instance.tlsFingerprint())
-        return raceOnce(instance.candidates) { candidate -> LinkCloser(dialer.dial(candidate)) }
+        return raceOnce(instance.raced) { candidate -> LinkCloser(dialer.dial(candidate)) }
     }
 
     /** [instanceId]'s main profile, or [SessionUnavailable] once a removal deleted its files. */

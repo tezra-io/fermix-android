@@ -347,7 +347,7 @@ class PairingFailureTest {
         }
 
     @Test
-    fun `a version-1 link, the vendored one, is Older Fermix, refused before any key is made or socket opened`() =
+    fun `a version-1 link, the vendored one as an older Fermix writes it, is Older Fermix, refused before any key`() =
         runTest {
             val harness = PairingHarness(this)
             harness.start(vendoredVersionOneLink())
@@ -669,7 +669,10 @@ private fun versionRefusal(
         maxVersion = daemonVersion,
     )
 
-/** The vendored link an older Fermix writes, version 1, from fixtures/pairing_links.jsonl. */
+/**
+ * The vendored link from fixtures/pairing_links.jsonl, as an older Fermix writes it: version 1, with no profile.
+ * The export pins version-2 links alone.
+ */
 private fun vendoredVersionOneLink(): String {
     val stream =
         checkNotNull(PairingFailureTest::class.java.getResourceAsStream(LINKS_RESOURCE)) {
@@ -681,7 +684,9 @@ private fun vendoredVersionOneLink(): String {
         .jsonObject
         .getValue("uri")
         .jsonPrimitive.content
-        .also { check("v=1&" in it) { "the vendored link is version 1" } }
+        .also { check("?v=2&" in it) { "the vendored link is version 2" } }
+        .replace("?v=2&", "?v=1&")
+        .replace(Regex("&profile=[^&]*"), "")
 }
 
 /**

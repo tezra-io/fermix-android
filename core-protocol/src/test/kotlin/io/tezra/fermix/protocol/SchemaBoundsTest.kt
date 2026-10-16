@@ -18,6 +18,8 @@ import org.junit.jupiter.api.assertThrows
 import java.math.BigInteger
 
 private const val SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+private const val RELAY = """{"url":"https://us1.relay.fermix.ai/","quic_port":7842}"""
+private const val HOST = """{"host":"192.168.1.8","interface":"en0","scope":"lan"}"""
 private const val CARD =
     """{"url":"https://example.com","site":"Example","title":"Example page","description":"A page",""" +
         """"image_ref":"$SHA"}"""
@@ -26,8 +28,16 @@ private const val CARD =
 private val SAMPLES: Map<String, String> =
     mapOf(
         "profile" to """{"id":"main","name":"Fermix"}""",
-        "candidate" to """{"host":"192.168.1.8","interface":"en0","scope":"lan"}""",
-        "caps" to """{"commands":[],"media":true,"streaming":true,"max_media_bytes":1}""",
+        "candidate" to HOST,
+        "hostCandidate" to HOST,
+        "irohCandidate" to
+            """{"kind":"iroh","node_id":"${"7".repeat(64)}","relays":[$RELAY],"relays_rev":"374b4c8f103627f7"}""",
+        "relay" to RELAY,
+        // The cert lengths of client_binary_frames.jsonl's pair_request, whose tail the plant keeps.
+        "attestation" to """{"kind":"android_keymint","cert_lengths":[16,12,4]}""",
+        "requestOutcome" to
+            """{"client_msg_id":"c","status":"failed","turn_id":"t","result_server_seq":1,"error":"cancelled"}""",
+        "caps" to """{"commands":[],"media":true,"streaming":true,"turn_done":true,"max_media_bytes":1}""",
         "commandDescriptor" to """{"name":"help","aliases":["h"],"description":"Lists the commands"}""",
         "mediaRef" to
             """{"ref":"r","sha256":"$SHA","kind":"image","mime":"image/jpeg","size_bytes":1,"filename":"a.jpg",""" +
@@ -42,17 +52,30 @@ private val SAMPLES: Map<String, String> =
 private val ENVELOPE = setOf("v", "t", "seq")
 
 /**
- * Every bound protocol.schema.json states on a protocol v1 field, planted as a violation into a
- * valid frame of its event and refused under the field's path: minLength, maxLength and x-max-bytes,
- * minimum, maximum, pattern, minItems, maxItems, const, enum, and an array's items. Each frame is the
- * fullest fixture line of its event, a nested definition planted, wherever an event holds it, in a
- * whole sample of its own; a server event is decoded as a run's logical event when it takes no tail,
- * so no bound is out of reach of the 4 KiB header. PROTOCOL.md's rules that the schema does not state
- * are in ValidationTest, and protocol v2's bounds in ProvisionalV2Test.
+ * The candidate union (CandidateSerializer): a `oneOf` with no fields of its own, planted as each of its
+ * alternatives; the route's `kind` is the union's tag, which a value past its `const` makes a kind this app
+ * skips, never refuses (PROTOCOL.md "Server events"), so it is no bound to plant.
+ */
+private const val UNION = "candidate"
+private val UNION_TAGS = mapOf("irohCandidate" to "kind")
+
+/**
+ * Every bound protocol.schema.json states on a field, planted as a violation into a valid frame of its
+ * event and refused under the field's path: minLength, maxLength and x-max-bytes, minimum, maximum,
+ * pattern, minItems, maxItems, const, enum, and an array's items. Each frame is the fullest fixture line
+ * of its event at the schema's version, with its own tail, a nested definition planted, wherever an event
+ * holds it, in a whole sample of its own; a server event is decoded as a run's logical event when it takes
+ * no tail, so no bound is out of reach of the 4 KiB header. PROTOCOL.md's rules that the schema does not
+ * state are in ValidationTest, and design section 7's bounds beyond the export in ProvisionalV2Test.
  */
 class SchemaBoundsTest {
     private val schema = Json.parseToJsonElement(vendored("protocol.schema.json")).jsonObject
     private val defs = schema.getValue("\$defs").jsonObject
+    private val version =
+        schema
+            .getValue("x-protocol-version")
+            .jsonPrimitive.content
+            .toInt()
 
     private fun def(name: String) = defs.getValue(name).jsonObject
 
@@ -73,15 +96,27 @@ class SchemaBoundsTest {
         val header: JsonObject,
         val field: String,
         val bound: String,
+        val tail: ByteArray,
     ) {
         private val raw = def(t)["x-raw-bytes"]?.jsonPrimitive?.boolean == true
 
         fun decode() {
-            val tail = if (raw) byteArrayOf(1) else ByteArray(0)
             when {
-                client -> decodeClientEvent(frameOf("$header", tail))
-                raw -> decodeServerEvent(frameOf("$header", tail))
-                else -> decodeLogicalServerEvent(1, 1uL, "${JsonObject(header - "v" - "seq")}".encodeToByteArray())
+                client -> {
+                    decodeClientEvent(frameOf("$header", tail))
+                }
+
+                raw -> {
+                    decodeServerEvent(frameOf("$header", tail))
+                }
+
+                else -> {
+                    decodeLogicalServerEvent(
+                        version,
+                        1uL,
+                        "${JsonObject(header - "v" - "seq")}".encodeToByteArray(),
+                    )
+                }
             }
         }
 
@@ -91,7 +126,7 @@ class SchemaBoundsTest {
             value: JsonElement,
             bound: String,
             refusedAt: String = path,
-        ) = Plant(client, t, planted(header, path, value), refusedAt, bound)
+        ) = Plant(client, t, planted(header, path, value), refusedAt, bound, tail)
 
         override fun toString() = "${if (client) "client" else "server"} $t: $field $bound"
     }
@@ -107,12 +142,20 @@ class SchemaBoundsTest {
             } else {
                 "fixtures/server_events.jsonl" to "fixtures/server_binary_frames.jsonl"
             }
-        val headers = headerLines(lines).map { it.json } + binaryLines(binary).map { it.header }
-        val header =
-            checkNotNull(headers.filter { it.getValue("t").jsonPrimitive.content == t }.maxByOrNull { it.size }) {
+        val frames =
+            headerLines(lines).map { it.json to ByteArray(0) } + binaryLines(binary).map { it.header to it.raw }
+        val (header, tail) =
+            checkNotNull(
+                frames
+                    .filter {
+                        it.first
+                            .getValue("t")
+                            .jsonPrimitive.content == t
+                    }.maxByOrNull { it.first.size },
+            ) {
                 "no fixture carries the ${if (client) "client" else "server"} event $t"
             }
-        return Plant(client, t, header, "", "")
+        return Plant(client, t, header, "", "", tail)
     }
 
     /** Every frame a bound is planted in, before it is planted. */
@@ -120,32 +163,69 @@ class SchemaBoundsTest {
         val events =
             catalogue("clientEvent").map { fullest(true, it) to def(it) } +
                 catalogue("serverEvent").map { fullest(false, it) to def(it) }
-        val nested =
-            nestings().map { (name, t, path) ->
-                fullest(false, t).with(path, Json.parseToJsonElement(SAMPLES.getValue(name)), "") to def(name)
-            }
+        val nested = nestings().map { nesting -> planted(nesting) to fieldsOf(nesting.name) }
         return events + nested
     }
 
+    /** The fullest frame of [nesting]'s event, the sample of each definition that holds it planted first. */
+    private fun planted(nesting: Nesting): Plant {
+        val chain = generateSequence(nesting) { it.outer }.toList().asReversed()
+        return chain.fold(fullest(nesting.client, nesting.t)) { frame, level ->
+            frame.with(level.path, Json.parseToJsonElement(SAMPLES.getValue(level.name)), "")
+        }
+    }
+
+    /** A nested definition, the event that holds it and the path of its first instance there. */
+    private data class Nesting(
+        val name: String,
+        val client: Boolean,
+        val t: String,
+        val path: String,
+        val outer: Nesting? = null,
+    )
+
     /**
-     * Each place a server event holds a nested definition, read from the schema: the definition, the
-     * event, and the path of its first instance there. Two levels down is as deep as the schema nests.
+     * Each place an event holds a nested definition, read from the schema, the candidate union as each of its
+     * alternatives. Three levels down (a route's relay) is as deep as the schema nests.
      */
-    private fun nestings(): List<Triple<String, String, String>> {
+    private fun nestings(): List<Nesting> {
         val direct =
-            catalogue("serverEvent").flatMap { t ->
-                references(def(t), "").map { (name, path) -> Triple(name, t, path) }
+            listOf(true to "clientEvent", false to "serverEvent").flatMap { (client, direction) ->
+                catalogue(direction).flatMap { t ->
+                    references(def(t), "").map { (name, path) -> Nesting(name, client, t, path) }
+                }
             }
-        val inner =
-            direct.flatMap { (outer, t, at) ->
-                references(def(outer), "$at.").map { (name, path) -> Triple(name, t, path) }
+        var level = expand(direct)
+        val all = level.toMutableList()
+        repeat(2) {
+            level =
+                expand(
+                    level.flatMap { outer ->
+                        references(def(outer.name), "${outer.path}.").map { (name, path) ->
+                            outer.copy(name = name, path = path, outer = outer)
+                        }
+                    },
+                )
+            all += level
+        }
+        check(level.all { references(def(it.name), "").isEmpty() }) { "a definition nests four deep; plant it too" }
+        return all
+    }
+
+    /** The candidate union's place as each of its alternatives, every other nesting as it is. */
+    private fun expand(nestings: List<Nesting>): List<Nesting> =
+        nestings.flatMap { nesting ->
+            if (nesting.name != UNION) {
+                listOf(nesting)
+            } else {
+                def(UNION).getValue("oneOf").jsonArray.map { nesting.copy(name = it.jsonObject.reference()!!) }
             }
-        check(
-            inner.all { (name) ->
-                references(def(name), "").isEmpty()
-            },
-        ) { "a definition nests three deep; plant it too" }
-        return direct + inner
+        }
+
+    /** [name]'s definition, without the union's tag. */
+    private fun fieldsOf(name: String): JsonObject {
+        val tag = UNION_TAGS[name] ?: return def(name)
+        return JsonObject(def(name) + ("properties" to JsonObject(def(name).getValue("properties").jsonObject - tag)))
     }
 
     /** The nested definitions [definition]'s fields hold, each with the path of its first instance under [prefix]. */
@@ -183,9 +263,8 @@ class SchemaBoundsTest {
     @Test
     fun `each nested definition is planted wherever an event holds it, in a sample with every field it defines`() {
         val nested = defs.keys.filter { it !in catalogue("clientEvent") + catalogue("serverEvent") }
-        val hosted = nestings().map { it.first }.toSet()
-        assertEquals(nested.toSet() - setOf("envelope", "clientEvent", "serverEvent", "pairingLink"), hosted)
-        assertEquals(emptyList<Pair<String, String>>(), catalogue("clientEvent").flatMap { references(def(it), "") })
+        val hosted = nestings().map { it.name }.toSet()
+        assertEquals(nested.toSet() - setOf("envelope", "clientEvent", "serverEvent", "pairingLink", UNION), hosted)
         hosted.forEach { name ->
             assertEquals(def(name).fields().keys, Json.parseToJsonElement(SAMPLES.getValue(name)).jsonObject.keys, name)
         }
@@ -245,6 +324,7 @@ class SchemaBoundsTest {
         return when {
             reference != null -> Json.parseToJsonElement(SAMPLES.getValue(reference))
             item?.get("type")?.jsonPrimitive?.content == "string" -> JsonPrimitive("x")
+            item?.get("type")?.jsonPrimitive?.content == "integer" -> JsonPrimitive(1)
             else -> error("no sample for an array of $item")
         }
     }

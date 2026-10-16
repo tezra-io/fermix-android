@@ -28,7 +28,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * retry"), and every other failure is reported by candidate.
  */
 class CandidateRacerTest {
-    private val candidates = (1..4).map { Candidate("100.64.0.$it", TAILNET, IP) }
+    private val candidates: List<Candidate> = (1..4).map { Candidate.Host("100.64.0.$it", TAILNET, IP) }
 
     @Test
     fun `attempts start 250 ms apart, in order`() =
@@ -70,7 +70,7 @@ class CandidateRacerTest {
     @Test
     fun `when every attempt fails, each failure is reported by candidate in the order given`() =
         runTest {
-            val failures = candidates.associateWith { IOException("no route to ${it.host}") }
+            val failures = candidates.associateWith { IOException("no route to $it") }
             val result = CandidateRacer.race(candidates.reversed()) { throw failures.getValue(it) }
             val allFailed = assertInstanceOf<RaceResult.AllFailed>(result)
             assertEquals(candidates.reversed(), allFailed.failures.keys.toList())
@@ -176,9 +176,9 @@ class CandidateRacerTest {
                         Session(candidate, failsToClose = candidate == candidates[1]).also { sessions += it }
                     }
                 }
-            assertEquals("${candidates[1].host} failed to close", failure.message)
+            assertEquals("${candidates[1]} failed to close", failure.message)
             assertEquals(3, sessions.size)
-            sessions.forEach { assertTrue(it.closed, "${it.candidate.host} was left open") }
+            sessions.forEach { assertTrue(it.closed, "${it.candidate} was left open") }
         }
 
     @Test
@@ -198,7 +198,7 @@ class CandidateRacerTest {
     @Test
     fun `an empty, oversized or repeated list, or a stagger outside 0 to 10 s, is refused`() =
         runTest {
-            val seventeen = (1..17).map { Candidate("192.168.1.$it", LAN, IP) }
+            val seventeen = (1..17).map { Candidate.Host("192.168.1.$it", LAN, IP) }
             assertThrows<IllegalArgumentException> { CandidateRacer.race(emptyList()) { Session(it) } }
             assertThrows<IllegalArgumentException> { CandidateRacer.race(seventeen) { Session(it) } }
             assertThrows<IllegalArgumentException> { CandidateRacer.race(candidates + candidates[0]) { Session(it) } }
@@ -264,7 +264,7 @@ class CandidateRacerTest {
 
         override fun close() {
             closed = true
-            check(!failsToClose) { "${candidate.host} failed to close" }
+            check(!failsToClose) { "$candidate failed to close" }
         }
     }
 

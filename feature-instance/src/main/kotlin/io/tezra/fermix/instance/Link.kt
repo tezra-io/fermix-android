@@ -195,7 +195,10 @@ fun linkWords(
         }
     }
 
-/** The live path (design section 13.5): "Tailscale · 38 ms" or "Wi-Fi · 9 ms", from the candidate's scope. */
+/**
+ * The live path (design section 13.5): "Tailscale · 38 ms" or "Wi-Fi · 9 ms", from the candidate's scope, or
+ * "From anywhere · 120 ms" over the daemon's iroh route (M62).
+ */
 @Composable
 fun pathWords(
     scope: Candidate.Scope,
@@ -204,4 +207,5 @@ fun pathWords(
     when (scope) {
         Candidate.Scope.TAILNET -> stringResource(R.string.instance_path_tailnet, latencyMs)
         Candidate.Scope.LAN -> stringResource(R.string.instance_path_lan, latencyMs)
+        Candidate.Scope.REMOTE -> stringResource(R.string.instance_path_remote, latencyMs)
     }

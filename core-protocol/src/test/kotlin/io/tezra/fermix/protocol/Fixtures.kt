@@ -75,6 +75,13 @@ class BinaryLine(
     }
 }
 
+/** pairing_links.jsonl's link at [index], from 0: `{uri, query}`, the query's fields decoded. */
+internal fun pairingLinkFixture(index: Int): JsonObject =
+    vendored("fixtures/pairing_links.jsonl")
+        .lines()
+        .filter { it.isNotEmpty() }[index]
+        .let { reader.parseToJsonElement(it).jsonObject }
+
 internal fun headerLines(path: String): List<HeaderLine> =
     vendored(path).lines().filter { it.isNotEmpty() }.mapIndexed { index, line -> HeaderLine(index + 1, line) }
 

@@ -265,6 +265,7 @@
     <string name="chat_info_finished">finished</string>
     <string name="chat_path_lan">Wi-Fi</string>
     <string name="chat_path_tailnet">Tailscale</string>
+    <string name="chat_path_remote">From anywhere</string>
 
     <!-- Code and table cards (section 13.5). Labels the design does not give (section 13.8). -->
     <string name="chat_code_copy">Copy code</string>

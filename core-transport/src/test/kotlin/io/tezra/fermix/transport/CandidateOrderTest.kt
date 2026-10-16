@@ -8,14 +8,17 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
-/** Design section 5.1's order: last successful, tailnet addresses, MagicDNS names, LAN addresses. */
+/** Design section 5.1's order and M62's: last successful, tailnet addresses, MagicDNS names, LAN addresses, route. */
 class CandidateOrderTest {
-    private val lanIp = Candidate("192.168.1.8", LAN, IP)
-    private val lanIp2 = Candidate("10.0.0.8", LAN, IP)
-    private val lanName = Candidate("workstation.local", LAN, NAME)
-    private val tailnetIp = Candidate("100.101.102.103", TAILNET, IP)
-    private val tailnetIp2 = Candidate("fd7a:115c:a1e0::1", TAILNET, IP)
-    private val magicDns = Candidate("workstation.tail1234.ts.net", TAILNET, NAME)
+    private val route =
+        Candidate.Route("7".repeat(64), listOf(Candidate.Relay("us1.relay.fermix.ai", 7842)), "374b4c8f103627f7")
+
+    private val lanIp = Candidate.Host("192.168.1.8", LAN, IP)
+    private val lanIp2 = Candidate.Host("10.0.0.8", LAN, IP)
+    private val lanName = Candidate.Host("workstation.local", LAN, NAME)
+    private val tailnetIp = Candidate.Host("100.101.102.103", TAILNET, IP)
+    private val tailnetIp2 = Candidate.Host("fd7a:115c:a1e0::1", TAILNET, IP)
+    private val magicDns = Candidate.Host("workstation.tail1234.ts.net", TAILNET, NAME)
 
     @Test
     fun `tailnet addresses come first, then MagicDNS names, then LAN addresses, then LAN names`() {
@@ -53,15 +56,65 @@ class CandidateOrderTest {
 
     @Test
     fun `more than the wire's 16 candidates is refused`() {
-        val seventeen = (1..17).map { Candidate("192.168.1.$it", LAN, IP) }
+        val seventeen = (1..17).map { Candidate.Host("192.168.1.$it", LAN, IP) }
         assertEquals(16, candidateOrder(seventeen.take(16)).size)
         assertThrows<IllegalArgumentException> { candidateOrder(seventeen) }
     }
 
     @Test
     fun `a host that is empty or past 253 bytes is refused`() {
-        assertThrows<IllegalArgumentException> { Candidate("", LAN, IP) }
-        assertEquals(253, Candidate("a".repeat(253), LAN, NAME).host.length)
-        assertThrows<IllegalArgumentException> { Candidate("a".repeat(254), LAN, NAME) }
+        assertThrows<IllegalArgumentException> { Candidate.Host("", LAN, IP) }
+        assertEquals(253, Candidate.Host("a".repeat(253), LAN, NAME).host.length)
+        assertThrows<IllegalArgumentException> { Candidate.Host("a".repeat(254), LAN, NAME) }
+    }
+
+    @Test
+    fun `the route goes last, after every host`() {
+        assertEquals(
+            listOf(tailnetIp, magicDns, lanIp, lanName, route),
+            candidateOrder(listOf(route, lanName, lanIp, magicDns, tailnetIp)),
+        )
+    }
+
+    @Test
+    fun `a route that was the last successful goes first`() {
+        assertEquals(
+            listOf(route, tailnetIp, lanIp),
+            candidateOrder(listOf(lanIp, route, tailnetIp), lastSuccessful = route),
+        )
+    }
+
+    @Test
+    fun `sixteen hosts and the route race the best fifteen hosts and the route, sixteen in all`() {
+        val sixteen = (1..16).map { Candidate.Host("192.168.1.$it", LAN, IP) }
+        val ordered = candidateOrder(sixteen + route)
+        assertEquals(MAX_CANDIDATES, ordered.size)
+        assertEquals(sixteen.take(15) + route, ordered)
+        val withLast = candidateOrder(sixteen + route, lastSuccessful = sixteen.last())
+        assertEquals(listOf(sixteen.last()) + sixteen.take(14) + route, withLast)
+    }
+
+    @Test
+    fun `two routes are refused`() {
+        val other = route.copy(nodeId = "8".repeat(64))
+        assertThrows<IllegalArgumentException> { candidateOrder(listOf(route, other)) }
+    }
+
+    @Test
+    fun `a host never lies in the remote scope, and a route's fields are the wire's`() {
+        assertThrows<IllegalArgumentException> { Candidate.Host("192.168.1.8", Candidate.Scope.REMOTE, IP) }
+        assertEquals(Candidate.Scope.REMOTE, route.scope)
+        assertEquals("https://us1.relay.fermix.ai/", route.relays.single().url)
+        val relay = route.relays.single()
+        listOf(
+            { route.copy(nodeId = "7".repeat(63)) },
+            { route.copy(nodeId = "A".repeat(64)) },
+            { route.copy(relays = emptyList()) },
+            { route.copy(relays = List(9) { relay }) },
+            { route.copy(revision = "374B4C8F103627F7") },
+            { Candidate.Relay("US1.relay.fermix.ai", 7842) },
+            { Candidate.Relay("us1.relay.fermix.ai", 0) },
+            { Candidate.Relay("us1.relay.fermix.ai", 65_536) },
+        ).forEach { make -> assertThrows<IllegalArgumentException> { make() } }
     }
 }

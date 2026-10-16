@@ -46,7 +46,7 @@ class HelloTest {
             val hello = connection.next()
             assertEquals(2, hello.v)
             assertEquals(1uL, hello.seq)
-            assertEquals(ClientEvent.Hello("device-1", "0.1.0", 7uL, 2, 3uL), hello.event)
+            assertEquals(ClientEvent.Hello("device-1", "0.1.0", 7uL, 2, lastMutationSeq = 3uL), hello.event)
         }
 
     @Test

@@ -41,7 +41,7 @@ internal fun testRecord(
         profile = "fermix",
         label = host,
         tint = "Slate",
-        candidates = listOf(Candidate("192.0.2.$gateway", Candidate.Scope.LAN, Candidate.Kind.IP)),
+        candidates = listOf(Candidate.Host("192.0.2.$gateway", Candidate.Scope.LAN, Candidate.Kind.IP)),
         port = 4031,
         deviceId = "share-test-$gateway",
         keyAlias = "fermix.device.share-test.$gateway",

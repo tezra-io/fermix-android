@@ -51,20 +51,15 @@ import io.tezra.fermix.design.rowFocusRing
 import io.tezra.fermix.transport.Candidate
 
 // The visual canon's Instance page: `.sh` section headers 18 dp above and 4 below, 24 at the sides; `.kv`
-// rows at least 48 dp, 4 dp and 24 dp of padding, 16 dp between label and value; `.cand` candidates, 4 dp
-// apart under 2 dp, over 6 dp, with 8 dp dots and an 11/16 scope tag (`.cand em`), 5 dp inside its hairline
-// at the sides and none above or below; the `.log` on the code card's dark, 16 dp corners, 4 dp under its
-// header and 24 at the sides, 10 dp and 12 dp inside, in #C9CCD4.
+// rows at least 48 dp, 4 dp and 24 dp of padding, 16 dp between label and value; a candidate's 11/16 scope tag
+// (`.cand em`, the lines themselves in CandidateLines.kt), 5 dp inside its hairline at the sides and none above
+// or below; the `.log` on the code card's dark, 16 dp corners, 4 dp under its header and 24 at the sides, 10 dp
+// and 12 dp inside, in #C9CCD4.
 private val SIDES = 24.dp
 private val HEADER_TOP = 18.dp
 private val HEADER_BOTTOM = 4.dp
 private val ROW_ENDS = 4.dp
 private val ROW_GAP = 16.dp
-private val CANDIDATE_GAP = 4.dp
-private val CANDIDATE_TOP = 2.dp
-private val CANDIDATE_BOTTOM = 6.dp
-private val CANDIDATE_DOT = 8.dp
-private val CANDIDATE_INSET = 8.dp
 private val TAG_CORNER = 6.dp
 private val TAG_SIDES = 5.dp
 private val LOG_CORNER = 16.dp
@@ -80,14 +75,14 @@ private val BAR_SIDES = 4.dp
 private val CARD_CORNER = 16.dp
 internal val CARD_ROW_SIDES = 16.dp
 
-/** The canon's candidate line, mono 13/20. */
-private val CANDIDATE_STYLE = FermixType.mono.copy(fontSize = 13.sp, lineHeight = 20.sp)
+/** The canon's candidate line, mono 13/20, which a row's mono value takes too. */
+internal val CANDIDATE_STYLE = FermixType.mono.copy(fontSize = 13.sp, lineHeight = 20.sp)
 
 /** The canon's log, mono 12/18. */
 private val LOG_STYLE = FermixType.mono.copy(fontSize = 12.sp, lineHeight = 18.sp)
 
 /** The canon's scope tag, 11/16 medium on a hairline. */
-private val TAG_STYLE = FermixType.labelSmall.copy(fontFeatureSettings = null)
+internal val TAG_STYLE = FermixType.labelSmall.copy(fontFeatureSettings = null)
 
 /** The bar above a page (the canon's `.ab`) with the back button alone. */
 @Composable
@@ -207,64 +202,6 @@ internal fun SwitchRow(
             modifier = Modifier.weight(1f),
         )
         Switch(checked = on, onCheckedChange = null)
-    }
-}
-
-/**
- * The record's candidates, each with its port, its scope and whether it is [reached] (reachableCandidates), [sides]
- * in from the page's or a card's edges.
- */
-@Composable
-internal fun Candidates(
-    candidates: List<Candidate>,
-    port: Int,
-    sides: Dp = SIDES,
-    reached: (Candidate) -> Boolean,
-) {
-    Column(
-        modifier = Modifier.padding(start = sides, end = sides, top = CANDIDATE_TOP, bottom = CANDIDATE_BOTTOM),
-        verticalArrangement = Arrangement.spacedBy(CANDIDATE_GAP),
-    ) {
-        for (candidate in candidates) CandidateLine(candidate, port, reached(candidate))
-    }
-}
-
-@Composable
-private fun CandidateLine(
-    candidate: Candidate,
-    port: Int,
-    reached: Boolean,
-) {
-    val colors = LocalFermixColors.current
-    val scope =
-        when (candidate.scope) {
-            Candidate.Scope.LAN -> R.string.instance_scope_lan
-            Candidate.Scope.TAILNET -> R.string.instance_scope_tailnet
-        }
-    // The dot stands apart, on the middle of the address's line, and the address and its tag flow beside it:
-    // at a large font the scope tag drops below the address, under it rather than under the dot, and never
-    // splits it.
-    val firstLine = with(LocalDensity.current) { CANDIDATE_STYLE.lineHeight.toDp() }
-    Row(horizontalArrangement = Arrangement.spacedBy(CANDIDATE_INSET)) {
-        Box(modifier = Modifier.height(firstLine), contentAlignment = Alignment.Center) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(CANDIDATE_DOT)
-                        .background(if (reached) colors.ok else colors.inkTertiary, CircleShape),
-            )
-        }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(CANDIDATE_INSET),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.instance_candidate, candidate.host, port),
-                style = CANDIDATE_STYLE,
-                color = colors.textSecondary,
-            )
-            Tag(stringResource(scope), TAG_STYLE, ends = 0.dp)
-        }
     }
 }
 

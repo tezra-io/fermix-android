@@ -12,6 +12,7 @@
     <!-- A no-break space keeps the figure with its unit when a large font wraps the line. -->
     <string name="instance_path_tailnet">Tailscale · %1$d\u00A0ms</string>
     <string name="instance_path_lan">Wi-Fi · %1$d\u00A0ms</string>
+    <string name="instance_path_remote">From anywhere · %1$d\u00A0ms</string>
     <string name="instance_link_revoked">Unpaired by %1$s</string>
     <string name="instance_link_identity_changed">%1$s\'s identity changed (reinstalled?)</string>
     <string name="instance_link_replaced">Another session took over this connection</string>
@@ -73,6 +74,8 @@
     <string name="instance_candidate" translatable="false">%1$s:%2$d</string>
     <string name="instance_scope_lan" translatable="false">lan</string>
     <string name="instance_scope_tailnet" translatable="false">tailnet</string>
+    <!-- The daemon's iroh route among the candidates (M62), its relays' hosts under it. -->
+    <string name="instance_route">From anywhere</string>
     <!-- The test's result in place: section 13.5's banner line when no route answers. -->
     <string name="instance_test_not_reached">Can\'t reach %1$s — is it on and awake?</string>
 

@@ -168,6 +168,22 @@ class InstanceScreenTest {
     }
 
     @Test
+    fun `over the route the path is From anywhere, and its row after the hosts names its relays and never its id`() {
+        val record = sample(nickname = "Studio").copy(route = ROUTE)
+        val remote = Link.Up(Candidate.Scope.REMOTE, latencyMs = 41, caughtUp = true)
+        show(ui().copy(record = record, link = remote, reachable = setOf(ROUTE)))
+        val path = string(R.string.instance_path_remote, 41)
+        rule.onAllNodesWithText(path, substring = true).assertCountEquals(1)
+        open()
+        rule.onNodeWithText(path).performScrollTo().assertIsDisplayed()
+        val route = rule.onNodeWithText(string(R.string.instance_route)).performScrollTo().fetchSemanticsNode()
+        rule.onNodeWithText("us1.relay.fermix.ai, eu1.relay.fermix.ai").assertIsDisplayed()
+        rule.onAllNodesWithText(ROUTE.nodeId.take(8), substring = true).assertCountEquals(0)
+        val host = rule.onNodeWithText(TAILNET.host, substring = true).fetchSemanticsNode()
+        assertTrue("the route's row is under the hosts", route.boundsInRoot.top >= host.boundsInRoot.bottom)
+    }
+
+    @Test
     fun `the test's outcome under the buttons is said to TalkBack as it comes, politely`() {
         val reached = TestState.Done(TestOutcome.Reached(TAILNET, millis = 911))
         show(ui().copy(test = reached))

@@ -54,7 +54,7 @@ internal fun sample(
         label = host,
         nickname = nickname,
         tint = "Slate",
-        candidates = listOf(Candidate("100.101.42.$gateway", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
+        candidates = listOf(Candidate.Host("100.101.42.$gateway", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
         port = PORT,
         deviceId = "device-$gateway",
         keyAlias = "fermix.device.$gateway.0102030405060708",

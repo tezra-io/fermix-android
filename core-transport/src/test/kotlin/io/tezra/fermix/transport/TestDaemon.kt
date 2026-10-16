@@ -41,7 +41,8 @@ internal fun tlsServer(
 }
 
 /** The candidate a test server listens on. */
-internal fun MockWebServer.candidate(): Candidate = Candidate(hostName, Candidate.Scope.LAN, Candidate.Kind.NAME)
+internal fun MockWebServer.candidate(): Candidate.Host =
+    Candidate.Host(hostName, Candidate.Scope.LAN, Candidate.Kind.NAME)
 
 /**
  * The daemon's side of a test WebSocket. It echoes every binary message, answers a close with 1000,

@@ -189,8 +189,8 @@ class ReconciliationTest {
             val harness = Harness(this)
             val routes =
                 listOf(
-                    WireCandidate("192.168.1.20", "en0", CandidateScope.LAN),
-                    WireCandidate("100.101.102.103", "utun4", CandidateScope.TAILNET),
+                    WireCandidate.Host("192.168.1.20", "en0", CandidateScope.LAN),
+                    WireCandidate.Host("100.101.102.103", "utun4", CandidateScope.TAILNET),
                 )
             val first = harness.connect(HELLO_ACK.copy(candidates = routes))
             assertTrue(SessionEvent.Candidates(listOf(LAN, TAILNET)) in harness.events)

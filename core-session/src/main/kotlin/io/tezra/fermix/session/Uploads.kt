@@ -455,7 +455,7 @@ private fun UploadProgress.cut(): UploadProgress {
 
 /** [this]'s `attach_begin`. */
 internal fun OutboxAttachment.begin(): ClientEvent.AttachBegin =
-    ClientEvent.AttachBegin(attachId, kind, mime, sizeBytes, name, sha256)
+    ClientEvent.AttachBegin(attachId, kind, mime, sizeBytes, name, sha256 = sha256)
 
 /** [clientMsgId]'s uploads leave the session's progress with it. */
 internal fun SessionCore.forgetUploads(clientMsgId: String) {

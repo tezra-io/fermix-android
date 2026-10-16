@@ -112,7 +112,7 @@ internal class PairedDaemon(
             profile = "fermix",
             label = label,
             tint = "Slate",
-            candidates = listOf(Candidate("100.101.102.$number", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
+            candidates = listOf(Candidate.Host("100.101.102.$number", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
             port = 4031,
             deviceId = "device-$number",
             keyAlias = "fermix.device.$number.0102030405060708",

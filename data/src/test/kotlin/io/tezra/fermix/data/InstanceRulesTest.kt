@@ -41,6 +41,28 @@ class InstanceRulesTest {
     }
 
     @Test
+    fun `the same daemon paired again keeps its route when the pairing brings none, and takes the one it brings`() {
+        val routed = listOf(mac.copy(route = ROUTE), linux)
+        val bare = instance(gateway = 1, host = "suj-mbp", keyAlias = "fermix.device.1.ffffffff")
+        assertEquals(ROUTE, planUpsert(routed, bare).instances.first().route)
+        val newer = ROUTE.copy(revision = "00000000000000a1")
+        assertEquals(newer, planUpsert(routed, bare.copy(route = newer)).instances.first().route)
+    }
+
+    @Test
+    fun `a reinstalled daemon merged into a row takes no route of the old one, a daemon it no longer is`() {
+        val reinstalled = instance(gateway = 7, host = "suj-mbp")
+        val plan = planMerge(listOf(mac.copy(route = ROUTE), linux), mac.id, reinstalled)
+        assertNull(plan.instances.first().route)
+    }
+
+    @Test
+    fun `an update writes the route the daemon reports`() {
+        val updated = updated(listOf(mac, linux), mac.id) { it.copy(route = ROUTE) }
+        assertEquals(ROUTE, updated.first().route)
+    }
+
+    @Test
     fun `the same daemon under the key alias its record holds is no pairing, and is refused`() {
         // A pairing always brings a new alias (design section 6.1), and upsert hands back the old one to delete.
         assertThrows<IllegalArgumentException> { planUpsert(listOf(mac, linux), mac.copy(label = "suj-mini")) }
@@ -136,7 +158,7 @@ class InstanceRulesTest {
 
     @Test
     fun `an update changes what the daemon reports and this phone's settings, in place`() {
-        val lan = Candidate("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
+        val lan = Candidate.Host("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
         val reported: (Instance) -> Instance = {
             it.copy(
                 host = "suj-mini",
@@ -209,5 +231,5 @@ class InstanceRulesTest {
     }
 
     /** The vendored hello_ack's caps, which a record keeps as its snapshot. */
-    private fun helloAckCaps() = fixtureServerEvents().filterIsInstance<ServerEvent.HelloAck>().single().caps
+    private fun helloAckCaps() = fixtureServerEvents().filterIsInstance<ServerEvent.HelloAck>().first().caps
 }

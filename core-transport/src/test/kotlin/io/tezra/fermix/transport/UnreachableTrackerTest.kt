@@ -15,7 +15,7 @@ class UnreachableTrackerTest {
     private val online =
         NetworkFacts(1L, defaultHasVpn = false, defaultHasCgnatAddress = false, otherUidVpnPresent = false)
     private val otherNetwork = online.copy(defaultNetwork = 2L)
-    private val candidate = Candidate("100.101.102.103", TAILNET, IP)
+    private val candidate = Candidate.Host("100.101.102.103", TAILNET, IP)
 
     @Test
     fun `with no network yet it is waiting for one`() {

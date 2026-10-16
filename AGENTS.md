@@ -109,7 +109,13 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   shown to carry it; CI does that on every pull request. Never edit a vendored file: re-vendor as
   `README.md` says, with `CHECKSUMS.txt` and `SOURCE.json` in the same change.
 - The daemon ships first. A wire change lands in the engine, the engine releases it, and then it is
-  re-vendored here. The app never pins a protocol that no released daemon serves.
+  re-vendored here. The app never pins a protocol that no released daemon serves. One pin stands against this, for
+  M62's phone side to be built before the engine releases it: engine `dev` at `90608c1a` (README, "The vendored
+  contract"), under which `release_preflight.sh` refuses every app release; the re-vendor from the engine release
+  that ships the rail (M62 stage 7) ends it.
+- Read an engine checkout through git alone, at the commit you pin: `git -C <engine> ls-tree`, `cat-file`,
+  `show` or `archive`. Never run anything in it, never check a commit out there, and never read its working
+  tree, which may hold another session's work that no commit carries.
 - The design is the owner's record. It sits in an engine checkout's `docs/design/`, which the engine
   repository does not track, so it is not on GitHub. `MILESTONE_51_ANDROID_COMPANION_APP.md` is the
   authority; the pipelines are in `MILESTONE_51_ANDROID_CI_CD.md`, and developer setup and signing
@@ -174,6 +180,10 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   `Pairing`, `Session`, the states and events) updates the demo and its tests in the same change: core-session's
   `DemoDaemonTest` runs the demo against core-session's own pairing and session, and the app's `DemoWiringTest`
   and `DemoDeviceTest` the debug app's wiring.
+- The phone's iroh key is iroh's own: the endpoint makes it in memory as it binds, and nothing reads it, passes
+  one in, persists it or logs it, nor the endpoint id it gives (PROTOCOL.md "Remote reach": the daemon knows a
+  phone by its Noise key alone). The endpoint binds with `presetMinimal()` and the relays the stored routes name,
+  never `presetN0()`, which brings n0's relays and discovery.
 - JVM tests never touch a real daemon, the network or the phone's Keystore. The deterministic
   vectors carry fixed private keys, and the JVM gate replays them and the vendored fixtures. The
   hardware half runs on a real phone with a freshly generated Keystore key, never an imported

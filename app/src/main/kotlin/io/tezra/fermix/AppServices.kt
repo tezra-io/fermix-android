@@ -42,9 +42,13 @@ import io.tezra.fermix.onboarding.handleStarter
 import io.tezra.fermix.push.PushLog
 import io.tezra.fermix.push.TrialDecrypt
 import io.tezra.fermix.session.Dialer
+import io.tezra.fermix.session.InstanceDialer
 import io.tezra.fermix.session.PhoneIdentity
+import io.tezra.fermix.session.RouteDialer
 import io.tezra.fermix.session.Session
 import io.tezra.fermix.session.deviceModel
+import io.tezra.fermix.transport.Candidate
+import io.tezra.fermix.transport.IrohRail
 import io.tezra.fermix.transport.NetworkWatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -108,7 +112,8 @@ data class ServiceDispatchers(
  * session has an upload in flight is [uploadingOf]'s to say, Session.uploading, which a test replaces to have
  * one; the device keys are the Keystore's ([keys]), which a test replaces with software keys; and every
  * session, pairing and connection test dials what [dialerFor] makes for a daemon's port and pin, its pinned
- * WebSocket, which the debug app's demo answers for its own pins (README, "The demo").
+ * WebSocket, which the debug app's demo answers for its own pins (README, "The demo"), and a daemon's route
+ * over the process's one iroh endpoint ([rail]).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppServices(
@@ -146,6 +151,12 @@ class AppServices(
     val settings = AppSettingsStore(File(context.noBackupFilesDir, SETTINGS_FILE), storeScope)
     private val network = NetworkWatcher(context)
 
+    /**
+     * The phone's iroh endpoint (M62 stage 6), bound at the first route a race dials, its relay map those the
+     * records' routes name; its streams run in [scope], and [close] lets go of it.
+     */
+    private val rail = IrohRail(context.applicationContext, knownRelays = { instances.relays() }, scope)
+
     /** Whether [start] has registered the network watch, which [close] then releases, once. */
     private val watching = AtomicBoolean(false)
     private val identity by lazy { phoneIdentity(context) }
@@ -164,7 +175,7 @@ class AppServices(
         AppSessions(
             databases,
             keys,
-            dialerFor,
+            { port, pin -> InstanceDialer(dialerFor(port, pin), RouteDialer(rail)) },
             network.facts,
             announcer = { instanceId, database ->
                 RowAnnouncer(
@@ -196,7 +207,7 @@ class AppServices(
     val supervisor: SessionSupervisor =
         SessionSupervisor(
             instances.instances,
-            sessionsMade,
+            { record, inScope -> sessionsMade.open(record, inScope) { instances.routeOf(record.id)?.revision } },
             SessionEvents(
                 instances,
                 databases,
@@ -307,11 +318,12 @@ class AppServices(
      * past the reset and threw into the next test (its canvas gone from the reset registry). It waits [wait] at most,
      * in real time, and then throws, the watch's refusal suppressed in it. The one coroutine it never waits for hands
      * the app lock its setting on the main thread ([lockHop]): cancelled, it waits only for a thread that may be this
-     * close's own. The coroutines and the stores end even when the system will not release the watch, whose refusal
-     * is thrown on. A second call ends nothing more, as a Closeable's. The profile databases stay open until the
-     * process ends: ProfileDatabases closes one only as its instance is removed. A phone's process ends with the
-     * services; an emulated one's application ends them as it ends (FermixApplication.onTerminate), Robolectric's
-     * after each test. Call it off the services' own threads, which it waits for.
+     * close's own. The coroutines and the stores end even when the system will not release the watch, whose refusal is
+     * thrown on. The iroh endpoint and its connections are let go of after the coroutines, whose streams ran on them,
+     * however long those took. A second call ends nothing more, as a Closeable's. The profile databases stay open until
+     * the process ends: ProfileDatabases closes one only as its instance is removed. A phone's process ends with the
+     * services; an emulated one's application ends them as it ends (FermixApplication.onTerminate), Robolectric's after
+     * each test. Call it off the services' own threads, which it waits for.
      */
     fun close(wait: Duration = CLOSE_WAIT_MILLIS.milliseconds) {
         require(wait.isPositive()) { "a wait of $wait" }
@@ -320,12 +332,16 @@ class AppServices(
         val running = listOf(sessionScope, scope, storeScope)
         running.forEach { it.cancel() }
         val ended = runBlocking { withTimeoutOrNull(wait) { running.forEach { it.coroutineContext.job.join() } } }
+        // The streams in [scope] have let go of their handles: the endpoint and its connections go after them.
+        val railReleased = runCatching { runBlocking { rail.shutdown() } }
         if (ended == null) {
             val outlived = IllegalStateException("the services' coroutines still ran $wait after their close")
             released.exceptionOrNull()?.let(outlived::addSuppressed)
+            railReleased.exceptionOrNull()?.let(outlived::addSuppressed)
             throw outlived
         }
         released.getOrThrow()
+        railReleased.getOrThrow()
     }
 
     /** The App lock switch: the settings say it, and the gate hears it from them. */
@@ -348,7 +364,10 @@ class AppServices(
     fun onboardingParts(): OnboardingParts =
         OnboardingParts(
             gate = { HardwareGate.check(context.packageManager) },
-            pairings = handleStarter(keys) { link -> sessionsMade.pairingParts(link, io, sessionScope) },
+            pairings =
+                handleStarter(keys) { link ->
+                    sessionsMade.pairingParts(link, io, sessionScope) { id -> instances.routeOf(id)?.revision }
+                },
             identity = identity,
             instances = instances,
             network = network.facts,
@@ -444,6 +463,20 @@ private object AppClock : ChatClock {
 
     override fun wallMs(): Long = System.currentTimeMillis()
 }
+
+/** The route [instanceId]'s record holds now: what its `hello` acknowledges (M62 section 2, "Wire"). */
+private suspend fun InstanceStore.routeOf(instanceId: String): Candidate.Route? =
+    instances
+        .first()
+        .firstOrNull { it.id == instanceId }
+        ?.route
+
+/** Every relay the records' routes name: the iroh endpoint's relay map when it binds. */
+private suspend fun InstanceStore.relays(): Set<Candidate.Relay> =
+    instances
+        .first()
+        .mapNotNull { it.route }
+        .flatMapTo(HashSet()) { it.relays }
 
 /** A fault the app logs and lives with: a session it cannot open now, a chat's request that did not go. */
 private fun logFault(

@@ -133,7 +133,7 @@ private fun AdvancedRow(
 
 /**
  * The path while the link is up (the status line says it too, and this row stands with the routes it chose from),
- * the candidates, each lit while it is reachable, and the protocol.
+ * the candidates, each lit while it is reachable, the iroh route after the hosts, and the protocol.
  */
 @Composable
 private fun ConnectionSection(ui: InstanceUi) {
@@ -146,7 +146,14 @@ private fun ConnectionSection(ui: InstanceUi) {
     RowsCard(
         listOfNotNull(
             path?.let { words -> { KvRow(label = pathLabel, value = words, sides = CARD_ROW_SIDES) } },
-            { Candidates(ui.record.candidates, ui.record.port, CARD_ROW_SIDES) { it in ui.reachable } },
+            {
+                Candidates(
+                    ui.record.candidates,
+                    ui.record.route,
+                    ui.record.port,
+                    CARD_ROW_SIDES,
+                ) { it in ui.reachable }
+            },
             { KvRow(label = protocol, value = version, mono = true, sides = CARD_ROW_SIDES) },
         ),
     )

@@ -7,6 +7,7 @@ import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.descriptors.elementDescriptors
 import kotlinx.serialization.descriptors.elementNames
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.int
@@ -25,10 +26,10 @@ private const val ULONG = "kotlin.ULong"
  * The models against protocol.schema.json, which they are written by hand from and checked
  * against here rather than generated from. "Required" is read by reflection over the kotlinx
  * descriptors (a property without a default), together with the version table in Rules.kt for
- * the fields one version alone requires; the catalogue is the rule books' keys; each field's type is
- * its descriptor's kind, and a nested object's its model. Where protocol v2 adds to a protocol v1
- * shape, the addition must be one ProvisionalV2Test lists. Every bound the schema states is planted in
- * SchemaBoundsTest.
+ * the fields one version alone requires, at the schema's own version; the catalogue is the rule books' keys;
+ * each field's type is its descriptor's kind, and a nested object's its model. Where design section 7 adds to a
+ * shape the vendored export does not carry, the addition must be one ProvisionalV2Test lists. Every bound the
+ * schema states is planted in SchemaBoundsTest.
  */
 class SchemaTest {
     private val schema = Json.parseToJsonElement(vendored("protocol.schema.json")).jsonObject
@@ -64,6 +65,11 @@ class SchemaTest {
         mapOf(
             "profile" to serializer<Profile>().descriptor,
             "candidate" to serializer<Candidate>().descriptor,
+            "hostCandidate" to serializer<Candidate.Host>().descriptor,
+            "irohCandidate" to serializer<Candidate.Iroh>().descriptor,
+            "relay" to serializer<Relay>().descriptor,
+            "attestation" to serializer<Attestation>().descriptor,
+            "requestOutcome" to serializer<RequestOutcome>().descriptor,
             "caps" to serializer<Caps>().descriptor,
             "commandDescriptor" to serializer<CommandDescriptor>().descriptor,
             "mediaRef" to serializer<MediaRef>().descriptor,
@@ -79,7 +85,14 @@ class SchemaTest {
         val versioned: List<VersionedField>,
     )
 
-    /** Every protocol v1 definition with a model: the events of both directions and the nested shapes. */
+    /** The protocol version the vendored schema is of, which its required fields are read at. */
+    private val schemaVersion = schema.getValue("x-protocol-version").jsonPrimitive.int
+
+    /**
+     * Every definition of the schema with a model: the events of both directions and the nested shapes, but the
+     * candidate union, a `oneOf` of two of them with no fields of its own (CandidateSerializer). The route's
+     * `kind` is the union's tag, which the serializer writes, so its model has no such field.
+     */
     private fun v1Models(): List<Model> {
         val client =
             catalogue("clientEvent").map {
@@ -93,12 +106,28 @@ class SchemaTest {
                     Model(it, def(it), r.descriptor, r.versioned)
                 }
             }
-        return client + server + shapes.map { (name, descriptor) -> Model(name, def(name), descriptor, emptyList()) }
+        val nested =
+            (shapes - "candidate").map { (name, descriptor) ->
+                val definition = if (name == "irohCandidate") def(name).without("kind") else def(name)
+                Model(name, definition, descriptor, emptyList())
+            }
+        return client + server + nested
     }
 
-    /** The fields protocol v1 requires of a model: its non-optional properties, and its v1 rows in Rules.kt. */
+    private fun JsonObject.without(field: String): JsonObject {
+        val required = getValue("required").jsonArray.filterNot { it.jsonPrimitive.content == field }
+        return JsonObject(
+            this + ("required" to JsonArray(required)) + ("properties" to JsonObject(properties() - field)),
+        )
+    }
+
+    /**
+     * The fields the schema's version requires of a model: its non-optional properties, its rows of that version in
+     * Rules.kt, and the fields of a form the codec reads beside design section 7's (V2_OTHER_FORM).
+     */
     private fun Model.requiredAtV1(): Set<String> =
-        descriptor.required() + versioned.filter { V1 in it.requiredIn }.map { it.name }
+        descriptor.required() + versioned.filter { schemaVersion in it.requiredIn }.map { it.name } +
+            V2_OTHER_FORM[name].orEmpty()
 
     @Test
     fun `the codec's bounds are the schema's`() {
@@ -252,7 +281,8 @@ class SchemaTest {
 
     @Test
     fun `the pairing link requires the schema's parameters`() {
-        assertEquals(def("pairingLink").required(), REQUIRED_PARAMETERS.getValue(V1).toSet())
+        assertEquals(def("pairingLink").required(), REQUIRED_PARAMETERS.getValue(schemaVersion).toSet())
+        assertEquals(ROUTE_PARAMETERS.toSet(), def("pairingLink").properties().keys - def("pairingLink").required())
     }
 
     private fun sealedNames(descriptor: SerialDescriptor) =

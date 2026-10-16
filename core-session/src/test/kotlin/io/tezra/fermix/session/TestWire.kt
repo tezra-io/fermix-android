@@ -21,7 +21,7 @@ internal val HELLO_ACK =
         minVersion = 2,
         maxVersion = 2,
         profiles = listOf(Profile(PROFILE, "Fermix")),
-        candidates = listOf(WireCandidate("100.101.102.103", "utun4", CandidateScope.TAILNET)),
+        candidates = listOf(WireCandidate.Host("100.101.102.103", "utun4", CandidateScope.TAILNET)),
         historyHeadSeq = 0uL,
         readUpToSeq = 0uL,
         caps = Caps(commands = emptyList(), maxMediaBytes = 20_971_520),

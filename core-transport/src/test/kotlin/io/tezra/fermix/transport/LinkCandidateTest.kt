@@ -17,11 +17,11 @@ class LinkCandidateTest {
     @Test
     fun `the vendored link's hosts are a MagicDNS name, a tailnet address and a LAN address`() {
         assertEquals(
-            Candidate("workstation.tail1234.ts.net", TAILNET, NAME),
+            Candidate.Host("workstation.tail1234.ts.net", TAILNET, NAME),
             linkCandidate("workstation.tail1234.ts.net"),
         )
-        assertEquals(Candidate("100.101.102.103", TAILNET, IP), linkCandidate("100.101.102.103"))
-        assertEquals(Candidate("192.168.1.8", LAN, IP), linkCandidate("192.168.1.8"))
+        assertEquals(Candidate.Host("100.101.102.103", TAILNET, IP), linkCandidate("100.101.102.103"))
+        assertEquals(Candidate.Host("192.168.1.8", LAN, IP), linkCandidate("192.168.1.8"))
     }
 
     @Test
@@ -37,7 +37,7 @@ class LinkCandidateTest {
                 "192.168.0.0" to LAN,
                 "192.168.255.255" to LAN,
             )
-        inside.forEach { (host, scope) -> assertEquals(Candidate(host, scope, IP), linkCandidate(host), host) }
+        inside.forEach { (host, scope) -> assertEquals(Candidate.Host(host, scope, IP), linkCandidate(host), host) }
         val outside =
             listOf(
                 "100.63.255.255",
@@ -63,7 +63,7 @@ class LinkCandidateTest {
 
     @Test
     fun `a name is a MagicDNS name in lowercase labels under ts dot net, and nothing else`() {
-        assertEquals(Candidate("a.ts.net", TAILNET, NAME), linkCandidate("a.ts.net"))
+        assertEquals(Candidate.Host("a.ts.net", TAILNET, NAME), linkCandidate("a.ts.net"))
         val longest = "${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(54)}.ts.net"
         assertEquals(253, longest.length)
         assertEquals(TAILNET, linkCandidate(longest)?.scope)

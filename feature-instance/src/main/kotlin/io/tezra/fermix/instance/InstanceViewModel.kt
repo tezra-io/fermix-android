@@ -145,7 +145,7 @@ fun instanceUiOf(
         link = linkOf(watched.state, watched.diagnostics),
         diagnostics = watched.diagnostics,
         reachable =
-            reachableCandidates(record.candidates, watched.live, test, reachability(phone.network, record.candidates)),
+            reachableCandidates(record.raced, watched.live, test, reachability(phone.network, record.raced)),
         previews = phone.chat.previews,
         cacheBytes = phone.screen.cacheBytes,
         test = test,

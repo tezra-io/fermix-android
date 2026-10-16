@@ -57,7 +57,7 @@ class WebSocketConnector {
      * addresses becomes a route of its own; how is the owner's decision.
      */
     suspend fun open(
-        candidate: Candidate,
+        candidate: Candidate.Host,
         port: Int,
         trust: PinnedTrust,
     ): Connection {
@@ -109,7 +109,7 @@ internal fun pinnedClient(
 }
 
 private fun upgradeRequest(
-    candidate: Candidate,
+    candidate: Candidate.Host,
     port: Int,
 ): Request {
     val url =

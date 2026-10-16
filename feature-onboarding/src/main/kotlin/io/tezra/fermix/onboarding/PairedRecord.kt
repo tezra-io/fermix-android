@@ -7,10 +7,10 @@ import io.tezra.fermix.data.nicknameRefusal
 import io.tezra.fermix.session.InstanceFacts
 
 /**
- * The record design section 9.1 keeps for an approved pairing: [facts] as the ceremony reports them,
- * with [tint], no nickname yet, and notifications off until the owner allows them (section 13.3, step 7);
- * and what the Instance screen's "This phone" shows (section 13.7): [deviceName], the name `pair_request`
- * carried, and [pairedAt], when the pairing was approved, in milliseconds since the epoch.
+ * The record design section 9.1 keeps for an approved pairing: [facts] as the ceremony reports them, the route among
+ * them when there is one, with [tint], no nickname yet, and notifications off until the owner allows them (section
+ * 13.3, step 7); and what the Instance screen's "This phone" shows (section 13.7): [deviceName], the name
+ * `pair_request` carried, and [pairedAt], when the pairing was approved, in milliseconds since the epoch.
  */
 fun instanceOf(
     facts: InstanceFacts,
@@ -26,6 +26,7 @@ fun instanceOf(
         label = facts.label,
         tint = tint,
         candidates = facts.candidates,
+        route = facts.route,
         port = facts.port,
         deviceId = facts.deviceId,
         keyAlias = facts.keyAlias,

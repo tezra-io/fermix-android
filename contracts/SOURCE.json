@@ -3,11 +3,10 @@
   "description": "Provenance of the vendored Fermix mobile wire contract. The canonical files live in the fermix repository under apps/fermix_core/priv/mobile/; this tree is a byte-identical copy pinned by CHECKSUMS.txt. scripts/verify_protocol_contract.sh asserts the two agree, --source <fermix-checkout> byte-compares against an engine checkout, and --pinned byte-compares against the pinned commit fetched from the public engine repository.",
   "upstream": {
     "repository": "tezra-io/fermix",
-    "commit": "df8d8a4d911b64458a9c908a39de64d817fa5e07",
-    "release": "v0.12.1",
-    "branch": "main",
+    "commit": "90608c1a0e620bdc197dc710786e59ef4e50ab6f",
+    "branch": "dev",
     "working_tree": "clean",
-    "retrieved_at": "2026-09-30"
+    "retrieved_at": "2026-10-15"
   },
   "contracts": [
     {
@@ -15,43 +14,53 @@
       "source_directory": "apps/fermix_core/priv/mobile",
       "vendored_directory": "mobile",
       "source_of_truth_module": "FermixChannels.Mobile.Protocol",
-      "protocol_version": 1,
+      "protocol_version": 2,
       "supported_version_range": {
-        "minimum": 1,
-        "maximum": 1
+        "minimum": 2,
+        "maximum": 2
       },
       "committed_upstream": true,
-      "provenance_note": "Taken on 2026-09-30 from the fermix repository at df8d8a4d on main, the commit the v0.12.1 release was built from, which origin carries, so committed_upstream is true. The export is byte for byte the same on dev at 52b1999d, where it was first read. This is the protocol v1 export, vendored ahead of engine stage D1 so that the repository, its contract check and its CI exist before the v2 export ships: protocol 1 on the 1 to 1 window, read from the schema's x-protocol-version and x-supported-version-range. Stage A1 builds against v2 (MILESTONE_51_ANDROID_COMPANION_APP.md section 16), so this pin is replaced by a re-vendor from the engine release that publishes v2, and nothing in the app is built against v1.",
+      "provenance_note": "Taken on 2026-10-15 from the fermix repository at 90608c1a on dev, through git alone (git cat-file of each blob at the commit, nothing of a working tree), so working_tree is clean and committed_upstream is true. No engine release carries this export yet: it is the v0.15.0 release's export (b268d8e1) plus the M62 rail (1dcab065, a2e0dd52): the iroh candidate in hello_ack and pair_approved, hello.relay_list_rev, the pairing link's iroh, relays and relays_rev, and relays.json. The pin is from dev, not a release, so upstream names no release and release_preflight.sh's check 5 refuses a release tag until a re-vendor from the engine release that publishes the rail (M62 stage 7 releases the engine before the Android app). Protocol 2 on the 2 to 2 window, read from the schema's x-protocol-version and x-supported-version-range. relays.json is vendored with the directory and never read: the phone takes its relays from the route it is given (PROTOCOL.md, Remote reach). attestation_roots.json and android_signers.json, new since v0.12.1, are the daemon's and not read by the app either.",
       "files": [
         {
           "path": "mobile/PROTOCOL.md",
           "source_path": "apps/fermix_core/priv/mobile/PROTOCOL.md",
-          "sha256": "7d832c40821c003278bd7fa246b4199c3f2dcf0d11e102b31aa1869f40a54bfd"
+          "sha256": "e3c0681a87b285590a16628321510ca2ef16171ca869cbfb2c9c0020a2078858"
+        },
+        {
+          "path": "mobile/android_signers.json",
+          "source_path": "apps/fermix_core/priv/mobile/android_signers.json",
+          "sha256": "27dce7a69692b7b7c2329e2cae0c9b00e7a61e92276e2a05178ebb647713421c"
+        },
+        {
+          "path": "mobile/attestation_roots.json",
+          "source_path": "apps/fermix_core/priv/mobile/attestation_roots.json",
+          "sha256": "1c8f9da8b5a13da216198541d276e424c6a73c72af9fa3433f43e096100ae5ed"
         },
         {
           "path": "mobile/fixtures/client_binary_frames.jsonl",
           "source_path": "apps/fermix_core/priv/mobile/fixtures/client_binary_frames.jsonl",
-          "sha256": "a813ba1b8f933657362703471fb9a565dcaba13a9e0e328b530f947c7fcf56aa"
+          "sha256": "c0336b2ad9e08ba75ef536dd6e68850c50cc9b228cad17630e3229b401b265ad"
         },
         {
           "path": "mobile/fixtures/client_events.jsonl",
           "source_path": "apps/fermix_core/priv/mobile/fixtures/client_events.jsonl",
-          "sha256": "d8bb67d61f57161793ba57830e3ae70aa47a77d6eef3f05aa12363fc42368628"
+          "sha256": "ff9d41afb653746806827c9f11334d1731278f14fada8ba2fd609cb86b765271"
         },
         {
           "path": "mobile/fixtures/pairing_links.jsonl",
           "source_path": "apps/fermix_core/priv/mobile/fixtures/pairing_links.jsonl",
-          "sha256": "5a17851bf5eee1643f19e345b68e3de3ac1294f447345578cd91ab28c604adc2"
+          "sha256": "03494205e07052aa54e6ab21713e9e94698a3b62e6dbbb3b62a9d5b6a0cd8ea4"
         },
         {
           "path": "mobile/fixtures/server_binary_frames.jsonl",
           "source_path": "apps/fermix_core/priv/mobile/fixtures/server_binary_frames.jsonl",
-          "sha256": "671b10b85cec4b55afb45557284ebbb38ccf26397de139d5ea7f5159597b70c2"
+          "sha256": "f124c0728a348bbc35b2931f5ceba834709091aea01d252999f008e4f52cafa4"
         },
         {
           "path": "mobile/fixtures/server_events.jsonl",
           "source_path": "apps/fermix_core/priv/mobile/fixtures/server_events.jsonl",
-          "sha256": "a47727887f45154b366657ce1a825834e889f7810b3a1c3a49e2eb9c86fe0ce0"
+          "sha256": "0957d101d7bc47011afd71c7fce91cdf462a66ff2950ccbe74f5b73c808a8c81"
         },
         {
           "path": "mobile/noise_vectors.json",
@@ -61,12 +70,17 @@
         {
           "path": "mobile/protocol.schema.json",
           "source_path": "apps/fermix_core/priv/mobile/protocol.schema.json",
-          "sha256": "c427a1e075c81b5ef69e643d21065b59103352394619eb26d636d0d61a504c31"
+          "sha256": "a723a012d07595ae7cba22f2be7485f7698e3cd389a25a339b5eac58609b97cb"
         },
         {
           "path": "mobile/push_vectors.json",
           "source_path": "apps/fermix_core/priv/mobile/push_vectors.json",
           "sha256": "4245e93eefefa8a3d400122a3d5c1659853f2a34bfd80b3147be61cd2378636d"
+        },
+        {
+          "path": "mobile/relays.json",
+          "source_path": "apps/fermix_core/priv/mobile/relays.json",
+          "sha256": "99c37a22d63035e9d61183bc2fcd1773ec044f7eb396b9d4632e6d2a7bf4baec"
         }
       ]
     }

@@ -44,8 +44,19 @@ import java.io.IOException
 import java.net.URLEncoder
 import java.util.Base64
 
-private val LAN = Candidate("192.168.1.24", Candidate.Scope.LAN, Candidate.Kind.IP)
-private val TAILNET = Candidate("100.101.42.7", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+private val LAN = Candidate.Host("192.168.1.24", Candidate.Scope.LAN, Candidate.Kind.IP)
+private val TAILNET = Candidate.Host("100.101.42.7", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+
+/** A daemon's iroh route (M62). */
+private val ROUTE =
+    Candidate.Route(
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        listOf(Candidate.Relay("relay-a.example.net", 7842)),
+        "374b4c8f103627f7",
+    )
+
+/** A session's `hello` revision where the test needs none. */
+private val NO_REVISION: suspend () -> String? = { null }
 
 /** The Keystore as the opener asks it: the aliases it [holds], and each alias it was [asked] for. */
 private class FakeKeys(
@@ -138,14 +149,49 @@ class AppSessionsTest {
             val paired = record(1)
             val keys = FakeKeys(holds = setOf(paired.keyAlias))
             val opener = opener(keys)
-            opener.open(paired, backgroundScope).close()
+            opener.open(paired, backgroundScope, NO_REVISION).close()
             assertEquals(listOf(paired.keyAlias), keys.asked)
 
             val lost = record(2)
-            assertThrows(SessionUnavailable::class.java) { opener.open(lost, backgroundScope) }
+            assertThrows(SessionUnavailable::class.java) { opener.open(lost, backgroundScope, NO_REVISION) }
             assertEquals(listOf(paired.keyAlias, lost.keyAlias), keys.asked)
             val routeless = paired.copy(candidates = emptyList())
-            assertThrows(SessionUnavailable::class.java) { opener.open(routeless, backgroundScope) }
+            assertThrows(SessionUnavailable::class.java) { opener.open(routeless, backgroundScope, NO_REVISION) }
+        }
+
+    @Test
+    fun `a record with only its route opens a session, which races the route and names the stored revision`() =
+        runTest {
+            val routed = record(1).copy(candidates = emptyList(), route = ROUTE)
+            val opener = opener(FakeKeys(holds = setOf(routed.keyAlias)))
+            opener.open(routed, backgroundScope, NO_REVISION).close()
+            val parts = opener.sessionParts(routed) { ROUTE.revision }
+            assertEquals(ROUTE.revision, parts.relayListRev())
+        }
+
+    @Test
+    fun `a pairing's session names the revision of the route stored for the link's daemon`() =
+        runTest {
+            val paired = record(1)
+            val asked = mutableListOf<String>()
+            val link = PairingLink.parse(pairingLinkText(paired))
+            val opener = opener(FakeKeys(holds = emptySet()))
+            val pairing =
+                opener.pairingParts(link, StandardTestDispatcher(testScheduler), backgroundScope) { instanceId ->
+                    asked += instanceId
+                    ROUTE.revision
+                }
+            assertEquals(ROUTE.revision, pairing.relayListRev())
+            assertEquals(listOf(paired.id), asked)
+        }
+
+    @Test
+    fun `a connection test races the record's hosts and its route`() =
+        runTest {
+            val paired = record(1).copy(route = ROUTE)
+            val refusing = Dialer { throw TransportException.Unreachable(IOException("no daemon here")) }
+            val opener = opener(FakeKeys(holds = setOf(paired.keyAlias))) { _, _ -> refusing }
+            assertEquals(TestOutcome.NotReached(failed = (paired.candidates + ROUTE).toSet()), opener.test(paired))
         }
 
     @Test
@@ -153,8 +199,8 @@ class AppSessionsTest {
         runTest {
             val paired = record(1)
             val opener = opener(FakeKeys(holds = setOf(paired.keyAlias)))
-            assertTrue(opener.sessionParts(paired.copy(historyPullDue = true)).fullPull)
-            assertFalse(opener.sessionParts(paired).fullPull)
+            assertTrue(opener.sessionParts(paired.copy(historyPullDue = true), NO_REVISION).fullPull)
+            assertFalse(opener.sessionParts(paired, NO_REVISION).fullPull)
         }
 
     @Test
@@ -179,7 +225,7 @@ class AppSessionsTest {
             checkNotNull(process.coroutineContext[Job]).cancelAndJoin()
             val kept = InstanceStore(file, backgroundScope, databases).instances.first().single()
             assertEquals(LAN, kept.lastCandidate)
-            val session = opener(FakeKeys(holds = setOf(kept.keyAlias))).open(kept, backgroundScope)
+            val session = opener(FakeKeys(holds = setOf(kept.keyAlias))).open(kept, backgroundScope, NO_REVISION)
             assertEquals(LAN, session.lastSuccessful.value)
             session.close()
         }
@@ -191,7 +237,8 @@ class AppSessionsTest {
             val opener = opener(FakeKeys(holds = setOf(removed.keyAlias)))
             databases.open(removed.id, MAIN_PROFILE)
             databases.delete(removed.id)
-            val refusal = assertThrows(SessionUnavailable::class.java) { opener.open(removed, backgroundScope) }
+            val refusal =
+                assertThrows(SessionUnavailable::class.java) { opener.open(removed, backgroundScope, NO_REVISION) }
             assertTrue(refusal.cause is InstanceGone)
             assertFalse(File(folder.root, removed.id).exists())
         }
@@ -209,10 +256,10 @@ class AppSessionsTest {
                 }
             val pin = paired.tlsFingerprint().toHexString()
 
-            assertSame(refusing, opener.sessionParts(paired).dialer)
+            assertSame(refusing, opener.sessionParts(paired, NO_REVISION).dialer)
             assertEquals(TestOutcome.NotReached(failed = paired.candidates.toSet()), opener.test(paired))
             val link = PairingLink.parse(pairingLinkText(paired))
-            val pairing = opener.pairingParts(link, StandardTestDispatcher(testScheduler), backgroundScope)
+            val pairing = opener.pairingParts(link, StandardTestDispatcher(testScheduler), backgroundScope) { null }
             assertSame(refusing, pairing.dialerFor(7, ByteArray(32)))
             assertEquals(listOf(paired.port to pin, paired.port to pin, 7 to ByteArray(32).toHexString()), asked)
         }

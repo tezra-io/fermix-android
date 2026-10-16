@@ -5,9 +5,10 @@ The Fermix companion app for Android phones, written in Kotlin with Jetpack Comp
 Fermix itself is a background service, the `fermix` daemon from the engine repository
 ([`tezra-io/fermix`](https://github.com/tezra-io/fermix)). This app is a client of that daemon's
 mobile channel. It pairs with each of your Fermix daemons (a Mac, a Linux box, a development
-checkout) through a QR code. After that it talks to each one over a TLS WebSocket, with Noise
-running on top of it, keyed by a device key that lives in the phone's secure hardware and never
-leaves it. Each daemon is its own trust domain, and the phone pairs with each one separately.
+checkout) through a QR code. After that it talks to each one over a TLS WebSocket, or from any
+network over the daemon's iroh route through Fermix's relays, with Noise running on top of either,
+keyed by a device key that lives in the phone's secure hardware and never leaves it. Each daemon is
+its own trust domain, and the phone pairs with each one separately.
 
 The repository is at its first stages: the build, its gates, the vendored wire contract, CI, the
 Noise layer (`core-noise`), the wire codec (`core-protocol`), the transport (`core-transport`), the
@@ -26,7 +27,7 @@ docs/                   RELEASING.md: how a release goes from a tag to a draft, 
                         screenshots/, tracked: a hand-picked eight of those screens, light and dark, a reader's reference (the owner, 2026-10-11)
 core-noise/             the Noise layer under every session (io.tezra.fermix.noise)
 core-protocol/          the wire codec: frames, events and the pairing link (io.tezra.fermix.protocol)
-core-transport/         the pinned TLS WebSocket, the candidate race and the network facts (io.tezra.fermix.transport)
+core-transport/         the pinned TLS WebSocket, the iroh route's endpoint and stream, the candidate race and the network facts (io.tezra.fermix.transport)
 attest/                 the device key: the hardware gate, the Keystore key and its attestation chain's shape (io.tezra.fermix.attest)
 core-session/           the pairing ceremony, and one paired session: hello, the outbox, the cursors, reconciliation and the turns (io.tezra.fermix.session)
 design/                 the design language as code, its fonts and its previews (io.tezra.fermix.design)
@@ -121,7 +122,9 @@ another, so a pin refusal on one of them is a `PinMismatch` only when every addr
 another address presents the pinned certificate, the open succeeds and the refusal goes unreported.
 Until each address is a route of its own, a name candidate falls short of design section 13.3's "no
 retry", and how to close that is the owner's decision. `candidateOrder` puts the last successful
-candidate first, then the tailnet addresses, the MagicDNS names and the LAN addresses.
+candidate first, then the tailnet addresses, the MagicDNS names and the LAN addresses, and the daemon's
+iroh route last (M62 stage 6), at most 16 in all: the hosts past the room the route leaves are cut, as the
+daemon cuts its own list to 15 when it lists its route.
 `linkCandidate` classifies a pairing link's host, which carries no scope, by the ranges the daemon
 draws them from, from the text alone: 100.64.0.0/10 and a MagicDNS name under `ts.net` are the
 tailnet, 10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 the LAN, and anything else is no candidate.
@@ -143,6 +146,34 @@ without robolectric") and uses its JDK platform. So these tests prove the pin on
 run android.* code inside OkHttp. The phone's own TLS stack is the device gate's (design sections
 12.6 and 15.3), and that is still open: a certificate that is not pinned must come out as
 `PinMismatch` there before core-session relies on it.
+
+The route (PROTOCOL.md "Remote reach", M62 stages 1 and 6) is core-transport's too. A `Candidate` is a `Host`,
+on the LAN or the tailnet, or the daemon's `Route`: its iroh node id, one to eight relays, each `https://<host>/`
+with its QUIC port, and the relay list's revision, its scope `REMOTE`. `IrohRail` is the phone's one iroh endpoint
+for the process, on iroh's Android binding (`computer.iroh:iroh-android` 1.1.0, UniFFI's Kotlin over JNA): bound on
+the first dial that needs it, with `presetMinimal`, never n0's preset, and a custom relay map of every relay the
+stored routes name, a relay a later route names inserted before its dial. It names no ALPN, so it accepts nothing.
+Its key is iroh's, made and held in memory: never passed in, read, logged or persisted, and no endpoint id is
+logged. A dial is every relay of the route at once, each the daemon's node id with that relay's URL and no address
+of its own, bounded at 10 s; the first connection wins, one that connects after it is closed, and a route that fails
+at every relay fails naming each and why. Android's context goes into the native library once per process
+(`IrohContext`), as the library aborts the process on a second install. A connection is kept per daemon, and the
+next session's stream opens on it, the hourly renewal's among them; one that has closed, the daemon's 30 s idle
+close among them, is dialled again, an open cancelled while it waits for room leaves it kept with its streams, one
+that finds no room within 10 s lets it go, and opens to one daemon take turns, so two at once share one connection.
+A connect is held outside its bound's block, so one the bound or a cancel overtakes as it lands is closed.
+`RouteStream` is one session's bidirectional stream, with the surface of a WebSocket `Connection`:
+`uint32be length | type | payload` frames, a type-1 frame one Noise message of 1 to 65,535 bytes, a type-2 frame a
+close, a `uint16be` code and a UTF-8 reason of at most 123 bytes. The length is judged before anything past it is
+read or any room made for it: past 65,536 the stream ends with no close frame, its sending half reset, and under 2,
+another type, a close shorter than its code or with a reason past 123 bytes or not UTF-8, it is closed `1002`
+"mobile protocol error". A close goes after what is queued and the sending half is then finished, and reset when the
+daemon stopped it (the helper stops the phone's half once the daemon has closed, and a finish there frees none of
+the connection's four stream slots) or when the finish does not complete within 5 s; the receiving half is then
+stopped and the binding's handles let go. A bind or a dial that fails is that candidate's `Unreachable`, its
+`RouteFailure` saying what, never a crash, and nothing retries it but the session's own backoff. The JVM tests hold
+the frames over a pipe (`RouteStreamTest`), the production dial, the relays alone (`RelayDialsTest`), and the
+order (`CandidateOrderTest`); the binding is the device tests' (Instrumented tests, below).
 
 `attest` (`io.tezra.fermix.attest`) is the phone's device key as pairing makes it, on core-noise.
 `HardwareGate.check` is design section 6.1's gate, run at "Get started": Android 15 or newer and
@@ -367,6 +398,67 @@ taking it, a refusal, a refusal mid-chunks, a dropped upload's late refusals, a 
 the item interrupted and started again on the next, a text `msg` written behind a stalled upload only after
 it, a changed source, an item removed mid-upload, the paced socket, the in-flight flag, the `msg`s' order
 behind an upload while a second offer comes, and the limits on attachments.
+
+A session reaches its daemon over the route as over a host (M62 stage 6). A `Link` is a WebSocket `Connection` or a
+`RouteStream`, and `InstanceDialer` dials each host over the instance's pinned WebSocket (`WebSocketDialer`) and the
+route through the phone's iroh endpoint (`RouteDialer`), in the one race, the route last; the prelude, the
+handshake, `hello` and every frame inside the stream are the WebSocket's, and a session over the route is
+`Connected` with the scope `REMOTE`. `hello` names the stored route's revision as `relay_list_rev` (protocol v2),
+read from the record as the hello goes, and none while the record holds no route; the session a pairing hands over
+reads it the same way (`PairingParts.relayListRev`), so its first hello, sent before the record is written, names
+none and every later one the route the pairing saved. `hello_ack` and `pair_approved`
+bring the hosts and the route: an `iroh` candidate is the route, the last one if two are listed; a kind this app
+does not know is skipped, with one Diagnostics line naming it; and a list with no route, or no host, keeps the
+record's (PROTOCOL.md "Server events"). A pairing races the link's hosts and its route (`iroh`, `relays` and
+`relays_rev`, all three or none), so a link with a route and no host pairs from any network, and the record keeps
+the approval's route, else the link's. The Diagnostics' `ROUTE` lines are what opening a route noted: the endpoint
+bound, with its relays' count and no id, and a relay that failed before another answered; a route that failed at
+every relay is the race's line, each relay named with why, and a frame refused is the close's line, with which
+frame and why. `RemoteReachTest` and `PairingRouteTest` hold them against the fake daemon over an in-memory route.
+
+Where the route departs from M62 and the brief that built it, or reads them where they are silent, for the owner
+to settle:
+
+- One relay URL per address. iroh-ffi 1.1.0's `EndpointAddr` takes one relay URL, so a route's dial is one connect
+  per relay, all at once, the first to connect kept and the others closed, where M62 stage 6 builds one address
+  with every relay.
+- Two ABIs, not per-ABI splits (Build and check, below), and the release carries x86_64 beside arm64-v8a where the
+  brief asked for arm64-v8a alone: lint's ChromeOsAbiSupport fails a release without it, and nothing is suppressed.
+- iroh-android 1.1.0's `libiroh_ffi.so` is not 16 KB aligned, and lint's Aligned16KB fails the build on it (Build
+  and check, below): the gate's first line is red until a release of the binding is, or the owner decides otherwise.
+  Play refuses an app for Android 15 and later whose native libraries are not 16 KB aligned.
+- `scripts/check_release_policy.sh`'s check 7 now finds the hex of a vector key of one repeated byte (the vectors'
+  private keys, psk and salt) only as a run of its own length: arm64-v8a's `libiroh_ffi.so` holds, in its `.rodata`,
+  a run of 111 bytes `0x35`, the ASCII `5`, and so the hex of the vectors' second psk, 32 bytes of `0x55` (`5555…`,
+  64 digits), a table of iroh's and no key, which failed the release APK. Every other key is still found anywhere,
+  and every key's base64 too; `test_check_release_policy.py` plants each case.
+- JNA is 5.19.1, a constraint over the 5.15.0 the binding names, whose x86_64 library is 4 KB aligned (Aligned16KB
+  again); the binding's Kotlin is compiled against 5.15.0's API, which 5.19.1 keeps.
+- `app/proguard-rules.pro`'s `-dontwarn java.awt.**` is the tree's one suppression: JNA's desktop helpers name AWT
+  classes, which Android has not, and R8 fails the release on them without it; nothing on a phone reaches them.
+- The contract is pinned at engine dev `90608c1a`, not a release (The vendored contract, below), against
+  AGENTS.md's "the daemon ships first".
+- Android's context in the native library is one process-wide fact (`IrohContext`), against the house rule of no
+  module state: the library aborts the process when it is installed twice, so it cannot be a rail's.
+- A session's stream that ends is finished, and reset only when the daemon stopped it or the finish does not
+  complete in 5 s, where the brief asked for the losing stream's sending half reset; PROTOCOL.md allows either, and a
+  finish the daemon takes frees the slot as a reset does.
+- That two streams the race wins at once make one session is held on the JVM (`CandidateRacerTest`); on a device the
+  host and the route race for real, and which wins, or whether both complete, is the race's, so the device proves
+  the loser's end on a race the route is made to lose: the daemon hears its close frame, and both its halves end
+  and are let go.
+- A connection's open that is cancelled leaves the connection kept, with its streams, where the brief has a loser's
+  native resources released; one that finds no room for a stream within 10 s is let go and dialled anew, cutting
+  any stream still on it, as a connection with no room may be a dead one.
+- iroh 1.1.0 gives a connection's stream room back in batches: with its default of 100, one or ten streams closed
+  gave none back within 20 s, sixty gave back more than fifty (the device test closes them all). The daemon's helper
+  takes four streams at once on a connection; if its room comes back so too, a phone that keeps its connection for
+  hours may wait the 10 s bound for a stream and then dial again. The owner's phone test against the helper says.
+- The Instance screen's route row is "From anywhere" with its relays' hosts as its detail, and the path line "From
+  anywhere · n ms" (M62 D5's words); the chat's Info sheet names the route "From anywhere" too, as its path line's
+  `when` covers every scope. The row's words are the body face, a name among the hosts' mono addresses; its relays
+  wrap, one a line on the compact window, never cut short; and at font scale 2 the path line breaks after its `·`,
+  as "Secure hardware ✓ · release build" does.
 
 `design` (`io.tezra.fermix.design`) is design section 13.1's language as code, a Compose library
 every screen builds on. `FermixTheme` provides it and hands it to Material 3 too, so that Material's
@@ -776,7 +868,11 @@ own serializer (`TintNameSerializer`, through `LEGACY_TINT_NAMES`): Sage as Oliv
 Ocean as Sky and Sand as Amber, Slate as itself. It writes a name as it is, so a file keeps its old names until its
 next write and reads right every time; without it an old name would be a `CorruptionException`, which is never
 replaced, and every record on the phone would be lost with it. Protocol v2 supplies fields the record
-requires (`pair_approved.push_salt`, the QR's `profile`), so a version-1 pairing cannot make one. The
+requires (`pair_approved.push_salt`, the QR's `profile`), so a version-1 pairing cannot make one. A
+record's `candidates` are the daemon's hosts, and its `route` the daemon's iroh route (M62): the last the link,
+`pair_approved` or a `hello_ack` gave, kept when one gives none, and none from a daemon without remote reach or in
+a record written before it. The route's revision is what `hello.relay_list_rev` names, and the relays of every
+record's route are the phone's iroh relay map. The
 records are a typed DataStore, `DataStore<Instances>`, written as JSON through kotlinx.serialization by an
 `OkioSerializer` of the module's own: design section 12.1 says Proto DataStore, and the typed store is
 what it needs, while protobuf would be a second codec and toolchain for one file. A file that does not
@@ -802,7 +898,7 @@ deletes the old key alias (design section 6.1); a pairing always brings a new al
 alias the record holds is refused and the live key is never handed back, and no two records may share
 an alias. A nickname a pairing brings, from the Paired screen, is held to the rename rule below in the
 same write, and a refused one writes nothing. `update` is every later change
-in one write, what `hello_ack` reports (host, label, profile, candidates, caps, push platforms) and this
+in one write, what `hello_ack` reports (host, label, profile, candidates, route, caps, push platforms) and this
 phone's settings (notifications, the last `push_register`), and it refuses a change to what a pairing
 set (gateway key, TLS pin, device id, key alias, push salt) or to the owner's nickname, tint, eyes and photo's
 time (`picture_at`). `merge` is "Pair again" on the row of a daemon that was reinstalled: the new gateway key,
@@ -1355,8 +1451,10 @@ chevron that TalkBack reads as a button, "Expanded" or "Collapsed" (the row's st
 description of the chevron alone would; the chevron itself is unlabelled), closed on each visit and kept through a
 rotation, which opens and closes with Material's standard spatial and effects springs and at once under
 reduce-motion. It holds, each section's rows in a card of its own as Notifications' are, Connection (the Path
-while the session is up, "Wi-Fi · 9 ms" or "Tailscale · 38 ms", each candidate with its scope, and the protocol; a
-candidate's dot is
+while the session is up, "Wi-Fi · 9 ms", "Tailscale · 38 ms" or "From anywhere · 41 ms" over the daemon's iroh
+route, each candidate with its scope, then the route, when the record has one, as one row, "From anywhere", with
+its relays' hosts as its detail and never its node id, and the protocol; a candidate's dot, the route's as a
+host's, is
 lit only by what answered for it: the live connection went over it, or the last test reached it, a
 candidate the winner cancelled lit by neither; section 5.2's network facts never light a dot, as only a
 handshake confirms a tailnet, and only put out a test's word that no longer holds, every candidate's with
@@ -1376,9 +1474,10 @@ dot, the fingerprint, "Paired since" in a given zone, the candidates' dots, the 
 state. `InstanceScreenTest` (Robolectric with native graphics, so text is measured as on a phone) holds the
 status line read once, "Advanced" closed at first and kept through a recreation, its sections each in a card and the
 Path only while the session is up, the test's outcome a polite live region, each button's label and what it calls,
-no underlined text, and the buttons stacked at font scale 2 with no label cut. The screen is a preview at
-the twelve windows, at its head with the owner's photo, its "Advanced" open alone in the page's column, and at the
-foot of one that cannot be reached, drawn by a record into
+no underlined text, the buttons stacked at font scale 2 with no label cut, and over the route the path "From
+anywhere" and the route's row after the hosts, its relays named and never its node id. The screen is a preview at
+the twelve windows, at its head with the owner's photo, its "Advanced" open alone in the page's column, "Advanced"
+again over the daemon's iroh route (`InstanceScreenRemotePreview`), and at the foot of one that cannot be reached, drawn by a record into
 `feature-instance/src/test/screenshots`.
 
 "Picture" (the owner, 2026-10-10) is a sheet over the Instance screen, the tonal surface as the share sheet's,
@@ -2617,7 +2716,7 @@ scripts/app_shots.sh                              # after a green record: each p
 ./gradlew :feature-onboarding:connectedDebugAndroidTest   # the instrumented tests, on the device adb sees (below)
 ./gradlew :feature-chats:connectedDebugAndroidTest        # ... and the Chats list's
 ./gradlew :feature-chat:connectedDebugAndroidTest         # ... and the chat's
-./gradlew :app:connectedDebugAndroidTest                  # ... and the app's share, on an app with nothing paired
+./gradlew :app:connectedDebugAndroidTest                  # ... and the app's share and its iroh route, on an app with nothing paired
 scripts/verify_protocol_contract.sh               # the vendored contract against its pins
 scripts/verify_protocol_contract.sh --source ../fermix   # ... and byte for byte against an engine checkout
 scripts/verify_protocol_contract.sh --pinned      # ... and against the pinned engine commit on GitHub
@@ -2645,7 +2744,8 @@ test material: no entry named as a file of `contracts/mobile/`, under a `fixture
 with a key store's, a key's or a fixture's extension, no entry holding the bytes of a vendored file
 under any name, and no entry holding a key of the vendored vectors (every private and public key, psk,
 salt, secret and key field of `noise_vectors.json` and `push_vectors.json`) as hex of either case or as
-base64; and nothing of the debug app's demo (The demo, above): no class of `io.tezra.fermix.demo` in any
+base64, the hex of a key of one repeated byte only as a run of its own length, as a longer run is no key (iroh's
+arm64 library holds 111 fives); and nothing of the debug app's demo (The demo, above): no class of `io.tezra.fermix.demo` in any
 dex, no name of it in the merged manifest, and no resource named `demo_…` as the debug source set names the
 demo's; given R8's mapping of the release as its second argument, as CI's `policy` job and `verify_candidate.sh`
 give it, the mapping must be the APK's own (its `pg_map_id` the one R8 marks the APK's dex with, or the script
@@ -2669,6 +2769,26 @@ ktlint (any finding fails, no baseline), and Gradle itself (`org.gradle.warning.
 its own warnings, a deprecated `android.*` option for one, as `WARNING:` lines and still exits 0,
 so CI also fails a build whose log has a line starting with `WARNING:` or `w: `; a clean build
 prints neither. `./gradlew ktlintFormat` fixes what ktlint can fix by itself.
+
+The app carries native libraries since the iroh route: iroh's `libiroh_ffi.so`, 14 to 16 MB for each ABI, and
+JNA's `libjnidispatch.so`. Both builds ship arm64-v8a and x86_64 (`ndk.abiFilters`), a choice for the owner's
+review where M62 section 3 asks for per-ABI splits, which, like an app bundle, would change the candidate
+pipeline's one-APK steps, scripts and tests: arm64-v8a for phones, and x86_64 for the emulators and for lint's
+ChromeOsAbiSupport, which fails a build whose ABIs leave it out. armeabi-v7a and x86, 25 MB of iroh's alone, are
+left out, and with them the 32-bit copies of the app's other native libraries (SQLite's, zxing-cpp's, CameraX's),
+so a phone that runs 32-bit code alone cannot install the app. iroh's JVM jar, which its Android AAR depends on, carries
+the desktops' libraries as resources, which the app's packaging drops. That took the unsigned release APK from
+21,142,896 bytes to 45,879,614 and the debug APK from 63,058,753 to 88,287,051. A library module's test APK
+takes the binding through core-transport with every ABI and the desktops' libraries, some 69 MB more each, as the
+filters and the exclusions are the app's alone. R8 keeps JNA's and the binding's classes whole
+(`app/proguard-rules.pro`, each rule with its reason), since JNA reaches them by name from native code; the release
+mapping maps `computer.iroh.*` and `com.sun.jna.*` to themselves. iroh's and JNA's AAR manifests declare an SDK level
+and nothing else, so the merged manifest requests and exports what it did before (`policy/`). iroh-android 1.1.0's `libiroh_ffi.so` is
+4 KB aligned in every ABI, and lint's Aligned16KB fails core-transport's debug and release lint and the app's debug
+lint on it; the fix is in iroh-ffi's sources but in no release, 1.1.0 is the newest on Maven Central, and nothing is
+suppressed, so `./gradlew build` fails there alone until the owner decides (the departures under core-session,
+above). JNA is held at 5.19.1 by a constraint, as the binding's 5.15.0 ships an x86_64 library that is not 16 KB
+aligned either.
 
 The configuration cache is on, for speed. A run that reuses its entry skips configuration, and with
 it any Gradle deprecation raised there, so a deprecation fails only the run that first meets it.
@@ -2846,6 +2966,24 @@ that names no path and nothing copied, while a file the chat made under its cach
 path with a lone surrogate is weighed, never thrown on. A test
 that needs the window's focus, Espresso's back and the clipboard's read, waits for it
 (`awaitWindowFocus`) and fails naming the window that holds it.
+
+The app's `IrohRailDeviceTest` and `IrohSessionDeviceTest` run the iroh route between two real iroh endpoints in
+the test's process: the rail the app makes, and `IrohTestDaemon`, an endpoint bound with the minimal preset, no
+relay and the ALPN `fermix/mobile/1`, as fermix-iroh's is, which the phone reaches by its node id over its loopback
+address. That address comes in through the rail's dial plan, a constructor parameter production leaves at
+`relayDials`, the relays alone: the route's relays are `.invalid` names nothing answers. The rail's tests prove the
+native library loads and the endpoint binds once, the connection kept between two streams, a 65,537-byte frame
+refused from its header, with no close frame and the sending half reset, a zero-length one closed `1002` with a
+close frame, a close after the daemon's own, a dial cancelled while it connects returning at once and the same
+endpoint dialling again, a route failing at every relay naming each, production's dial reaching no address of
+its own, and a connection filled to its room (100 streams) kept with its streams through an open cancelled while it
+waits, then, every stream closed, giving its room back to the next on the same connection. The session's tests carry each stream the daemon takes to the demo daemon (demo-daemon's `carryRoute`), as
+fermix-iroh carries one to the engine: a pairing over the link's route alone, every host refused, its session
+`REMOTE`, and the next session on the kept connection; a session idle for the keepalive, its ping and pong carried;
+a host and the route raced together, one session, every other stream let go; a route made to lose the race, its
+close frame heard by the daemon and both its halves let go; the hourly close renewed as a second stream on the kept
+connection; and a network change reconnecting over the route. No relay, helper or engine takes part, and the real
+networks (cellular, another VPN, a real relay) are the owner's phone test.
 
 CI's four legs run Google APIs images of API 35 and 36, as `medium_phone` and as `pixel_fold`. Make the
 same AVDs with cmdline-tools 20.0 or later (12.0 knows no `pixel_fold`); a green run on another image,
@@ -3149,9 +3287,17 @@ compares against are fixed in the script, never read from `SOURCE.json`. CI also
 commit, then compares every file with that commit in the public engine repository. Never edit a
 vendored file by hand.
 
-It is vendored from the engine's v0.12.1 release (`df8d8a4d` on `main`), and that is protocol v1.
-The app is built against v2, which ships with engine stage D1, so the first real re-vendor comes
-with it.
+It is vendored from engine `dev` at `90608c1a`, protocol v2 (window 2 to 2), with the remote reach of M62: the
+`iroh` candidate, the link's `iroh`, `relays` and `relays_rev`, `hello.relay_list_rev` and PROTOCOL.md's "Remote
+reach", which no engine release carries yet (v0.15.0, `b268d8e1`, is the newest; `1dcab065` and `a2e0dd52` after
+it changed the export). `SOURCE.json` names no `upstream.release`, so `scripts/release_preflight.sh` (check 5)
+and `scripts/check_evidence.py` refuse every app release until the engine releases a build of a commit whose export
+is this one and the contract is pinned again at it; until then the test of `docs/RELEASING.md`'s example evidence
+checks that refusal and holds the example to its own engine. Three files are new in this export: `relays.json`, the
+engine's list of Fermix's relays, which the phone never reads, as its relays come from the route it is given, and
+`attestation_roots.json` and `android_signers.json`, the daemon's own trust lists. That departs from "the daemon ships first", below, for M62's phone side to be built and
+tested before the engine's release; the owner settles it. The vendored copy was taken from the engine checkout's
+git objects at that commit, never its working tree.
 
 To re-vendor from an engine commit `<sha>` that origin carries:
 

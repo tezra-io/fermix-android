@@ -51,6 +51,20 @@ private const val MAX_DESCRIPTION_BYTES = 600
 private const val MAX_PENDING_APPROVALS = 4
 private const val MAX_STATUS_PAGE = 32
 
+/** The relays an iroh route names at most (the schema's `irohCandidate.relays`). */
+internal const val MAX_ROUTE_RELAYS = 8
+
+/** An iroh endpoint id: 64 lowercase hex digits (the schema's `irohCandidate.node_id` and the link's `iroh`). */
+internal val NODE_ID = Regex("[0-9a-f]{64}")
+
+/** A relay list's revision: 16 lowercase hex digits (`relays_rev`, and `hello.relay_list_rev`). */
+internal val RELAY_LIST_REV = Regex("[0-9a-f]{16}")
+
+/** A relay's host as the route and the link carry it (the schema's `relay.url` without `https://` and `/`). */
+internal const val RELAY_HOST_PATTERN = "[a-z0-9]([a-z0-9.-]*[a-z0-9])?"
+
+private val RELAY_URL = Regex("https://$RELAY_HOST_PATTERN/")
+
 private val COMMAND_NAME = Regex("[a-z0-9_]+")
 private val SHA256 = Regex("[0-9a-fA-F]{64}")
 private val TIMESTAMP = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.*", RegexOption.DOT_MATCHES_ALL)
@@ -109,10 +123,28 @@ private val profileRules: FieldCheck.(String, Profile) -> Unit = { path, profile
     maxBytes("$path.name", profile.name, MAX_PROFILE_NAME_BYTES)
 }
 
+/** The iroh route's bounds (the schema's `irohCandidate` and `relay`); a skipped kind has none. */
 private val candidateRules: FieldCheck.(String, Candidate) -> Unit = { path, candidate ->
-    nonEmpty("$path.host", candidate.host)
-    maxBytes("$path.host", candidate.host, MAX_HOST_BYTES)
-    nonEmpty("$path.interface", candidate.networkInterface)
+    when (candidate) {
+        is Candidate.Host -> {
+            nonEmpty("$path.host", candidate.host)
+            maxBytes("$path.host", candidate.host, MAX_HOST_BYTES)
+            nonEmpty("$path.interface", candidate.networkInterface)
+        }
+
+        is Candidate.Iroh -> {
+            matches("$path.node_id", candidate.nodeId, NODE_ID)
+            size("$path.relays", candidate.relays, 1..MAX_ROUTE_RELAYS)
+            each("$path.relays", candidate.relays) { relay, value ->
+                matches("$relay.url", value.url, RELAY_URL)
+                inRange("$relay.quic_port", value.quicPort.toLong(), 1L..MAX_PORT)
+            }
+            matches("$path.relays_rev", candidate.relaysRev, RELAY_LIST_REV)
+        }
+
+        // A kind this app does not know is skipped whatever it holds (PROTOCOL.md "Server events").
+        is Candidate.Skipped -> {}
+    }
 }
 
 private val modelRefRules: FieldCheck.(String, ModelRef) -> Unit = { path, model ->
@@ -201,6 +233,26 @@ private val attestationRules: FieldCheck.(Attestation) -> Unit = { attestation -
     )
 }
 
+/**
+ * Protocol v2's `push_register` is one of two forms: design section 7's [ClientEvent.PushRegister.platform] and
+ * [ClientEvent.PushRegister.token], or the APNs token and environment the engine's v2 export carries, as v1 does.
+ */
+private fun FieldCheck.pushForm(register: ClientEvent.PushRegister) {
+    if (version != V2) return
+    val neutral = register.platform != null || register.token != null
+    require(
+        "apns_token",
+        register.apnsToken == null || !neutral,
+        "comes with platform or token; a register is one form",
+    )
+    if (register.apnsToken != null) {
+        present("environment", register.environment)
+        return
+    }
+    present("platform", register.platform)
+    present("token", register.token)
+}
+
 /** `pair_request`'s texts, which the owner reads in the daemon's pairing prompt. */
 private val PAIR_REQUEST_TEXTS = setOf("device_name", "model", "app_version")
 
@@ -221,23 +273,28 @@ fun requirePairRequestText(
 
 private val CLIENT_SESSION_RULES: List<EventRule<ClientEvent>> =
     listOf(
-        client<ClientEvent.Hello>(versioned = listOf(VersionedField("last_mutation_seq", ONLY_V2, ONLY_V2))) {
+        client<ClientEvent.Hello>(
+            versioned =
+                listOf(VersionedField("relay_list_rev", ONLY_V2), VersionedField("last_mutation_seq", ONLY_V2)),
+        ) {
             nonEmpty("device_id", it.deviceId)
             nonEmpty("app_version", it.appVersion)
             require("protocol_v", it.protocolV == version, "is ${it.protocolV}, not the envelope's $version")
+            matches("relay_list_rev", it.relayListRev, RELAY_LIST_REV)
         },
         client<ClientEvent.PushRegister>(
             versioned =
                 listOf(
-                    VersionedField("apns_token", ONLY_V1, ONLY_V1),
-                    VersionedField("platform", ONLY_V2, ONLY_V2),
-                    VersionedField("token", ONLY_V2, ONLY_V2),
+                    VersionedField("apns_token", VERSIONS, ONLY_V1),
+                    VersionedField("platform", ONLY_V2),
+                    VersionedField("token", ONLY_V2),
                     VersionedField("environment", VERSIONS, ONLY_V1),
                 ),
         ) {
             nonEmpty("apns_token", it.apnsToken)
             nonEmpty("token", it.token)
             require("environment", it.environment == null || it.platform != Platform.ANDROID, "is for ios alone")
+            pushForm(it)
         },
         client<ClientEvent.Ack>(),
         client<ClientEvent.ReadState> { nonEmpty("profile_id", it.profileId) },
@@ -267,11 +324,12 @@ private val CLIENT_CHAT_RULES: List<EventRule<ClientEvent>> =
             require("text", it.text.isNotBlank() || it.attachIds.isNotEmpty(), "is blank and nothing is attached")
             nonEmpty("retry_of", it.retryOf)
         },
-        client<ClientEvent.AttachBegin> {
+        client<ClientEvent.AttachBegin>(versioned = listOf(VersionedField("poster_of", ONLY_V2))) {
             nonEmpty("attach_id", it.attachId)
             nonEmpty("mime", it.mime)
             inRange("size_bytes", it.sizeBytes, 0..Long.MAX_VALUE)
             nonEmpty("name", it.name)
+            nonEmpty("poster_of", it.posterOf)
             matches("sha256", it.sha256, SHA256)
         },
         client<ClientEvent.AttachChunk>(rawIn = VERSIONS) {
@@ -422,9 +480,10 @@ private val TURN_RULES: List<EventRule<ServerEvent.Known>> =
         },
         server<ServerEvent.TextDelta>(versioned = listOf(VersionedField("replace", ONLY_V2))) {
             nonEmpty("turn_id", it.turnId)
+            require("replace", it.replace != false, "is false; it is present only as true")
         },
         server<ServerEvent.ToolEvent>(
-            versioned = listOf(VersionedField("detail", ONLY_V1), VersionedField("status", ONLY_V2)),
+            versioned = listOf(VersionedField("status", ONLY_V2)),
         ) {
             nonEmpty("turn_id", it.turnId)
             nonEmpty("tool", it.tool)

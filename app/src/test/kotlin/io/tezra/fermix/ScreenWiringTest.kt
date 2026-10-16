@@ -63,8 +63,17 @@ import kotlin.time.Duration.Companion.seconds
  */
 private val SETTLE = 10.seconds
 
-private val TAILNET = Candidate("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
-private val LAN = Candidate("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
+private val TAILNET = Candidate.Host("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+private val LAN = Candidate.Host("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
+
+/** A daemon's iroh route at one revision, then at the next. */
+private val ROUTE =
+    Candidate.Route(
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        listOf(Candidate.Relay("relay-a.example.net", 7842), Candidate.Relay("relay-b.example.net", 7842)),
+        "374b4c8f103627f7",
+    )
+private val NEXT_ROUTE = ROUTE.copy(relays = ROUTE.relays.take(1), revision = "0123456789abcdef")
 
 private val RECORD =
     Instance(
@@ -189,6 +198,35 @@ class ScreenWiringTest {
                     .first()
                     .single()
                     .candidates,
+            )
+        }
+
+    @Test
+    fun `the session's route is saved apart from its hosts, and a list with none keeps the saved one`() =
+        runTest(main, timeout = SETTLE) {
+            val store = store()
+            val events = events(store)
+            val session = idleSession(backgroundScope)
+            events.take(RECORD.id, session, SessionEvent.Candidates(listOf(LAN, ROUTE)))
+            val routed = store.instances.first().single()
+            assertEquals(listOf(LAN), routed.candidates)
+            assertEquals(ROUTE, routed.route)
+
+            events.take(RECORD.id, session, SessionEvent.Candidates(listOf(TAILNET)))
+            assertEquals(
+                ROUTE,
+                store.instances
+                    .first()
+                    .single()
+                    .route,
+            )
+            events.take(RECORD.id, session, SessionEvent.Candidates(listOf(TAILNET, NEXT_ROUTE)))
+            assertEquals(
+                NEXT_ROUTE,
+                store.instances
+                    .first()
+                    .single()
+                    .route,
             )
         }
 

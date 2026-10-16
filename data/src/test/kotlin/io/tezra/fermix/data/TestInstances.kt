@@ -19,7 +19,15 @@ internal fun key(fill: Int): ByteArray = ByteArray(KEY_BYTES) { fill.toByte() }
 /** What [Instance.id] and a cached blob's name must be: the SHA-256 of the bytes, in lowercase hex. */
 internal fun idOf(bytes: ByteArray): String = hexOf(MessageDigest.getInstance("SHA-256").digest(bytes))
 
-internal val TAILNET_CANDIDATE = Candidate("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+internal val TAILNET_CANDIDATE = Candidate.Host("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+
+/** A daemon's iroh route, as `hello_ack` gives it (PROTOCOL.md "Remote reach"). */
+internal val ROUTE =
+    Candidate.Route(
+        "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+        listOf(Candidate.Relay("us1.relay.fermix.ai", 7842), Candidate.Relay("eu1.relay.fermix.ai", 7842)),
+        "374b4c8f103627f7",
+    )
 
 /** One paired daemon, its gateway key every byte [gateway]; the rest a pairing would record. */
 internal fun instance(

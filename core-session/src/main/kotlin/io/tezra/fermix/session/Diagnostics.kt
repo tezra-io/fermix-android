@@ -37,6 +37,14 @@ enum class DiagnosticKind {
 
     /** The session failed on a fault of the phone's own, such as its store. */
     FAILED,
+
+    /**
+     * The iroh route (PROTOCOL.md "Remote reach"): its endpoint bound, never naming it; a relay that failed and
+     * why; a candidate of a kind this app does not know, skipped. A dial that failed at every relay is the race's
+     * line ([RACE_FAILED]), and a frame the route's stream refused its connection's ending ([PROTOCOL_ERROR] or
+     * [CLOSED]), each with its relay or its frame and why.
+     */
+    ROUTE,
 }
 
 /**

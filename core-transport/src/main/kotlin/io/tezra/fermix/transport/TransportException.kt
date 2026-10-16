@@ -51,8 +51,21 @@ sealed class TransportException(
         val code: Int,
         val reason: String,
         val byDaemon: Boolean,
-    ) : TransportException("${if (byDaemon) "the daemon" else "this side"} closed the WebSocket with $code \"$reason\"")
+        detail: String? = null,
+    ) : TransportException(
+            "${if (byDaemon) "the daemon" else "this side"} closed the connection with $code \"$reason\"" +
+                detail?.let { ": $it" }.orEmpty(),
+        )
 }
+
+/**
+ * Why the iroh route failed to open, for the race's report and the Diagnostics: the endpoint that did not bind,
+ * or each relay with how its connect failed. It never names the phone's own endpoint.
+ */
+class RouteFailure(
+    message: String,
+    cause: Throwable? = null,
+) : java.io.IOException(message, cause)
 
 /**
  * Types what OkHttp reports. A pin refusal comes first, wherever it sits under the failure: the trust

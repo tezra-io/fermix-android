@@ -61,11 +61,13 @@ fun deviceModel(
  * [dialerFor], which makes the dialer of a port and a `tls_fp` pin, and is given the link's own; the
  * profile the first chat opens on, `main`, with that (instance, profile)'s store and the announcer; the
  * network facts, the clock and the randomness, which picks the attempt's key alias; [keystore], the
- * dispatcher every blocking DeviceKeyFacade call runs on, off the main thread; and [sessionScope], the
- * scope the approved session runs in, the one the app keeps its sessions in, so that the session outlives
- * the screens that paired it and the app takes it over as it is. SessionParts without the static key,
- * which the pairing makes, and the app's version, which [PhoneIdentity] carries. A test passes fakes, the
- * virtual clock and its own dispatcher.
+ * dispatcher every blocking DeviceKeyFacade call runs on, off the main thread; [sessionScope], the scope
+ * the approved session runs in, the one the app keeps its sessions in, so that the session outlives the
+ * screens that paired it and the app takes it over as it is; and [relayListRev], which reads the revision of
+ * the route the daemon's instance record holds, the one each `hello` of that session names (PROTOCOL.md
+ * "Remote reach"), so a route the pairing gave is acknowledged once the record that saves it is written.
+ * SessionParts without the static key, which the pairing makes, and the app's version, which [PhoneIdentity]
+ * carries. A test passes fakes, the virtual clock and its own dispatcher.
  */
 data class PairingParts(
     val dialerFor: (port: Int, tlsFingerprint: ByteArray) -> Dialer,
@@ -75,6 +77,7 @@ data class PairingParts(
     val network: StateFlow<NetworkFacts>,
     val keystore: CoroutineDispatcher,
     val sessionScope: CoroutineScope,
+    val relayListRev: suspend () -> String?,
     val clock: TimeSource = TimeSource.Monotonic,
     val random: Random = Random.Default,
 )
@@ -83,7 +86,8 @@ data class PairingParts(
  * What a pairing tells the instance record of design section 9.1, the data layer's to write: the keys in
  * the wire's text ([gatewayPk] and [pushSalt] in standard base64, [tlsFp] in lowercase hex), [host] and
  * [label] the link's name until the first `hello_ack` names them, [profile] the link's, the approval's
- * [candidates] (the link's when it names none), [keyAlias] the attempt's new key, and [pushPlatforms]. The
+ * [candidates], hosts alone (the link's when it names none), [keyAlias] the attempt's new key, [pushPlatforms],
+ * and [route], the daemon's iroh route, `pair_approved`'s or else the link's, none from a daemon without one. The
  * `caps` snapshot comes with the `hello_ack` the session announces. [id] is `sha256(gateway_pk)`. Each
  * field is held to the shape the link's parse and core-protocol already gave it, so only facts built
  * elsewhere, never a daemon's, are refused.
@@ -94,19 +98,20 @@ data class InstanceFacts(
     val host: String,
     val profile: String,
     val label: String,
-    val candidates: List<Candidate>,
+    val candidates: List<Candidate.Host>,
     val port: Int,
     val deviceId: String,
     val keyAlias: String,
     val pushSalt: String,
     val pushPlatforms: List<PushPlatform>,
+    val route: Candidate.Route? = null,
 ) {
     init {
         require(BASE64_32_BYTES.matches(gatewayPk)) { "gateway_pk is not 32 bytes in standard base64" }
         require(SHA256_HEX.matches(tlsFp)) { "tls_fp is not a SHA-256 in lowercase hex" }
         require(host.isNotBlank() && label.isNotBlank()) { "a pairing names its host and label" }
         require(profile.isNotBlank()) { "a pairing names its profile" }
-        require(candidates.isNotEmpty()) { "a pairing has a route to its daemon" }
+        require(candidates.isNotEmpty() || route != null) { "a pairing has a way to its daemon" }
         require(port in 1..MAX_PORT) { "port $port is outside 1 to $MAX_PORT" }
         require(deviceId.isNotEmpty()) { "a pairing has a device id" }
         require(keyAlias.startsWith(DEVICE_KEY_ALIAS_PREFIX)) { "$keyAlias is not a device key's alias" }

@@ -37,7 +37,7 @@ private const val WAIT_MS = 60_000L
 private const val OLD = "${DEVICE_KEY_ALIAS_PREFIX}old"
 
 /** The paired session's route from the approval: the daemon's tailnet address. */
-private val APPROVED_ROUTE = Candidate("100.101.102.104", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+internal val APPROVED_ROUTE = Candidate.Host("100.101.102.104", Candidate.Scope.TAILNET, Candidate.Kind.IP)
 
 class PairingTest {
     @Test

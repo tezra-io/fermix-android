@@ -32,15 +32,16 @@ internal class Adopted(
     val candidate: Candidate,
     val won: Handshaken,
     val channel: SecureChannel,
+    val notes: List<String> = emptyList(),
 )
 
 /**
- * One attempt: race the candidates, last successful first (design section 5.1); the winner's hello at
- * seq 1; and, once `hello_ack` completes it, the connection until it ends. Hello goes on the winner
- * alone, so the daemon sees one session per race. Hello carries protocol v2's `last_mutation_seq`
- * (design section 7, the `mutation_seq` row), the mutation feed's cursor. A session that adopted a
- * pairing's connection makes its first attempt on that connection, with hello at its next seq, and
- * races from the second on.
+ * One attempt: race the candidates, last successful first (design section 5.1); the winner's hello at seq 1; and, once
+ * `hello_ack` completes it, the connection until it ends. Hello goes on the winner alone, so the daemon sees one
+ * session per race. Hello carries protocol v2's `last_mutation_seq` (design section 7, the `mutation_seq` row), the
+ * mutation feed's cursor, and `relay_list_rev`, the revision of the route the record holds. What opening the winner
+ * noted, the route's, goes to the Diagnostics. A session that adopted a pairing's connection makes its first attempt on
+ * that connection, with hello at its next seq, and races from the second on.
  */
 internal class Connector(
     private val core: SessionCore,
@@ -48,7 +49,10 @@ internal class Connector(
 ) {
     suspend fun attempt(): Attempt {
         val adopted = core.takeAdopted()
-        if (adopted != null) return adopted.won.use { connection(adopted.candidate, it, adopted.channel) }
+        if (adopted != null) {
+            adopted.notes.forEach { core.log(DiagnosticKind.ROUTE, it) }
+            return adopted.won.use { connection(adopted.candidate, it, adopted.channel) }
+        }
         val parts = core.parts
         val gatewayKey = core.instance.gatewayPublicKey
         val order = candidateOrder(core.candidates, core.lastSuccessful.value)
@@ -82,18 +86,22 @@ internal class Connector(
         won: Handshaken,
         channel: SecureChannel = SecureChannel(won.link, won.noise),
     ): Attempt {
+        won.link.notes.forEach { core.log(DiagnosticKind.ROUTE, it) }
         val lastMutationSeq =
             core.parts.store
                 .cursors()
                 .lastMutationSeq
         val cursor = core.timeline().cursor
+        // The revision the record has stored, never one only this session holds: a route is saved before it is
+        // acknowledged (PROTOCOL.md "Remote reach").
         val hello =
             ClientEvent.Hello(
                 core.instance.deviceId,
                 core.parts.appVersion,
                 cursor,
                 SESSION_VERSION,
-                lastMutationSeq,
+                relayListRev = core.parts.relayListRev(),
+                lastMutationSeq = lastMutationSeq,
             )
         return when (val outcome = exchangeHello(channel, hello, core::now)) {
             is HelloOutcome.Accepted -> live(candidate, won.link, channel, outcome)

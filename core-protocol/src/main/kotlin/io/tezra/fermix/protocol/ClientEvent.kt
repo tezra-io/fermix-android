@@ -13,8 +13,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 sealed interface ClientEvent {
     /**
-     * The first event of a paired session. [protocolV] equals the envelope's `v`. [lastMutationSeq]
-     * is protocol v2's and required there (design section 7, the `mutation_seq` row).
+     * The first event of a paired session. [protocolV] equals the envelope's `v`. [relayListRev] is protocol
+     * v2's: the revision of the relay list this phone has stored, absent with none (PROTOCOL.md "Remote reach").
+     * [lastMutationSeq] is protocol v2's too (design section 7, the `mutation_seq` row), which the engine's
+     * export does not carry, so a v2 hello is read without it.
      */
     @Serializable
     @SerialName("hello")
@@ -23,6 +25,7 @@ sealed interface ClientEvent {
         @SerialName("app_version") val appVersion: String,
         @SerialName("last_server_seq") val lastServerSeq: ULong,
         @SerialName("protocol_v") val protocolV: Int,
+        @SerialName("relay_list_rev") val relayListRev: String? = null,
         @SerialName("last_mutation_seq") val lastMutationSeq: ULong? = null,
     ) : ClientEvent
 
@@ -40,7 +43,10 @@ sealed interface ClientEvent {
         @SerialName("retry_of") val retryOf: String? = null,
     ) : ClientEvent
 
-    /** Announces an upload by its digest, before any byte of it. */
+    /**
+     * Announces an upload by its digest, before any byte of it. [posterOf] is protocol v2's: the upload this
+     * image is the poster frame of (the export's `attach_begin.poster_of`).
+     */
     @Serializable
     @SerialName("attach_begin")
     data class AttachBegin(
@@ -49,6 +55,7 @@ sealed interface ClientEvent {
         @SerialName("mime") val mime: String,
         @SerialName("size_bytes") val sizeBytes: Long,
         @SerialName("name") val name: String? = null,
+        @SerialName("poster_of") val posterOf: String? = null,
         @SerialName("sha256") val sha256: String,
     ) : ClientEvent
 
@@ -96,8 +103,8 @@ sealed interface ClientEvent {
     data class HistoryPull(
         @SerialName("profile_id") val profileId: String,
         @SerialName("after_seq") val afterSeq: ULong? = null,
-        @SerialName("limit") val limit: Int,
         @SerialName("before_seq") val beforeSeq: ULong? = null,
+        @SerialName("limit") val limit: Int,
     ) : ClientEvent
 
     /** Downloads a blob a row names. */
@@ -110,7 +117,7 @@ sealed interface ClientEvent {
     /**
      * A push token. Protocol v1 carries an APNs token, [apnsToken] and [environment]; protocol v2 is
      * platform-neutral, [platform] and [token], with [environment] only for `ios` (design section 7,
-     * the `push_register` row).
+     * the `push_register` row), and the engine's v2 export still takes v1's APNs form, which v2 reads too.
      */
     @Serializable
     @SerialName("push_register")

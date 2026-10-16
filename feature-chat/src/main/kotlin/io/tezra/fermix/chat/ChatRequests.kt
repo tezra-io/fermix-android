@@ -244,5 +244,5 @@ internal fun attachBeginOf(attachment: OutboxAttachment): ClientEvent.AttachBegi
         attachment.mime,
         attachment.sizeBytes,
         attachment.name,
-        attachment.sha256,
+        sha256 = attachment.sha256,
     )

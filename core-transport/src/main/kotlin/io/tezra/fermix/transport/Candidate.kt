@@ -28,27 +28,83 @@ private val LAN_B_SECOND_OCTETS = 16..31
 private const val LAN_C_FIRST_OCTET = 192
 private const val LAN_C_SECOND_OCTET = 168
 
+/** An iroh endpoint id: 64 lowercase hex digits (PROTOCOL.md "Remote reach"). */
+private val NODE_ID = Regex("[0-9a-f]{64}")
+
+/** A relay list's revision: 16 lowercase hex digits. */
+private val RELAY_LIST_REV = Regex("[0-9a-f]{16}")
+
+/** A relay's host as the route names it: lowercase letters, digits, dots and inner hyphens. */
+private val RELAY_HOST = Regex("[a-z0-9]([a-z0-9.-]*[a-z0-9])?")
+
+/** The relays a route names at most (the schema's `irohCandidate.relays`). */
+const val MAX_ROUTE_RELAYS = 8
+
+private const val MAX_PORT = 65_535
+
 /**
- * One route to a daemon: a [host] to open `wss://<host>:<port>/ws` on, where it lies, and whether it
- * is an address literal or a name. The phone reads the scope from `hello_ack` or `pair_approved`, and
- * the kind from the host itself; a pairing link's candidates carry neither, and [linkCandidate]
- * classifies them by the ranges the daemon draws them from.
+ * One route to a daemon: a [Host] to open `wss://<host>:<port>/ws` on, or the daemon's iroh [Route], reached
+ * from any network through Fermix's relays (PROTOCOL.md "Remote reach"). The phone reads a host's scope from
+ * `hello_ack` or `pair_approved`, and its kind from the host itself; a pairing link's candidates carry neither,
+ * and [linkCandidate] classifies them by the ranges the daemon draws them from. A route's scope is [Scope.REMOTE].
  */
-data class Candidate(
-    val host: String,
-    val scope: Scope,
-    val kind: Kind,
-) {
-    init {
-        require(host.isNotEmpty()) { "a candidate's host is empty" }
-        val bytes = host.encodeToByteArray().size
-        require(bytes <= MAX_HOST_BYTES) { "a candidate's host is $bytes bytes, past $MAX_HOST_BYTES" }
+sealed interface Candidate {
+    /** Where the candidate lies, which the Instance screen's path line names. */
+    val scope: Scope
+
+    /** A host: an address literal or a name, on the owner's LAN or tailnet. */
+    data class Host(
+        val host: String,
+        override val scope: Scope,
+        val kind: Kind,
+    ) : Candidate {
+        init {
+            require(host.isNotEmpty()) { "a candidate's host is empty" }
+            val bytes = host.encodeToByteArray().size
+            require(bytes <= MAX_HOST_BYTES) { "a candidate's host is $bytes bytes, past $MAX_HOST_BYTES" }
+            require(scope != Scope.REMOTE) { "a host lies on the LAN or the tailnet; the route alone is remote" }
+        }
     }
 
-    /** Where a candidate lies: on the owner's LAN, or on their tailnet. */
-    enum class Scope { LAN, TAILNET }
+    /**
+     * The daemon's iroh endpoint, [nodeId], the relays to reach it through, at most [MAX_ROUTE_RELAYS], and that
+     * list's [revision], which `hello.relay_list_rev` names back once it is stored. Its node id is the daemon's,
+     * never the phone's, and the screens show none.
+     */
+    data class Route(
+        val nodeId: String,
+        val relays: List<Relay>,
+        val revision: String,
+    ) : Candidate {
+        override val scope: Scope get() = Scope.REMOTE
 
-    /** What a candidate's host is: an address literal, or a name (a MagicDNS name on the tailnet). */
+        init {
+            require(NODE_ID.matches(nodeId)) { "a route's node id is not 64 lowercase hex digits" }
+            require(
+                relays.size in 1..MAX_ROUTE_RELAYS,
+            ) { "a route names ${relays.size} relays, not 1 to $MAX_ROUTE_RELAYS" }
+            require(RELAY_LIST_REV.matches(revision)) { "a route's revision is not 16 lowercase hex digits" }
+        }
+    }
+
+    /** One relay of a route: `https://<host>/`, with QUIC address discovery on [quicPort]. */
+    data class Relay(
+        val host: String,
+        val quicPort: Int,
+    ) {
+        init {
+            require(RELAY_HOST.matches(host)) { "a relay's host '$host' is not a lowercase DNS name" }
+            require(quicPort in 1..MAX_PORT) { "a relay's QUIC port $quicPort is outside 1 to $MAX_PORT" }
+        }
+
+        /** The relay's URL, as iroh's relay map keys it. */
+        val url: String get() = "https://$host/"
+    }
+
+    /** Where a candidate lies: on the owner's LAN, on their tailnet, or anywhere, through the relays. */
+    enum class Scope { LAN, TAILNET, REMOTE }
+
+    /** What a host is: an address literal, or a name (a MagicDNS name on the tailnet). */
     enum class Kind { IP, NAME }
 }
 
@@ -60,9 +116,9 @@ data class Candidate(
  * IPv6 address and no other name, so anything else is a link it did not write. Classified from the text
  * alone, never through DNS.
  */
-fun linkCandidate(host: String): Candidate? {
-    if (IPV4_LITERAL.matches(host)) return addressScope(host)?.let { Candidate(host, it, Candidate.Kind.IP) }
-    return if (isMagicDnsName(host)) Candidate(host, Candidate.Scope.TAILNET, Candidate.Kind.NAME) else null
+fun linkCandidate(host: String): Candidate.Host? {
+    if (IPV4_LITERAL.matches(host)) return addressScope(host)?.let { Candidate.Host(host, it, Candidate.Kind.IP) }
+    return if (isMagicDnsName(host)) Candidate.Host(host, Candidate.Scope.TAILNET, Candidate.Kind.NAME) else null
 }
 
 /** The scope of an IPv4 literal's range, or null outside the tailnet's and the private LAN's. */
@@ -84,21 +140,28 @@ private fun isMagicDnsName(host: String): Boolean =
         host.split('.').all(NAME_LABEL::matches)
 
 /**
- * Design section 5.1's order: the last successful candidate first, then the tailnet addresses, the
- * MagicDNS names and the LAN addresses. A LAN name, which section 5.1 does not name, goes last. Within
- * a class the order given is kept: the daemon lists its candidates best first. A candidate listed
- * twice is tried once, and a last successful candidate the list no longer holds is not tried: the
- * daemon's current list, at most 16, is the race's cap.
+ * Design section 5.1's order, and M62's: the last successful candidate first, then the tailnet addresses, the
+ * MagicDNS names and the LAN addresses, and the route last. A LAN name, which section 5.1 does not name, goes
+ * after the LAN addresses. Within a class the order given is kept: the daemon lists its candidates best first. A
+ * candidate listed twice is tried once, and a last successful candidate the list no longer holds is not tried.
+ * The race holds at most [MAX_CANDIDATES]: up to that many hosts and one route come in (a pairing link may name
+ * 16 hosts beside its route), and the hosts past the room the route leaves are cut, as the daemon cuts its own to
+ * 15 when it lists its route.
  */
 fun candidateOrder(
     candidates: List<Candidate>,
     lastSuccessful: Candidate? = null,
 ): List<Candidate> {
-    require(candidates.size <= MAX_CANDIDATES) { "${candidates.size} candidates is past the wire's $MAX_CANDIDATES" }
     val distinct = candidates.distinct()
+    val hosts = distinct.filterIsInstance<Candidate.Host>()
+    val routes = distinct.filterIsInstance<Candidate.Route>()
+    require(hosts.size <= MAX_CANDIDATES) { "${hosts.size} hosts is past the wire's $MAX_CANDIDATES" }
+    require(routes.size <= 1) { "${routes.size} routes; an instance has one" }
     val first = listOfNotNull(lastSuccessful?.takeIf { it in distinct })
     // The tailnet before the LAN, then an address before a name; false sorts first, and the sort is
     // stable, so a class keeps its order.
-    val classes = compareBy<Candidate>({ it.scope != Candidate.Scope.TAILNET }, { it.kind != Candidate.Kind.IP })
-    return first + (distinct - first.toSet()).sortedWith(classes)
+    val classes = compareBy<Candidate.Host>({ it.scope != Candidate.Scope.TAILNET }, { it.kind != Candidate.Kind.IP })
+    val last = routes.filterNot { it in first }
+    val room = MAX_CANDIDATES - first.size - last.size
+    return first + hosts.filterNot { it in first }.sortedWith(classes).take(room) + last
 }

@@ -3,8 +3,8 @@ package io.tezra.fermix.session
 import io.tezra.fermix.noise.StaticKey
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.transport.Candidate
-import io.tezra.fermix.transport.MAX_CANDIDATES
 import io.tezra.fermix.transport.NetworkFacts
+import io.tezra.fermix.transport.candidateOrder
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +51,8 @@ class PairedInstance(
  * test passes fakes and the virtual clock. [fullPull] is `onDeletedMessages`'s full `history_pull` (design
  * section 10): FCM dropped pushes it held for this phone, so an empty cache pulls every row from the first,
  * each announced, rather than the newest page alone; a cache that holds rows pulls everything after its cursor
- * on every connection, as always.
+ * on every connection, as always. [relayListRev] reads the revision of the route the instance record has stored,
+ * which each `hello` names (PROTOCOL.md "Remote reach"); none without a route.
  */
 data class SessionParts(
     val appVersion: String,
@@ -64,6 +65,7 @@ data class SessionParts(
     val random: Random = Random.Default,
     val io: CoroutineDispatcher = Dispatchers.IO,
     val fullPull: Boolean = false,
+    val relayListRev: suspend () -> String? = { null },
 )
 
 /**
@@ -232,12 +234,12 @@ class Session private constructor(
 
     companion object {
         /**
-         * Starts a session in [scope], whose dispatcher it runs on one coroutine at a time, racing
-         * [candidates], at most 16, for [instance]'s daemon, [lastSuccessful] first when [candidates] holds
-         * it: the candidate an earlier session's last `hello` went over, which the app keeps with the
-         * instance (design section 5.1, "last successful first"). It runs until it ends or [scope] does,
-         * which ends it as [SessionState.Closed]. The caller opens one session per (instance, profile) at a
-         * time: its store is that session's alone (SessionStore).
+         * Starts a session in [scope], whose dispatcher it runs on one coroutine at a time, racing [candidates], at
+         * most 16 hosts and the route, for [instance]'s daemon, [lastSuccessful] first when [candidates] holds it: the
+         * candidate an earlier session's last `hello` went over, which the app keeps with the instance (design section
+         * 5.1, "last successful first"). It runs until it ends or [scope] does, which ends it as [SessionState.Closed].
+         * The caller opens one session per (instance, profile) at a time: its store is that session's alone
+         * (SessionStore).
          */
         fun open(
             instance: PairedInstance,
@@ -273,7 +275,8 @@ class Session private constructor(
             first: (SessionCore) -> Unit,
         ): Session {
             require(candidates.isNotEmpty()) { "a session needs a candidate to race" }
-            require(candidates.size <= MAX_CANDIDATES) { "${candidates.size} candidates is past $MAX_CANDIDATES" }
+            // The race's own order holds what one instance may have: at most 16 hosts and one route.
+            candidateOrder(candidates)
             require(parts.appVersion.isNotEmpty()) { "hello carries the app's version" }
             val dispatcher = scope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher
             requireNotNull(dispatcher) { "a session's scope names the dispatcher it runs on" }

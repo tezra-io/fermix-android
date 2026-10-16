@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
 
+/** The vendored fixtures are protocol v2's, the engine's export (contracts/SOURCE.json). */
+private const val FIXTURE_V = 2
+
 /**
  * Every server frame of the vendored fixtures, byte for byte (design section 12.6): each line
  * decodes to its typed model, never to Unknown, and encodes back to the same bytes; the binary
@@ -21,7 +24,7 @@ class ServerFixtureTest {
         val decoded = decodeServerEvent(line.frame())
         val event = decoded.event
         assertTrue(event is ServerEvent.Known, "$line decoded to $event")
-        assertEquals(1, decoded.v)
+        assertEquals(FIXTURE_V, decoded.v)
         assertEquals(line.text, headerOf(encodeServerEvent(decoded.v, decoded.seq, event as ServerEvent.Known)))
     }
 
@@ -48,10 +51,24 @@ class ServerFixtureTest {
         assertNull(assembler.accept(decodeServerEvent(run[0].frame())))
         val logical = checkNotNull(assembler.accept(decodeServerEvent(run[1].frame())))
 
-        assertEquals(1, logical.v)
+        assertEquals(FIXTURE_V, logical.v)
         assertEquals(34uL, logical.seq)
         assertEquals(ServerEvent.TextDone("turn-client-6", 19uL, "A reply sent as two parts"), logical.event)
         assertEquals(0, logical.raw.size)
+    }
+
+    @Test
+    fun `the second hello_ack carries the route, last, after the hosts`() {
+        val ack = decodeServerEvent(headerLines(SERVER_EVENTS)[1].frame()).event as ServerEvent.HelloAck
+        val relays = listOf(Relay("https://us1.relay.fermix.ai/", 7842), Relay("https://eu1.relay.fermix.ai/", 7842))
+        val route =
+            Candidate.Iroh(
+                "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664",
+                relays,
+                "374b4c8f103627f7",
+            )
+        assertEquals(route, ack.candidates.last())
+        assertEquals(3, ack.candidates.count { it is Candidate.Host })
     }
 
     @Test

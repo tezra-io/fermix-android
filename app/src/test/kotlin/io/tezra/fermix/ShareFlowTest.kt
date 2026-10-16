@@ -52,7 +52,7 @@ private fun record(
         profile = "fermix",
         label = host,
         tint = "Slate",
-        candidates = listOf(Candidate("100.101.102.$gateway", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
+        candidates = listOf(Candidate.Host("100.101.102.$gateway", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
         port = 4031,
         deviceId = "device-$gateway",
         keyAlias = "fermix.device.$gateway.0102030405060708",

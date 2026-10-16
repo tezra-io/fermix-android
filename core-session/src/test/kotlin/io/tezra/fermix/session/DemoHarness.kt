@@ -68,6 +68,8 @@ internal class DemoHarness(
             network = network,
             keystore = StandardTestDispatcher(test.testScheduler),
             sessionScope = sessionScope,
+            // The demo gives no route.
+            relayListRev = { null },
             clock = test.testScheduler.timeSource,
             random = Random(SEED),
         )

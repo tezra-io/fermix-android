@@ -21,8 +21,8 @@ import kotlinx.coroutines.yield
 import kotlin.random.Random
 
 internal val ONLINE = NetworkFacts(1L, defaultHasVpn = true, defaultHasCgnatAddress = true, otherUidVpnPresent = false)
-internal val TAILNET = Candidate("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
-internal val LAN = Candidate("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
+internal val TAILNET = Candidate.Host("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+internal val LAN = Candidate.Host("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
 
 internal val EMPTY_CURSORS =
     StoredCursors(
@@ -234,6 +234,12 @@ internal class Harness(
     lateinit var eventsCollected: Job
     private val started = test.testScheduler.timeSource.markNow()
 
+    /** What the next [open] dials through: the fake daemon's own sockets, or a test's carrier in front of them. */
+    var dialer: Dialer = daemon
+
+    /** The stored route's revision each `hello` of the next [open] names: none, as for a record without a route. */
+    var relayListRev: suspend () -> String? = { null }
+
     /** Virtual milliseconds since the harness was made. */
     val now: Long get() = started.elapsedNow().inWholeMilliseconds
 
@@ -258,7 +264,7 @@ internal class Harness(
             SessionParts(
                 appVersion = "0.1.0",
                 staticKey = SoftwareKey.generate(),
-                dialer = daemon,
+                dialer = dialer,
                 store = store,
                 announcer = announcer,
                 network = network,
@@ -266,6 +272,7 @@ internal class Harness(
                 random = Random(SEED),
                 io = io,
                 fullPull = fullPull,
+                relayListRev = relayListRev,
             )
         val instance = PairedInstance("device-1", PROFILE, daemon.gatewayKey.publicKey)
         session = Session.open(instance, candidates, parts, scope, lastSuccessful)

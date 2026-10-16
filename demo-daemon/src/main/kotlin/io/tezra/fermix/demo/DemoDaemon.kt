@@ -113,9 +113,10 @@ class DemoDaemon(
         home: DemoHome,
         candidate: Candidate,
     ): Link {
-        if (candidate.host != home.fermix.address) {
+        // The demo's Fermixes list no iroh route, so a route is never theirs.
+        if ((candidate as? Candidate.Host)?.host != home.fermix.address) {
             throw TransportException.Unreachable(
-                IOException("the demo's ${home.fermix.host} is not at ${candidate.host}"),
+                IOException("the demo's ${home.fermix.host} is not at $candidate"),
             )
         }
         val pairing = withContext(confined) { home.windowAt(parts.nowMs(), parts.times.window) != null }

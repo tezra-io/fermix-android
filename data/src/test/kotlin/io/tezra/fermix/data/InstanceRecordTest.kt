@@ -22,18 +22,18 @@ import org.junit.jupiter.api.assertThrows
  * never a secret; and what a pairing and a `hello_ack` give it reads back as it was written.
  */
 class InstanceRecordTest {
-    /** The vendored pairing link: its `secret` is the one-time pairing PSK. */
+    /** The vendored pairing link, its first, without a route: its `secret` is the one-time pairing PSK. */
     private val link =
         PairingLink.parse(
             Json
-                .parseToJsonElement(vendored("fixtures/pairing_links.jsonl").trim())
+                .parseToJsonElement(vendored("fixtures/pairing_links.jsonl").lines().first { it.isNotBlank() })
                 .jsonObject
                 .getValue("uri")
                 .jsonPrimitive.content,
         )
 
-    /** The vendored hello_ack, whose caps the record keeps as its snapshot. */
-    private val helloAck = fixtureServerEvents().filterIsInstance<ServerEvent.HelloAck>().single()
+    /** The vendored first hello_ack, whose caps the record keeps as its snapshot. */
+    private val helloAck = fixtureServerEvents().filterIsInstance<ServerEvent.HelloAck>().first()
 
     /** The record a pairing through [link] makes, with the caps of the first hello_ack after it. */
     private val paired =
@@ -43,7 +43,10 @@ class InstanceRecordTest {
             host = link.name,
             label = link.name,
             port = link.port,
-            candidates = link.candidates.map { host -> Candidate(host, Candidate.Scope.TAILNET, Candidate.Kind.NAME) },
+            candidates =
+                link.candidates.map { host ->
+                    Candidate.Host(host, Candidate.Scope.TAILNET, Candidate.Kind.NAME)
+                },
             caps = helloAck.caps,
         )
 
@@ -74,6 +77,7 @@ class InstanceRecordTest {
                 "last_candidate",
                 "picture_at",
                 "eyes",
+                "route",
             )
         assertEquals(expected, names)
         val secretName = Regex("secret|psk|private|token|password", RegexOption.IGNORE_CASE)
@@ -146,6 +150,25 @@ class InstanceRecordTest {
                 val text = written(records)
                 assertEquals(records, InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray())))
             }
+        }
+
+    @Test
+    fun `a record holds its route, and its last candidate may be the route`() =
+        runTest {
+            val routed = paired.copy(route = ROUTE, lastCandidate = ROUTE)
+            val records = Instances(listOf(routed, instance(gateway = 3)))
+            val text = written(records)
+            assertTrue("\"node_id\":\"${ROUTE.nodeId}\"" in text, text)
+            assertEquals(records, InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray())))
+        }
+
+    @Test
+    fun `a record written before the route reads with none`() =
+        runTest {
+            val text = written(Instances(listOf(instance(gateway = 1))))
+            assertTrue("route" !in text, text)
+            val read = InstancesSerializer.readFrom(Buffer().write(text.encodeToByteArray()))
+            assertEquals(null, read.instances.single().route)
         }
 
     @Test

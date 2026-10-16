@@ -3,6 +3,7 @@ package io.tezra.fermix.protocol
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 // The objects events nest, and the closed value sets of their fields. A value outside a set is a
 // decode error naming its field; the rule that a client ignores what it does not know is about
@@ -198,12 +199,50 @@ data class Profile(
     @SerialName("name") val name: String,
 )
 
-/** A route to the daemon for later reconnects. */
+/**
+ * A route to the daemon for later reconnects, as `hello_ack` and `pair_approved` list them (PROTOCOL.md "Server
+ * events"): a [Host] to dial, which has no `kind`, or, with `kind` "iroh", the daemon's [Iroh] route. A
+ * candidate of any other kind is [Skipped]: never refused, never dialled, never a host. [CandidateSerializer]
+ * tells them apart by `kind` alone.
+ */
+@Serializable(with = CandidateSerializer::class)
+sealed interface Candidate {
+    /** A host to open `wss://<host>:<port>/ws` on, an address or a MagicDNS name, and where it lies. */
+    @Serializable
+    data class Host(
+        @SerialName("host") val host: String,
+        @SerialName("interface") val networkInterface: String,
+        @SerialName("scope") val scope: CandidateScope,
+    ) : Candidate
+
+    /**
+     * The daemon's iroh endpoint ([nodeId], 64 lowercase hex digits), the relays to reach it through, and that
+     * list's revision, which the phone names back in `hello.relay_list_rev` (PROTOCOL.md "Remote reach"). Its
+     * `kind` is the serializer's to write, first, as the daemon does.
+     */
+    @Serializable
+    data class Iroh(
+        @SerialName("node_id") val nodeId: String,
+        @SerialName("relays") val relays: List<Relay>,
+        @SerialName("relays_rev") val relaysRev: String,
+    ) : Candidate
+
+    /**
+     * A candidate of a kind this app does not know, kept as it came so it encodes back unchanged. [kind] is its
+     * `kind` when that is a string, for the Diagnostics; the caller bounds it before showing it.
+     */
+    data class Skipped(
+        val fields: JsonObject,
+    ) : Candidate {
+        val kind: String? get() = (fields[CANDIDATE_KIND] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    }
+}
+
+/** One relay of the iroh route: `https://<host>/`, with QUIC address discovery on [quicPort]. */
 @Serializable
-data class Candidate(
-    @SerialName("host") val host: String,
-    @SerialName("interface") val networkInterface: String,
-    @SerialName("scope") val scope: CandidateScope,
+data class Relay(
+    @SerialName("url") val url: String,
+    @SerialName("quic_port") val quicPort: Int,
 )
 
 /** One entry of the command palette. */
@@ -224,9 +263,9 @@ data class Caps(
     @SerialName("commands") val commands: List<CommandDescriptor>,
     @SerialName("media") val media: Boolean? = null,
     @SerialName("streaming") val streaming: Boolean? = null,
+    @SerialName("turn_done") val turnDone: Boolean? = null,
     @SerialName("max_media_bytes") val maxMediaBytes: Long,
     @SerialName("thoughts") val thoughts: Boolean? = null,
-    @SerialName("turn_done") val turnDone: Boolean? = null,
     @SerialName("transcripts") val transcripts: Boolean? = null,
     @SerialName("models") val models: Boolean? = null,
     @SerialName("search") val search: Boolean? = null,

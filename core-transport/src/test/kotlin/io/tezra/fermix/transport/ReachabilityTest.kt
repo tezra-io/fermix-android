@@ -16,9 +16,9 @@ import java.net.InetAddress
 
 /** Design section 5.2's facts and what they say, every row of the truth table. */
 class ReachabilityTest {
-    private val tailnet = Candidate("100.101.102.103", TAILNET, IP)
-    private val magicDns = Candidate("workstation.tail1234.ts.net", TAILNET, NAME)
-    private val lan = Candidate("192.168.1.8", LAN, IP)
+    private val tailnet = Candidate.Host("100.101.102.103", TAILNET, IP)
+    private val magicDns = Candidate.Host("workstation.tail1234.ts.net", TAILNET, NAME)
+    private val lan = Candidate.Host("192.168.1.8", LAN, IP)
 
     // Columns: a network, a VPN on it, a 100.64/10 address on it, another app's VPN, a tailnet
     // candidate, and what they say.

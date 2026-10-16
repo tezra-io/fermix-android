@@ -52,7 +52,12 @@ internal class SessionEvents(
     ): Boolean =
         when (event) {
             is SessionEvent.Candidates -> {
-                instances.update(instanceId) { it.copy(candidates = event.candidates) }
+                instances.update(instanceId) { record ->
+                    record.copy(
+                        candidates = event.candidates.filterIsInstance<Candidate.Host>(),
+                        route = event.candidates.filterIsInstance<Candidate.Route>().lastOrNull() ?: record.route,
+                    )
+                }
             }
 
             is SessionEvent.ReadFrontier -> {

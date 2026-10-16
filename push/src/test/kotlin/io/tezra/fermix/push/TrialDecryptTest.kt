@@ -34,7 +34,7 @@ internal fun pairedRecord(
         profile = "fermix",
         label = "suj-mbp",
         tint = "Slate",
-        candidates = listOf(Candidate("100.101.102.1", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
+        candidates = listOf(Candidate.Host("100.101.102.1", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
         port = 4031,
         deviceId = "device-$alias",
         keyAlias = alias,

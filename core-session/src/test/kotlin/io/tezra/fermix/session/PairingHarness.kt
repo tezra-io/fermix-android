@@ -42,7 +42,7 @@ internal val IDENTITY = PhoneIdentity("Pixel 9 Pro", "Google Pixel 9 Pro", "0.1.
 internal val APPROVAL =
     ServerEvent.PairApproved(
         deviceId = DEVICE_ID,
-        candidates = listOf(WireCandidate("100.101.102.104", "utun4", CandidateScope.TAILNET)),
+        candidates = listOf(WireCandidate.Host("100.101.102.104", "utun4", CandidateScope.TAILNET)),
         profiles = listOf(Profile(PROFILE, "Fermix")),
         pushSalt = Base64.getEncoder().encodeToString(ByteArray(32) { 9 }),
         push = listOf(PushPlatform.FCM),
@@ -70,11 +70,17 @@ internal class PairingHarness(
 
     /** What a scope from [faultScope] failed with, in order. */
     val faults = mutableListOf<Throwable>()
+
+    /** The stored route's revision each `hello` of the session the next [start] hands over names: none at first. */
+    var relayListRev: suspend () -> String? = { null }
     lateinit var link: PairingLink
     lateinit var handle: PairingHandle
 
-    /** A version-2 link as the daemon writes it, form-encoded. */
-    fun linkText(candidates: List<String> = listOf(TAILNET.host)): String {
+    /** A version-2 link as the daemon writes it, form-encoded, with [route]'s parameters when it names them. */
+    fun linkText(
+        candidates: List<String> = listOf(TAILNET.host),
+        route: Map<String, String> = emptyMap(),
+    ): String {
         val parameters =
             listOf(
                 "v" to "2",
@@ -85,7 +91,7 @@ internal class PairingHarness(
                 "secret" to Base64.getEncoder().encodeToString(secret),
                 "name" to HOST_NAME,
                 "profile" to LINK_PROFILE,
-            )
+            ) + route.toList()
         val query =
             parameters.joinToString(
                 "&",
@@ -106,6 +112,7 @@ internal class PairingHarness(
             network = network,
             keystore = StandardTestDispatcher(test.testScheduler),
             sessionScope = sessionScope,
+            relayListRev = relayListRev,
             clock = test.testScheduler.timeSource,
             random = Random(SEED),
         )

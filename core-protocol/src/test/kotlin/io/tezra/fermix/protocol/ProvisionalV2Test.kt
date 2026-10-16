@@ -14,29 +14,28 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.assertThrows
 
-// PROVISIONAL UNTIL THE PROTOCOL V2 EXPORT IS VENDORED (engine stage D1). Every test in this file
-// gates a shape protocol v2 adds or changes, from a sample frame written here out of design section
-// 7, because the vendored export is protocol v1 (v0.12.1). When D1's export is vendored, its
-// fixtures replace these samples: each shape listed below is checked against them, the listed
-// assumptions are settled by the export, and what protocol v1 alone carries is reconsidered.
+// DESIGN SECTION 7 BEYOND THE VENDORED EXPORT. The protocol v2 export is vendored now (engine dev 90608c1a,
+// contracts/SOURCE.json), and its fixtures and schema gate what it carries (ClientFixtureTest,
+// ServerFixtureTest, SchemaTest, SchemaBoundsTest). Every test in this file gates a shape design section 7
+// adds that the export does not carry, or one the export settled, from a sample frame written here.
 //
-// The provisional shapes, by design section 7 row:
-//   client events (V2_CLIENT_EVENTS): push_unregister, request_status, mutations_pull,
-//     history_search, models_pull
-//   server events (V2_SERVER_EVENTS): thought, thought_done, turn_done, models, model_changed,
-//     transcript, request_status_page, mutations_page, search_results
-//   fields added to protocol v1 shapes (V2_FIELDS); hello.last_mutation_seq,
-//     pair_request.platform/attestation and pair_approved.push_salt are required in v2
-//   push_register: v2 replaces {apns_token, environment} with {platform, token, environment?}
-//   tool_event: v2 drops detail and adds status
-//   history_pull: v2 takes exactly one of after_seq and before_seq
-//   pair_request: v2 carries the DER chain as its raw tail
-//   closed sets (V2_VALUES, V2_CLOSED_SETS and the enums): pair_denied.reason gains three values;
-//     attach_begin.kind is image, audio, document or video; a timeline row's kind is text, media or
-//     system
+// What the export carries and settled (Task 30): request_status, request_status_page and turn_done;
+// hello.relay_list_rev; history_pull's two cursors; pair_request's platform, attestation and DER chain;
+// pair_approved.push_salt; pair_denied's three refusals; caps.turn_done; text_delta.replace, present only as
+// true; history_page.prev_before_seq; the pairing link's v=2 and profile. Where it differs from section 7:
+//   - its v2 hello has no last_mutation_seq, which v2 now carries and no longer requires;
+//   - its v2 push_register is v1's APNs form, which v2 reads beside section 7's platform and token
+//     (V2_OTHER_FORM), never mixed with it;
+//   - its v2 tool_event keeps detail, which v2 now carries beside section 7's status.
+//
+// The shapes still provisional, by design section 7 row:
+//   client events (V2_CLIENT_EVENTS): push_unregister, mutations_pull, history_search, models_pull
+//   server events (V2_SERVER_EVENTS): thought, thought_done, models, model_changed, transcript,
+//     mutations_page, search_results
+//   fields section 7 adds to the export's shapes (V2_FIELDS)
+//   closed sets (V2_CLOSED_SETS and the enums): attach_begin.kind is image, audio, document or video; a
+//     timeline row's kind is text, media or system
 //   error.code mutations_gone (ServerEvent.Error.MUTATIONS_GONE)
-//   the pairing link (`v` row, QR v=2): link version 2, and its required profile parameter
-//     (REQUIRED_PARAMETERS)
 //   the bounds of every shape above (V2_CLIENT_BOUNDS, V2_SERVER_BOUNDS)
 //   the fields every shape above requires (V2_CLIENT_REQUIRED, V2_SERVER_REQUIRED)
 //
@@ -65,54 +64,42 @@ import org.junit.jupiter.api.assertThrows
 //   - models.next is a boolean, true when another page follows: models_pull carries no cursor;
 //   - mutations_page.next is an unsigned integer, the after_mutation_seq of the next pull;
 //   - mutations_pull.limit is 1 to 200, as history_pull's;
-//   - request_status carries 1 to 32 ids; request_status_page answers at most 32 requests;
-//   - request_status_page.requests[].error is the failure's error code, a string;
 //   - tool_event.status is a non-empty string; its values are not named;
-//   - text_delta.replace may be false, which means what its absence does;
-//   - history_page.next_after_seq stays required on a backward page. The engine's companion socket
-//     already pages this timeline backward with another shape: its history_page requires only
-//     profile_id, messages and history_head_seq, a forward page carries next_after_seq, and a backward
-//     page carries next_before_seq (apps/fermix_core/priv/companion/protocol.schema.json), where
-//     section 7 names the cursor prev_before_seq. If D1 takes the companion's shape, this codec refuses
-//     every backward page (MissingField next_after_seq) and reads no cursor from it. Open for the owner:
-//     on a v2 backward page, is next_after_seq required, and is the cursor prev_ or next_before_seq?
 //   - the hello_ack, caps and text_done additions are optional ("additive"), and pair_approved.push too;
 //   - thought.text is not bounded here: its 1,000 units are the daemon's String.length, graphemes,
 //     which a JVM cannot count the same way, so a bound here could refuse a valid thought;
-//   - a v2 field is declared after the v1 fields of its shape, in section 7's order, which is the
-//     order these samples pin.
+//   - a field section 7 adds is declared after the export's fields of its shape, in section 7's order,
+//     which is the order these samples pin; the export's own order is its fixtures'.
 
-/** Protocol v2's new client events (design section 7). */
+/** The client events design section 7 adds that the vendored protocol v2 export does not carry. */
 internal val V2_CLIENT_EVENTS =
-    setOf("push_unregister", "request_status", "mutations_pull", "history_search", "models_pull")
+    setOf("push_unregister", "mutations_pull", "history_search", "models_pull")
 
-/** Protocol v2's new server events (design section 7). */
+/** The server events design section 7 adds that the vendored protocol v2 export does not carry. */
 internal val V2_SERVER_EVENTS =
     setOf(
         "thought",
         "thought_done",
-        "turn_done",
         "models",
         "model_changed",
         "transcript",
-        "request_status_page",
         "mutations_page",
         "search_results",
     )
 
-/** The fields protocol v2 adds to a protocol v1 definition of protocol.schema.json, by definition. */
+/**
+ * The fields design section 7 adds to a definition of the vendored protocol v2 export that the export does not
+ * carry, by definition.
+ */
 internal val V2_FIELDS: Map<String, Set<String>> =
     mapOf(
         "hello" to setOf("last_mutation_seq"),
         "msg" to setOf("retry_of"),
-        "history_pull" to setOf("before_seq"),
         "push_register" to setOf("platform", "token"),
-        "pair_request" to setOf("platform", "attestation"),
         "hello_ack" to setOf("instance", "active_turns", "pending_approvals", "mutation_head_seq"),
         "caps" to
             setOf(
                 "thoughts",
-                "turn_done",
                 "transcripts",
                 "models",
                 "search",
@@ -121,16 +108,19 @@ internal val V2_FIELDS: Map<String, Set<String>> =
                 "push",
                 "model_state",
             ),
-        "text_delta" to setOf("replace"),
         "tool_event" to setOf("status"),
         "text_done" to setOf("route"),
-        "history_page" to setOf("prev_before_seq"),
-        "pair_approved" to setOf("push_salt", "push"),
+        "pair_approved" to setOf("push"),
     )
 
-/** The values protocol v2 adds to a closed set of protocol.schema.json, by `definition.field`. */
-internal val V2_VALUES: Map<String, Set<String>> =
-    mapOf("pair_denied.reason" to setOf("attestation", "attestation_unavailable", "platform_unsupported"))
+/**
+ * The fields the export requires of a definition that the codec requires only of one of two forms it reads at
+ * v2: `push_register`'s APNs token and environment, beside design section 7's platform and token (Rules.kt).
+ */
+internal val V2_OTHER_FORM: Map<String, Set<String>> = mapOf("push_register" to setOf("apns_token", "environment"))
+
+/** The values design section 7 adds to a closed set of the vendored export, by `definition.field`: none now. */
+internal val V2_VALUES: Map<String, Set<String>> = emptyMap()
 
 /** The open strings of protocol.schema.json that protocol v2 closes into a set, by `definition.field`. */
 internal val V2_CLOSED_SETS: Set<String> = setOf("attach_begin.kind", "row.kind", "historyMessage.kind")
@@ -145,7 +135,7 @@ private const val MSG_V2 =
         """"attach_ids":[],"retry_of":"client-8"}"""
 
 private const val HISTORY_PULL_V2 =
-    """{"v":2,"t":"history_pull","seq":4,"profile_id":"main","limit":50,"before_seq":120}"""
+    """{"v":2,"t":"history_pull","seq":4,"profile_id":"main","before_seq":120,"limit":50}"""
 
 private const val PUSH_REGISTER_V2 =
     """{"v":2,"t":"push_register","seq":5,"platform":"android","token":"fcm-token-1"}"""
@@ -165,8 +155,8 @@ private const val HELLO_ACK_V2 =
         """"profiles":[{"id":"main","name":"Fermix"}],""" +
         """"candidates":[{"host":"100.101.102.103","interface":"utun4","scope":"tailnet"}],""" +
         """"history_head_seq":40,"read_up_to_seq":38,"caps":{"commands":[{"name":"model","aliases":[],""" +
-        """"description":"Switch this chat's model"}],"media":true,"streaming":true,""" +
-        """"max_media_bytes":20971520,"thoughts":true,"turn_done":true,"transcripts":true,""" +
+        """"description":"Switch this chat's model"}],"media":true,"streaming":true,"turn_done":true,""" +
+        """"max_media_bytes":20971520,"thoughts":true,"transcripts":true,""" +
         """"models":true,"search":true,"approval_replay":true,"reply":false,"push":["apns","fcm"],""" +
         """"model_state":{"default":{"provider":"anthropic","model":"claude-opus-5-5",""" +
         """"label":"Claude Opus 5.5"},"override":{"provider":"openai","model":"gpt-6.1",""" +
@@ -261,7 +251,6 @@ private class V2Required(
 
 private val V2_CLIENT_REQUIRED =
     listOf(
-        V2Required(HELLO_V2, "last_mutation_seq"),
         V2Required(PUSH_REGISTER_V2, "platform"),
         V2Required(PUSH_REGISTER_V2, "token"),
         V2Required(HISTORY_PULL_V2, "before_seq", "after_seq"),
@@ -439,18 +428,11 @@ class ProvisionalV2Test {
     // Client additions.
 
     @Test
-    fun `hello carries protocol_v 2 and the mutation cursor, which v2 requires and v1 lacks`() {
+    fun `hello carries protocol_v 2 and the mutation cursor, which v2 carries and v1 lacks`() {
         val hello = ClientEvent.Hello("device-1", "0.1.0", 0uL, V2, lastMutationSeq = 41uL)
         encodesTo(HELLO_V2, hello, 1uL)
-        val missing =
-            assertThrows<ProtocolException.MissingField> {
-                encodeClientEvent(
-                    V2,
-                    1uL,
-                    hello.copy(lastMutationSeq = null),
-                )
-            }
-        assertEquals("last_mutation_seq", missing.field)
+        // The export's v2 hello has no last_mutation_seq (fixtures/client_events.jsonl), so v2 reads one without it.
+        encodeClientEvent(V2, 1uL, hello.copy(lastMutationSeq = null))
         val stray =
             assertThrows<ProtocolException.FieldNotInVersion> { encodeClientEvent(V1, 1uL, hello.copy(protocolV = V1)) }
         assertEquals("last_mutation_seq", stray.field)
@@ -523,10 +505,16 @@ class ProvisionalV2Test {
             "environment",
             assertThrows<ProtocolException.InvalidField> { encodeClientEvent(V2, 5uL, android) }.field,
         )
+        // The export's v2 takes v1's APNs form, which v2 reads too, but never mixed with design section 7's.
         val apns = ClientEvent.PushRegister(apnsToken = "0123", platform = Platform.IOS, token = "0123")
         assertEquals(
             "apns_token",
-            assertThrows<ProtocolException.FieldNotInVersion> { encodeClientEvent(V2, 5uL, apns) }.field,
+            assertThrows<ProtocolException.InvalidField> { encodeClientEvent(V2, 5uL, apns) }.field,
+        )
+        val apnsAlone = ClientEvent.PushRegister(apnsToken = "0123")
+        assertEquals(
+            "environment",
+            assertThrows<ProtocolException.MissingField> { encodeClientEvent(V2, 5uL, apnsAlone) }.field,
         )
         val noToken = ClientEvent.PushRegister(platform = Platform.ANDROID)
         assertEquals(
@@ -640,13 +628,12 @@ class ProvisionalV2Test {
 
     @Test
     fun `a link version 2 requires and reads the profile, a label like the name`() {
-        val fixture = Json.parseToJsonElement(vendored("fixtures/pairing_links.jsonl").trim()).jsonObject
         val v2 =
-            fixture
+            pairingLinkFixture(0)
                 .getValue("uri")
                 .jsonPrimitive.content
-                .replace("?v=1&", "?v=2&")
-        check("?v=2&" in v2) { "the vendored link is no longer version 1" }
+                .replace(Regex("&profile=[^&]*"), "")
+        check("?v=2&" in v2) { "the vendored link is no longer version 2" }
         assertEquals("profile", assertThrows<ProtocolException.MissingParameter> { PairingLink.parse(v2) }.name)
         val parsed = PairingLink.parse("$v2&profile=dev+box")
         assertEquals(2, parsed.version)
@@ -694,7 +681,7 @@ class ProvisionalV2Test {
                 V2,
                 V2,
                 listOf(Profile("main", "Fermix")),
-                listOf(Candidate("100.101.102.103", "utun4", CandidateScope.TAILNET)),
+                listOf(Candidate.Host("100.101.102.103", "utun4", CandidateScope.TAILNET)),
                 40uL,
                 38uL,
                 v2Caps,
@@ -714,7 +701,7 @@ class ProvisionalV2Test {
         val approved =
             ServerEvent.PairApproved(
                 "device-2",
-                listOf(Candidate("192.168.1.8", "en0", CandidateScope.LAN)),
+                listOf(Candidate.Host("192.168.1.8", "en0", CandidateScope.LAN)),
                 listOf(Profile("main", "Fermix")),
                 SALT,
                 listOf(PushPlatform.FCM),
@@ -758,7 +745,7 @@ class ProvisionalV2Test {
     }
 
     @Test
-    fun `tool_event carries a status and no detail in v2`() {
+    fun `tool_event carries a status, and its detail as the export's v2 does`() {
         decodesTo(
             TOOL_EVENT_V2,
             ServerEvent.ToolEvent("turn-client-1", "web_search", ToolPhase.STOP, status = "ok"),
@@ -766,13 +753,8 @@ class ProvisionalV2Test {
         val withDetail =
             """{"v":2,"t":"tool_event","seq":11,"turn_id":"t","tool":"web_search","phase":"stop","detail":"x"}"""
         assertEquals(
-            ServerEvent.ToolEvent("t", "web_search", ToolPhase.STOP),
+            ServerEvent.ToolEvent("t", "web_search", ToolPhase.STOP, detail = "x"),
             decodeServerEvent(frameOf(withDetail)).event,
-        )
-        val detail = ServerEvent.ToolEvent("t", "web_search", ToolPhase.STOP, detail = "x")
-        assertEquals(
-            "detail",
-            assertThrows<ProtocolException.FieldNotInVersion> { encodeServerEvent(V2, 11uL, detail) }.field,
         )
     }
 

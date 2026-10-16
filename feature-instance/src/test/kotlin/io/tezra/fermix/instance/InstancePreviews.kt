@@ -29,8 +29,9 @@ import java.time.ZoneOffset
 // The Instance screen at the twelve windows of @FermixPreviews: a Fermix the owner named and gave a photo,
 // connected over the LAN with Tailscale likely up, after a test whose race its tailnet address won, so that both its
 // candidates are lit as the canon draws them, each by its own handshake, with a few lines in its log, its page's
-// top, and its foot with "Advanced" open; and the foot of the page of one that cannot be reached, without FCM, on a
-// debug build; and the Picture sheet's content on its tonal surface, the eight tints, the six eye styles on Coral,
+// top, and its foot with "Advanced" open; "Advanced" again over the daemon's iroh route, from a network neither host
+// is on; and the foot of the page of one that cannot be reached, without FCM, on a debug build; and the Picture
+// sheet's content on its tonal surface, the eight tints, the six eye styles on Coral,
 // Happy chosen, and "Remove photo". The pairing's day is read in UTC, so the images are the same in every zone. The
 // photo is drawn as the preview composes, a fixed pose: a dusk over the sea, read through the app's picture cache as a
 // screen reads one.
@@ -39,6 +40,17 @@ private val LOG =
     listOf(
         Diagnostic(atMs = 2_000, kind = DiagnosticKind.CLOSED, detail = "1000 by daemon"),
         Diagnostic(atMs = 95_000, kind = DiagnosticKind.UNKNOWN_EVENT, detail = "t=call_offer"),
+    )
+
+/** What the rail notes as a session opens over the route: the endpoint bound, and a relay that answered late. */
+private val REMOTE_LOG =
+    listOf(
+        Diagnostic(atMs = 1_000, kind = DiagnosticKind.ROUTE, detail = "the iroh endpoint is bound, with 2 relays"),
+        Diagnostic(
+            atMs = 11_000,
+            kind = DiagnosticKind.ROUTE,
+            detail = "a relay failed before another answered: us1.relay.fermix.ai: timed out after 10 s",
+        ),
     )
 
 private val NO_ACTIONS =
@@ -137,6 +149,33 @@ fun InstanceScreenAdvancedPreview() {
             previews = true,
             cacheBytes = 184_000_000,
             test = test,
+            releaseBuild = true,
+        )
+    FermixPreviewTheme {
+        FermixColumn(ColumnWidth.Narrow) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                Advanced(ui, ZoneOffset.UTC, NO_ACTIONS, startsOpen = true)
+            }
+        }
+    }
+}
+
+@FermixPreviews
+@Composable
+fun InstanceScreenRemotePreview() {
+    // "Advanced" open while the session is up over the daemon's iroh route (M62): the path "From anywhere", the hosts
+    // unlit, the route's row after them, lit, with its relays, and the rail's lines in the log.
+    val record = sample(nickname = "Studio").copy(route = ROUTE)
+    val ui =
+        InstanceUi(
+            record = record,
+            others = emptyList(),
+            link = Link.Up(Candidate.Scope.REMOTE, latencyMs = 41, caughtUp = true),
+            diagnostics = REMOTE_LOG,
+            reachable = reachableCandidates(record.raced, ROUTE, TestState.Idle, Reachability.TAILSCALE_OFF),
+            previews = true,
+            cacheBytes = 184_000_000,
+            test = TestState.Idle,
             releaseBuild = true,
         )
     FermixPreviewTheme {

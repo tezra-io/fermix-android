@@ -11,8 +11,16 @@ internal const val HOST = "suj-mbp"
 /** 27 September 2026, 09:41 UTC. */
 internal const val PAIRED_AT = 1_790_502_060_000L
 
-internal val LAN = Candidate("192.168.1.24", Candidate.Scope.LAN, Candidate.Kind.IP)
-internal val TAILNET = Candidate("100.101.42.7", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+internal val LAN = Candidate.Host("192.168.1.24", Candidate.Scope.LAN, Candidate.Kind.IP)
+internal val TAILNET = Candidate.Host("100.101.42.7", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+
+/** The daemon's iroh route, through two of Fermix's relays (M62). */
+internal val ROUTE =
+    Candidate.Route(
+        nodeId = "7f3a".repeat(16),
+        relays = listOf(Candidate.Relay("us1.relay.fermix.ai", 7842), Candidate.Relay("eu1.relay.fermix.ai", 7842)),
+        revision = "4f1c2a9e8b7d6053",
+    )
 
 private const val KEY_BYTES = 32
 private const val PORT = 4031

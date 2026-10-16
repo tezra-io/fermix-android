@@ -18,7 +18,8 @@
 #   7. no test key, vector key or fixture is inside: no entry has the name of a file of the vendored
 #      contracts/mobile, lies in a fixtures/ directory, or is a key store, key or fixture by its
 #      extension; no entry holds the bytes of a vendored file, whatever its name; and no entry holds a
-#      key of the vendored vectors, in hex of either case or in base64, as a constant compiled in would
+#      key of the vendored vectors, in hex of either case or in base64, as a constant compiled in would,
+#      the hex of a key of one repeated byte as a run of its own length, since a longer run is no key
 #   8. no camera is required, as the pasted link is the other way in (section 13.3, step 2): no feature
 #      the manifest declares or CAMERA implies names a camera as required, and camera.any is declared
 #      not required, so that Play offers the app to a phone without one
@@ -335,7 +336,8 @@ searched() {
   echo "entries named as a file of contracts/mobile ($(vendored_names | paste -sd ' ' -)), entries under" \
     "a fixtures/ directory, the extensions $TEST_EXTENSIONS, entries holding the bytes of any non-empty" \
     "file of contracts/mobile, by sha256, and entries holding a key of the vectors, in hex of either case" \
-    "or in base64 ($(vector_keys | cut -d ' ' -f 1 | paste -sd ' ' -))"
+    "or in base64, the hex of a key of one repeated byte as a run of its own length" \
+    "($(vector_keys | cut -d ' ' -f 1 | paste -sd ' ' -))"
 }
 
 # Every entry named as test material.
@@ -374,20 +376,51 @@ base64_of() {
   printf '%b' "$escaped" | base64 -w 0
 }
 
+# Whether the hex [hex] spells one byte over and over, as the vectors' private keys, psk and salt do: its
+# hex is then a run of one digit, or of two in turn, which a longer run of them holds anywhere it starts.
+# iroh's arm64 library holds 111 fives in a row, and so the hex of the noise vectors' psk, 32 bytes of 0x55.
+repeated() {
+  [ -z "${1//"${1:0:2}"/}" ]
+}
+
 # Each key of the "<field> <hex>" lines on stdin as "<form> <field>", once per form: its hex in lower case
-# and in upper case, and its base64.
+# and in upper case, unless it is one repeated byte (run_forms has those), and its base64.
 key_forms() {
   local field hex
   while read -r field hex; do
-    printf '%s %s\n' "$hex" "$field" "${hex^^}" "$field" "$(base64_of "$hex")" "$field"
+    if ! repeated "$hex"; then
+      printf '%s %s\n' "$hex" "$field" "${hex^^}" "$field"
+    fi
+    printf '%s %s\n' "$(base64_of "$hex")" "$field"
+  done | awk '!seen[$1]++'
+}
+
+# Each key of one repeated byte of the "<field> <hex>" lines on stdin as "<form> <field>", once per form:
+# its hex in lower case and in upper case.
+run_forms() {
+  local field hex
+  while read -r field hex; do
+    if repeated "$hex"; then
+      printf '%s %s\n' "$hex" "$field" "${hex^^}" "$field"
+    fi
   done | awk '!seen[$1]++'
 }
 
 # "<entry> holds <field>" for every entry unpacked under [unpacked] that holds a vendored vector's key in
 # any of its forms, as a key compiled in, as a constant or a resource, would.
 keys_inside() {
-  local unpacked=$1 forms found status=0
-  forms="$(vector_keys | key_forms)"
+  local unpacked=$1 keys
+  keys="$(vector_keys)"
+  {
+    forms_inside "$unpacked" "$(key_forms <<<"$keys")"
+    runs_inside "$unpacked" "$(run_forms <<<"$keys")"
+  } | awk '!seen[$0]++'
+}
+
+# "<entry> holds <field>" for every entry unpacked under [unpacked] that holds, anywhere, a form of the
+# "<form> <field>" lines [forms].
+forms_inside() {
+  local unpacked=$1 forms=$2 found status=0
   found="$(cut -d ' ' -f 1 <<<"$forms" | grep -a -r -o -F -f - "$unpacked")" || status=$?
   [ "$status" -le 1 ] || fatal "grep for the vectors' keys failed with status $status"
   [ "$status" -eq 0 ] || return 0
@@ -400,6 +433,23 @@ keys_inside() {
     }
     { at = match($0, /:[^:]*$/); entry = substr($0, skip + 1, at - skip - 1); key = field[substr($0, at + 1)] }
     !seen[entry, key]++ { print entry " holds " key }' <<<"$found"
+}
+
+# "<entry> holds <field>" for every entry unpacked under [unpacked] that holds a form of the "<form> <field>"
+# lines [forms] as a run of its own length: not after the form's last digit and not before its first, where
+# a longer run would put them. In the C locale, where every byte is a character that [^x] matches.
+runs_inside() {
+  local unpacked=$1 forms=$2 form field found status
+  [ -n "$forms" ] || return 0
+  while read -r form field; do
+    status=0
+    found="$(LC_ALL=C grep -a -r -l -E "(^|[^${form: -1}])$form([^${form:0:1}]|\$)" "$unpacked")" || status=$?
+    [ "$status" -le 1 ] || fatal "grep for the run of $field failed with status $status"
+    if [ "$status" -eq 0 ]; then
+      PREFIX="$unpacked/" FIELD="$field" awk '
+        { print substr($0, length(ENVIRON["PREFIX"]) + 1) " holds " ENVIRON["FIELD"] }' <<<"$found"
+    fi
+  done <<<"$forms"
 }
 
 # 7. Nothing of the tests' inside, by name, by content or by key.

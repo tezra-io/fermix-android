@@ -54,7 +54,7 @@ internal class RawDaemon<R>(
     private val serving = thread(name = "raw daemon") { serveOne() }
 
     val candidate =
-        Candidate(checkNotNull(server.inetAddress.hostAddress), Candidate.Scope.LAN, Candidate.Kind.IP)
+        Candidate.Host(checkNotNull(server.inetAddress.hostAddress), Candidate.Scope.LAN, Candidate.Kind.IP)
     val port: Int = server.localPort
 
     /** What the script returned, once it has; what it threw, if it did. */

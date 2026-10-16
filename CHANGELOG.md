@@ -22,9 +22,9 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   kept outside the repository, and never with the Android SDK's; a debug build without that key
   fails and says what to create, and a key described only in part fails and names what is
   missing. A release build is shrunk by R8 and is never debuggable.
-- **The engine's mobile wire contract is vendored.** `contracts/mobile/` is protocol v1 from the
-  engine's v0.12.1 release (`df8d8a4d`), pinned by checksums and provenance, and `scripts/verify_protocol_contract.sh`
-  proves it against those pins, an engine checkout, or the pinned commit on GitHub.
+- **The engine's mobile wire contract is vendored.** `contracts/mobile/` is protocol v2 from the
+  engine's dev branch (`90608c1a`), which no engine release serves yet, pinned by checksums and provenance, and
+  `scripts/verify_protocol_contract.sh` proves it against those pins, an engine checkout, or the pinned commit on GitHub.
 - **CI.** Every pull request runs the contract, build and unit jobs and the one required check,
   `gate`.
 - **The Noise layer.** `core-noise` runs the phone's side of the IK and IKpsk2 handshakes and the
@@ -89,7 +89,8 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   debuggable, no cleartext traffic, no resizability opt-out, nothing in backup or device transfer, now
   also for the platforms before Android 12 and in every platform-specific override of the rules, each
   rule counted only where a phone reads it, exactly the permissions `policy/permissions.txt` lists, and
-  no test key, vector, vector key or fixture inside, under its own name or any other.
+  no test key, vector, vector key or fixture inside, under its own name or any other; a vector key of one repeated
+  byte counts only as a run of its own length, since iroh's library holds a longer run of those digits.
 - **The Chats list, the Instance screen and the sessions behind them.** Each paired Fermix is a row
   with its avatar, its connection dot, "thinking…", a draft or its last message, the time and the unread
   count, and a long-press for Move to top, Rename, Details and Unpair…. The app keeps one session per Fermix while it is in sight and puts them aside 5 s after it
@@ -236,6 +237,13 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   Fermix or your own message, with a button to drop them. What you send next carries them as a quote ahead of
   your question, so your Fermix reads the two together, and your message shows the quote above what you asked.
   With TalkBack, Reply is an action on each message; with reduced motion, the message stays still.
+- **Reach your Fermix from anywhere.** A Fermix with remote reach on hands the phone its route through Fermix's
+  relays as you pair and each time you connect, and the phone tries it after your own network and Tailscale, so a
+  chat keeps working on mobile data or someone else's Wi-Fi with no Tailscale; a pairing link with a route pairs
+  from anywhere too. The same end-to-end encrypted session goes through it, and a relay sees its sizes and timing,
+  never what it says. The Instance screen says "From anywhere · 41 ms" while the route carries the session, and
+  Advanced lists the route after the addresses, with the relays it goes through. The app now carries iroh's library
+  for 64-bit ARM phones and x86_64 emulators alone, so a phone that runs only 32-bit apps can no longer install it.
 
 ### Changed
 

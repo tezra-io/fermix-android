@@ -42,9 +42,12 @@ val EYE_STYLES: List<String> = listOf("Open", "Happy", "Wink", "Squint", "Sleepy
  * [host] and [profile] are the daemon's computer and its home's `[fermix_core] profile` (design D11). [label]
  * is the daemon's own name and [nickname] the owner's, which lives on this phone alone and survives a
  * re-pairing (section 9.2); [tint] is one of [TINT_NAMES], the design module's `Tint` by name, which the UI
- * maps to its colour. [candidates] are the routes for the next race, and [lastCandidate] the one the last
- * completed `hello` went over (core-session's Session.lastSuccessful), which the next process races first
- * (section 5.1, "last successful first") while [candidates] still holds it; [caps] are the last `hello_ack`'s,
+ * maps to its colour. [candidates] are the hosts for the next race, and [route] the daemon's iroh route, which
+ * races after them (M62): the last the link, `pair_approved` or a `hello_ack` gave, kept when one gives none, and
+ * none from a daemon without remote reach or a record written before it; its revision is what `hello` names.
+ * [lastCandidate] is the one the last completed `hello` went over, a host or the route (core-session's
+ * Session.lastSuccessful), which the next process races first (section 5.1, "last successful first") while the
+ * record still holds it; [caps] are the last `hello_ack`'s,
  * none before the first one. [fcmRegisteredAt] is when this phone last sent `push_register`, in Unix milliseconds,
  * none before the first one, once `push_unregister` went, or once FCM gave the app a new token, which the daemon
  * then takes at the next `hello` (design section 10). The token itself is not here: Firebase keeps it, and a
@@ -78,8 +81,8 @@ data class Instance(
     @Serializable(with = TintNameSerializer::class)
     @SerialName("tint") val tint: String,
     @SerialName("candidates") val candidates: List<
-        @Serializable(with = CandidateSerializer::class)
-        Candidate,
+        @Serializable(with = HostSerializer::class)
+        Candidate.Host,
     >,
     @SerialName("port") val port: Int,
     @SerialName("device_id") val deviceId: String,
@@ -96,6 +99,8 @@ data class Instance(
     @SerialName("last_candidate") val lastCandidate: Candidate? = null,
     @SerialName("picture_at") val pictureAt: Long? = null,
     @SerialName("eyes") val eyes: String = EYE_STYLES.first(),
+    @Serializable(with = RouteSerializer::class)
+    @SerialName("route") val route: Candidate.Route? = null,
 ) {
     init {
         keyBytes("gateway_pk", gatewayPk)
@@ -125,6 +130,9 @@ data class Instance(
 
     /** The row's title: the owner's nickname, or else the daemon's own name (design section 9.2). */
     val title: String get() = nickname ?: label
+
+    /** What a race to the daemon takes: its hosts, then its route when it has one (core-transport's candidateOrder). */
+    val raced: List<Candidate> get() = candidates + listOfNotNull(route)
 
     /** Whether the daemon pushes through FCM: `hello_ack.caps.push` once known, else the pairing's. */
     val pushReady: Boolean get() = PushPlatform.FCM in (caps?.push ?: pushPlatforms)

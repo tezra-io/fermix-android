@@ -12,9 +12,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.util.Base64
 
-/** The pairing link (PROTOCOL.md "Pairing link"), from the vendored pairing_links.jsonl. */
+/**
+ * The pairing link (PROTOCOL.md "Pairing link"), from the vendored pairing_links.jsonl's first link, the one
+ * without a route; PairingLinkRouteTest reads the second.
+ */
 class PairingLinkTest {
-    private val fixture = Json.parseToJsonElement(vendored("fixtures/pairing_links.jsonl").trim()).jsonObject
+    private val fixture = pairingLinkFixture(0)
     private val link = fixture.getValue("uri").jsonPrimitive.content
     private val query = fixture.getValue("query").jsonObject.mapValues { it.value.jsonPrimitive.content }
 
@@ -41,8 +44,12 @@ class PairingLinkTest {
         assertArrayEquals(Base64.getDecoder().decode(query.getValue("gateway_pk")), parsed.gatewayPublicKey)
         assertArrayEquals(Base64.getDecoder().decode(query.getValue("secret")), parsed.secret)
         assertEquals(query.getValue("name"), parsed.name)
-        assertNull(parsed.profile)
-        assertEquals(setOf("v", "candidates", "port", "tls_fp", "gateway_pk", "secret", "name"), query.keys)
+        assertEquals(query.getValue("profile"), parsed.profile)
+        assertNull(parsed.route)
+        assertEquals(
+            setOf("v", "candidates", "port", "tls_fp", "gateway_pk", "secret", "name", "profile"),
+            query.keys,
+        )
     }
 
     @Test
@@ -56,7 +63,7 @@ class PairingLinkTest {
     fun `parsing zeroes every value it decoded, however it ends`() {
         val parsed = LinkedHashMap<String, ByteArray>()
         PairingLink.parse(link, parsed)
-        assertEquals(REQUIRED_PARAMETERS.getValue(V1).toSet(), parsed.keys)
+        assertEquals(REQUIRED_PARAMETERS.getValue(V2).toSet(), parsed.keys)
         parsed.forEach { (name, bytes) -> assertTrue(bytes.all { it == 0.toByte() }, name) }
         listOf(replacing("name", "%C3"), replacing("name", "%ZZ"), "$link&port=4131").forEach { broken ->
             val refused = LinkedHashMap<String, ByteArray>()
@@ -73,8 +80,9 @@ class PairingLinkTest {
 
     @Test
     fun `a version-1 link reads no profile, however one is written`() {
+        val v1 = without("profile").replace("?v=2&", "?v=1&")
         listOf("&profile=dev", "&profile=%ZZ", "&profile=a&profile=b").forEach { extra ->
-            assertNull(PairingLink.parse(link + extra).profile, extra)
+            assertNull(PairingLink.parse(v1 + extra).profile, extra)
         }
     }
 
@@ -121,7 +129,7 @@ class PairingLinkTest {
 
     @Test
     fun `each missing parameter is refused by name`() {
-        listOf("candidates", "port", "tls_fp", "gateway_pk", "secret", "name").forEach { name ->
+        listOf("candidates", "port", "tls_fp", "gateway_pk", "secret", "name", "profile").forEach { name ->
             check(without(name) != link) { "the vendored link has no $name to drop" }
             assertEquals(
                 name,

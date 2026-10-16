@@ -66,13 +66,13 @@ class ValidationTest {
         listOf(0, 201).forEach { limit ->
             assertEquals(
                 "limit",
-                encoding<ProtocolException.InvalidField>(ClientEvent.HistoryPull("main", 0uL, limit)).field,
+                encoding<ProtocolException.InvalidField>(ClientEvent.HistoryPull("main", 0uL, limit = limit)).field,
             )
             val header = """{"v":1,"t":"history_pull","seq":10,"profile_id":"main","after_seq":0,"limit":$limit}"""
             assertEquals("limit", client<ProtocolException.InvalidField>(header).field)
         }
-        encodeClientEvent(1, 1uL, ClientEvent.HistoryPull("main", 0uL, 1))
-        encodeClientEvent(1, 1uL, ClientEvent.HistoryPull("main", 0uL, 200))
+        encodeClientEvent(1, 1uL, ClientEvent.HistoryPull("main", 0uL, limit = 1))
+        encodeClientEvent(1, 1uL, ClientEvent.HistoryPull("main", 0uL, limit = 200))
     }
 
     @Test

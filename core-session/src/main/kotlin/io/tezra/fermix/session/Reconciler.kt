@@ -1,14 +1,10 @@
 package io.tezra.fermix.session
 
-import io.tezra.fermix.protocol.CandidateScope
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.Decoded
 import io.tezra.fermix.protocol.ServerEvent
-import io.tezra.fermix.transport.Candidate
-import io.tezra.fermix.transport.MAX_CANDIDATES
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.withTimeoutOrNull
-import io.tezra.fermix.protocol.Candidate as WireCandidate
 
 /**
  * How long the daemon has to answer a reconciliation request, counted while the session waits on it
@@ -27,9 +23,6 @@ private const val MUTATION_PAGE_LIMIT = 200
 
 /** Mutation pages one reconnect pulls; past this the rest waits for the next reconnect. */
 private const val MAX_MUTATION_PAGES = 100
-
-/** An IPv4 literal; anything with a colon is an IPv6 one. A candidate is classified without DNS. */
-private val IPV4_LITERAL = Regex("""\d{1,3}(\.\d{1,3}){3}""")
 
 /** The connection ended while the actor waited on it. */
 internal class ConnectionEnded(
@@ -121,11 +114,17 @@ internal class Reconciler(
         core.emit(SessionEvent.Reconciled(pulledInFull = core.parts.fullPull))
     }
 
-    /** The daemon's routes, best first, replace the ones the session races, when it sends any. */
+    /**
+     * The daemon's hosts and route for later reconnects: a list with no host keeps the hosts the phone holds, and
+     * one with no route keeps its route (PROTOCOL.md "Server events" and "Remote reach"). A kind this app does not
+     * know is skipped, and noted once for the list.
+     */
     private suspend fun candidates(ack: ServerEvent.HelloAck) {
-        val routes = routesOf(ack.candidates)
-        if (routes.isEmpty()) return
-        core.candidates = routes
+        skippedNote(ack.candidates)?.let { core.log(DiagnosticKind.ROUTE, it) }
+        val hosts = hostsOf(ack.candidates)
+        val route = routeOf(ack.candidates)
+        if (hosts.isEmpty() && route == null) return
+        core.candidates = updatedCandidates(core.candidates, hosts, route)
         core.emit(SessionEvent.Candidates(core.candidates))
     }
 
@@ -211,22 +210,3 @@ private fun ServerEvent.Error.gone(): Boolean = code == ServerEvent.Error.MUTATI
  */
 private fun ServerEvent.refusal(): ServerEvent.Error? =
     (this as? ServerEvent.Error)?.takeIf { it.clientMsgId == null && it.ref == null }
-
-/**
- * The daemon's routes from a `hello_ack` or a `pair_approved`, best first, each once and at most 16: its
- * scope as the daemon says, its kind from the host.
- */
-internal fun routesOf(candidates: List<WireCandidate>): List<Candidate> =
-    candidates
-        .map { Candidate(it.host, scopeOf(it.scope), kindOf(it.host)) }
-        .distinct()
-        .take(MAX_CANDIDATES)
-
-private fun kindOf(host: String): Candidate.Kind =
-    if (':' in host || IPV4_LITERAL.matches(host)) Candidate.Kind.IP else Candidate.Kind.NAME
-
-private fun scopeOf(scope: CandidateScope): Candidate.Scope =
-    when (scope) {
-        CandidateScope.LAN -> Candidate.Scope.LAN
-        CandidateScope.TAILNET -> Candidate.Scope.TAILNET
-    }

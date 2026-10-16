@@ -19,8 +19,16 @@ internal val REQUIRED_PARAMETERS: Map<Int, List<String>> =
         mapOf(V1 to v1, V2 to v1 + "profile")
     }
 
+/**
+ * The route's parameters, link version 2's alone, read only together (PROTOCOL.md "Pairing link"): a link
+ * with one of them and not another is refused naming the first missing, in this order.
+ */
+internal val ROUTE_PARAMETERS = listOf("iroh", "relays", "relays_rev")
+
 private val LINK_VERSIONS = mapOf("1" to V1, "2" to V2)
-private const val MAX_PORT = 65_535
+
+/** A port's largest value: the listener's TCP port, and a relay's QUIC port. */
+internal const val MAX_PORT = 65_535
 private const val BASE64_KEY_CHARS = 44
 private const val BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -63,6 +71,17 @@ class PairingLink private constructor(
 
     /** The profile the link pairs into, from link version 2; a version-1 link has none. */
     val profile: String? = values["profile"]?.let { label("profile", it) }
+
+    /**
+     * The daemon's iroh route, from link version 2's `iroh`, `relays` and `relays_rev`, each relay
+     * `https://<host>/` with QUIC address discovery on its port; none on a link without them, which pairs over
+     * its hosts alone (PROTOCOL.md "Pairing link" and "Remote reach").
+     */
+    val route: Candidate.Iroh? =
+        values["iroh"]?.let { iroh ->
+            val relays = values.getValue("relays")
+            linkRoute(text("iroh", iroh), text("relays", relays), text("relays_rev", values.getValue("relays_rev")))
+        }
     val secret: ByteArray = key("secret", values.getValue("secret"))
 
     companion object {
@@ -88,12 +107,24 @@ class PairingLink private constructor(
                 readForm(query, names - "v", values)
                 val missing = names.firstOrNull { it !in values }
                 if (missing != null) throw ProtocolException.MissingParameter(missing)
+                if (version == V2) readRoute(query, values)
                 return PairingLink(version, values)
             } finally {
                 values.values.forEach { it.fill(0) }
             }
         }
     }
+}
+
+/** Reads the route's parameters into [values]: all three, or none, else the first missing is refused. */
+private fun readRoute(
+    query: String,
+    values: MutableMap<String, ByteArray>,
+) {
+    readForm(query, ROUTE_PARAMETERS, values)
+    if (ROUTE_PARAMETERS.none { it in values }) return
+    val missing = ROUTE_PARAMETERS.firstOrNull { it !in values }
+    if (missing != null) throw ProtocolException.MissingParameter(missing)
 }
 
 /**

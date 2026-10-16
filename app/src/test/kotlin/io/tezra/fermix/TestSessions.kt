@@ -47,7 +47,7 @@ internal fun record(gateway: Int): Instance =
         profile = "fermix",
         label = "suj-mbp",
         tint = "Slate",
-        candidates = listOf(Candidate("100.101.102.$gateway", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
+        candidates = listOf(Candidate.Host("100.101.102.$gateway", Candidate.Scope.TAILNET, Candidate.Kind.IP)),
         port = 4031,
         deviceId = "device-$gateway",
         keyAlias = "fermix.device.$gateway.0102030405060708",
@@ -57,7 +57,7 @@ internal fun record(gateway: Int): Instance =
     )
 
 /** The one candidate an idle session races. */
-internal val IDLE_CANDIDATE = Candidate("100.101.102.9", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+internal val IDLE_CANDIDATE = Candidate.Host("100.101.102.9", Candidate.Scope.TAILNET, Candidate.Kind.IP)
 
 /**
  * A session that never connects: its dialer waits for ever, on a phone with no network. Its [lastSuccessful]

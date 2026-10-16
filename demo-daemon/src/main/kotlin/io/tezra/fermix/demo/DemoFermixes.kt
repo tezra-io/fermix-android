@@ -42,9 +42,9 @@ class DemoFermix(
     /** Its one route, a tailnet address no network answers: only the demo's dialer does. */
     val address: String = ADDRESS_PREFIX + (FIRST_HOST_OCTET + index)
 
-    val route: Candidate = Candidate(address, Candidate.Scope.TAILNET, Candidate.Kind.IP)
+    val route: Candidate.Host = Candidate.Host(address, Candidate.Scope.TAILNET, Candidate.Kind.IP)
 
-    val wireRoute: WireCandidate = WireCandidate(address, INTERFACE, CandidateScope.TAILNET)
+    val wireRoute: WireCandidate = WireCandidate.Host(address, INTERFACE, CandidateScope.TAILNET)
 
     /** A pairing window's one-time secret, the [window]th this Fermix opened in this run. */
     fun secret(window: Int): ByteArray = derived(seed, index, "secret", window)

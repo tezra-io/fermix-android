@@ -40,8 +40,8 @@ internal const val PHONE = "Pixel 9 Pro"
 
 /** When the tests' pairings are approved: 27 September 2026, 09:41 UTC. */
 internal const val PAIRED_AT = 1_790_502_060_000L
-internal val TAILNET = Candidate("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
-internal val LAN = Candidate("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
+internal val TAILNET = Candidate.Host("100.101.102.103", Candidate.Scope.TAILNET, Candidate.Kind.IP)
+internal val LAN = Candidate.Host("192.168.1.20", Candidate.Scope.LAN, Candidate.Kind.IP)
 
 private const val KEY_BYTES = 32
 private const val PORT = 4031

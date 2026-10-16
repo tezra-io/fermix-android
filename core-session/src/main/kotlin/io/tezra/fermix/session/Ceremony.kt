@@ -88,25 +88,31 @@ internal class Ceremony(
      */
     private suspend fun steps(): PairingState.Approved {
         linkRefusal(link)?.let { throw CeremonyEnded(it) }
-        val candidates = link.candidates.map { checkNotNull(linkCandidate(it)) }
+        val linkHosts = link.candidates.map { checkNotNull(linkCandidate(it)) }
+        val linkRoute = link.route?.let(::routeOf)
         val dialer = parts.dialerFor(link.port, link.tlsFingerprint.copyOf())
         val attempt = AliasNames.next(link.gatewayPublicKey, parts.random)
         val (attested, staticKey) = deviceKey(attempt)
-        val race = reach(candidates, staticKey, dialer)
+        // A link with a route pairs from any network: its hosts and its route race together.
+        val race = reach(linkHosts + listOfNotNull(linkRoute), staticKey, dialer)
         val channel = request(race.value, attested)
         val approval = awaitDecision(channel, parts.clock)
         if (approval.profiles.none { it.id == parts.profileId }) {
             throw CeremonyEnded(PairingState.ProtocolError("pair_approved lists no profile ${parts.profileId}"))
         }
-        val routes = routesOf(approval.candidates).ifEmpty { candidates }
-        val facts = factsOf(approval, routes, attempt)
+        // pair_approved's route is newer than the link's; with none, the link's stays (PROTOCOL.md "Remote reach").
+        val hosts = hostsOf(approval.candidates).ifEmpty { linkHosts }
+        val route = routeOf(approval.candidates) ?: linkRoute
+        val facts = factsOf(approval, hosts, route, attempt)
         val instance = PairedInstance(approval.deviceId, parts.profileId, link.gatewayPublicKey)
-        val adopted = Adopted(race.candidate, race.value, channel)
+        val adopted = Adopted(race.candidate, race.value, channel, listOfNotNull(skippedNote(approval.candidates)))
+        val routes = hosts + listOfNotNull(route)
         val session = Session.adopt(instance, routes, sessionParts(staticKey, dialer), parts.sessionScope, adopted)
         won = null
         return PairingState.Approved(facts, session)
     }
 
+    /** What the handed-over session runs on: the pairing's parts, its key and its link's dialer. */
     private fun sessionParts(
         staticKey: StaticKey,
         dialer: Dialer,
@@ -120,6 +126,7 @@ internal class Ceremony(
             parts.network,
             parts.clock,
             parts.random,
+            relayListRev = parts.relayListRev,
         )
 
     /**
@@ -211,7 +218,8 @@ internal class Ceremony(
      */
     private fun factsOf(
         approval: ServerEvent.PairApproved,
-        routes: List<Candidate>,
+        hosts: List<Candidate.Host>,
+        route: Candidate.Route?,
         attempt: String,
     ): InstanceFacts =
         InstanceFacts(
@@ -220,12 +228,13 @@ internal class Ceremony(
             host = link.name,
             profile = checkNotNull(link.profile) { "a version-2 link names its profile" },
             label = link.name,
-            candidates = routes,
+            candidates = hosts,
             port = link.port,
             deviceId = approval.deviceId,
             keyAlias = attempt,
             pushSalt = checkNotNull(approval.pushSalt) { "a protocol v2 pair_approved carries push_salt" },
             pushPlatforms = approval.push.orEmpty(),
+            route = route,
         )
 
     /** Releases what [outcome] leaves, and publishes [outcome] even when the Keystore fails on the way. */
@@ -259,7 +268,7 @@ internal class Ceremony(
 
 /**
  * What the link's check on the phone refuses (design section 13.3, step 3): a version-1 link, an older
- * Fermix's, and a link without a candidate or with one outside the LAN and tailnet ranges.
+ * Fermix's, and a link without a candidate or a route, or with a candidate outside the LAN and tailnet ranges.
  */
 internal fun linkRefusal(link: PairingLink): PairingState.Ended? =
     when {
@@ -267,7 +276,7 @@ internal fun linkRefusal(link: PairingLink): PairingState.Ended? =
             PairingState.OlderFermix
         }
 
-        link.candidates.isEmpty() -> {
+        link.candidates.isEmpty() && link.route == null -> {
             PairingState.InvalidLink("the link names no candidate")
         }
 

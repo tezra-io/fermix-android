@@ -73,13 +73,38 @@ private fun checkValue(
     refuseIf(value is JsonNull) { ProtocolException.NullField(t, path) }
     val kind = descriptor.kind
     when {
-        descriptor.isInline -> checkUnsigned(t, path, value, descriptor)
-        kind == SerialKind.ENUM -> checkEnum(t, path, value, descriptor)
-        kind is PrimitiveKind -> checkPrimitive(t, path, value, kind)
-        kind == StructureKind.LIST -> checkList(t, path, value, descriptor, depth)
-        kind == StructureKind.CLASS -> checkObject(t, path, objectAt(t, path, value), descriptor, depth + 1)
-        kind == StructureKind.MAP -> refuseNullsWithin(t, path, objectAt(t, path, value))
-        else -> error("no shape check for ${descriptor.serialName}, a $kind")
+        descriptor.serialName == CANDIDATE_SERIAL_NAME -> {
+            val fields = objectAt(t, path, value)
+            candidateModel(fields)?.let { checkObject(t, path, fields, it, depth + 1) }
+        }
+
+        descriptor.isInline -> {
+            checkUnsigned(t, path, value, descriptor)
+        }
+
+        kind == SerialKind.ENUM -> {
+            checkEnum(t, path, value, descriptor)
+        }
+
+        kind is PrimitiveKind -> {
+            checkPrimitive(t, path, value, kind)
+        }
+
+        kind == StructureKind.LIST -> {
+            checkList(t, path, value, descriptor, depth)
+        }
+
+        kind == StructureKind.CLASS -> {
+            checkObject(t, path, objectAt(t, path, value), descriptor, depth + 1)
+        }
+
+        kind == StructureKind.MAP -> {
+            refuseNullsWithin(t, path, objectAt(t, path, value))
+        }
+
+        else -> {
+            error("no shape check for ${descriptor.serialName}, a $kind")
+        }
     }
 }
 

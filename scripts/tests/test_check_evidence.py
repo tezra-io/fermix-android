@@ -215,13 +215,24 @@ class ReleasingExampleTest(unittest.TestCase):
         check_evidence = load_check_evidence()
         schema = json.loads((ROOT / "release-evidence" / "schema.json").read_text())
         self.assertEqual([], check_evidence.schema_problems(example, schema, schema))
+        source = json.loads((ROOT / "contracts/SOURCE.json").read_text())
         facts = {
             "version": example["version"],
             "draft_apk_sha256": example["apk_sha256"],
             "engine_problems": [],
-            "pinned_engine": check_evidence.pinned_engine_of(json.loads((ROOT / "contracts/SOURCE.json").read_text())),
+            "pinned_engine": self.pinned_engine(check_evidence, source, example),
         }
         self.assertEqual([], check_evidence.release_problems(copy.deepcopy(example), facts))
+
+    def pinned_engine(self, check_evidence, source, example):
+        """The engine release the contract pins. A contract pinned from an engine branch ahead of every release
+        (README, "The vendored contract") names none, and then no evidence releases a build: that is checked, and the
+        example is held to its own engine's version."""
+        if source["upstream"].get("release"):
+            return check_evidence.pinned_engine_of(source)
+        with self.assertRaisesRegex(check_evidence.Fatal, "names no engine release as upstream.release"):
+            check_evidence.pinned_engine_of(source)
+        return check_evidence.version_of(example["engine"]["version"])
 
 
 if __name__ == "__main__":

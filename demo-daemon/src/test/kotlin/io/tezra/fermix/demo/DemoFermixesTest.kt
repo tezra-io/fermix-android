@@ -77,7 +77,7 @@ class DemoFermixesTest {
             assertNull(demo.dialerFor(DEMO_PORT, ByteArray(32) { 7 }))
             assertNull(demo.dialerFor(DEMO_PORT + 1, fermix.tlsFingerprint))
             val dialer = checkNotNull(demo.dialerFor(DEMO_PORT, fermix.tlsFingerprint))
-            val elsewhere = Candidate(demo.fermixes[3].address, Candidate.Scope.TAILNET, Candidate.Kind.IP)
+            val elsewhere = Candidate.Host(demo.fermixes[3].address, Candidate.Scope.TAILNET, Candidate.Kind.IP)
             assertThrows<TransportException.Unreachable> { dialer.dial(elsewhere) }
             val link = dialer.dial(fermix.route)
             assertFalse(link.closed.isCompleted, "the dial opened the demo's end")

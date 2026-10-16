@@ -10,6 +10,14 @@ android {
     // The release's own R8 rules (proguard-rules.pro): a class of the debug app's demo that reached a release
     // keeps its name, so the release policy's check 10 sees it.
     buildTypes.getByName("release").proguardFiles("proguard-rules.pro")
+    // The ABIs the app's native libraries ship for, iroh's 14 to 16 MB a piece among them (core-transport's rail):
+    // arm64-v8a, the phones' 64-bit ARM, and x86_64, the emulators' and the one lint asks of a build that names its
+    // ABIs (ChromeOsAbiSupport). armeabi-v7a and x86, 25 MB of iroh's alone, are left out; per-ABI splits would
+    // change the release pipeline's one APK (README's departures).
+    defaultConfig.ndk.abiFilters += setOf("arm64-v8a", "x86_64")
+    // iroh's JVM jar, which its Android AAR depends on, carries the desktops' libraries as resources, 72 MB that no
+    // phone loads: the AAR's jni libraries are the app's.
+    packaging.resources.excludes += setOf("win32-x86-64/**", "linux-aarch64/**", "linux-x86-64/**", "darwin-aarch64/**")
     // LauncherIconTest holds the icon and the splash to design's vendored mark, and as a test resource the
     // mark is an input of the test task, so a changed byte or a re-vendor reruns it, which an up-to-date or
     // cached result would pass.
@@ -54,6 +62,11 @@ dependencies {
     // The demo (README, "The demo"): the debug app's alone, which its own application and launcher entry in
     // src/debug wire in. The release never takes it; scripts/check_release_policy.sh holds its APK to that.
     debugImplementation(project(":demo-daemon"))
+
+    // The device tests' daemon end of the iroh rail: an iroh endpoint of their own (IrohTestDaemon). JNA at the
+    // catalog's 16 KB aligned version, as core-transport takes it, which its constraint does not carry here.
+    androidTestImplementation(libs.iroh.android)
+    constraints { androidTestImplementation(libs.jna) }
 
     // MainActivityTest starts the activity under Compose's test rule, on Robolectric.
     testImplementation(libs.androidx.compose.ui.test.junit4)
