@@ -3,6 +3,7 @@ package io.tezra.fermix.chat
 import io.tezra.fermix.design.Sender
 import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.session.linkPreviewsOf
+import io.tezra.fermix.session.placesOf
 
 /**
  * When each row came. A message carries its time; a reply's bubble carries none (TimelineRow.Reply), so it
@@ -61,7 +62,8 @@ internal fun rowItem(
 /**
  * A row's message, its words its content or else its first blob's caption; the owner's voice note with no words
  * yet waits for its transcript ("Transcribing…") while the daemon [transcripts] its notes (`caps.transcripts`),
- * whose `transcript` then becomes the row's content.
+ * whose `transcript` then becomes the row's content. An agent's row carries the places its reply links, and its link
+ * previews leave out the pages they name (shownPreviews); the owner's carries none.
  */
 internal fun messageOf(
     row: TimelineRow.Message,
@@ -73,6 +75,7 @@ internal fun messageOf(
     val metadata = message.metadata
     val media = rowMedia(message.mediaRefs, user)
     val note = media.any { it.shape == MediaShape.VOICE }
+    val places = if (user) emptyList() else placesOf(row)
     return ShownMessage(
         sender = if (user) Sender.User else Sender.Agent,
         text = message.content.ifBlank { message.mediaRefs.firstNotNullOfOrNull { it.caption }.orEmpty() },
@@ -84,17 +87,20 @@ internal fun messageOf(
         turnId = metadata?.string(TURN_ID_KEY),
         route = metadata?.let(::routeOf),
         reaction = if (user) metadata?.let(::reactionOf) else null,
-        previews = shownPreviews(linkPreviewsOf(row)),
+        previews = shownPreviews(linkPreviewsOf(row), places),
+        places = places,
         media = media,
         transcribing = note && transcripts && message.content.isBlank(),
     )
 }
 
+/** A sealed reply's message, with the places it links and the link previews they leave (shownPreviews). */
 internal fun replyOf(
     row: TimelineRow.Reply,
     wallMs: Long?,
-): ShownMessage =
-    ShownMessage(
+): ShownMessage {
+    val places = placesOf(row)
+    return ShownMessage(
         sender = Sender.Agent,
         text = row.text,
         wallMs = wallMs,
@@ -102,8 +108,10 @@ internal fun replyOf(
         seq = row.serverSeq,
         turnId = row.turnId,
         route = row.route,
-        previews = shownPreviews(linkPreviewsOf(row)),
+        previews = shownPreviews(linkPreviewsOf(row), places),
+        places = places,
     )
+}
 
 /**
  * A row's key: the owner's message keeps its outbox item's, so the bubble stays as `accepted` and then its

@@ -11,6 +11,12 @@ enum class DiagnosticKind {
     /** A server `t` this app does not know: ignored, never a failure (design section 7). */
     UNKNOWN_EVENT,
 
+    /**
+     * A block under a reply of a type this app does not know: kept on its row, never drawn and never a failure (the
+     * companion PROTOCOL.md "Blocks under a reply").
+     */
+    UNKNOWN_BLOCK,
+
     /** A frame or an event this side refused, and closed `1002` on; or the daemon's own `1002`. */
     PROTOCOL_ERROR,
 

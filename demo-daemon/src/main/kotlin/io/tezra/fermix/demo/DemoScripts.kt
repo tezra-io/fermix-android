@@ -1,5 +1,11 @@
 package io.tezra.fermix.demo
 
+import io.tezra.fermix.protocol.OpeningHours
+import io.tezra.fermix.protocol.Place
+import io.tezra.fermix.protocol.PlaceDistance
+import io.tezra.fermix.protocol.PlaceLocation
+import io.tezra.fermix.protocol.PlaceRating
+import io.tezra.fermix.protocol.ReplyBlock
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -26,7 +32,7 @@ class ScriptPreview(
     val image: DemoBlobName,
 )
 
-/** One row of a Fermix's history as the demo starts it. */
+/** One row of a Fermix's history as the demo starts it; an answer's [places] are the ones its words link. */
 data class ScriptRow(
     val role: String,
     val text: String,
@@ -35,9 +41,13 @@ data class ScriptRow(
     val job: String? = null,
     val media: List<DemoBlobName> = emptyList(),
     val preview: ScriptPreview? = null,
+    val places: List<Place> = emptyList(),
 ) {
     /** The row's metadata: a job's delivery names its job (feature-chat's RowMetadata). */
     val metadata: JsonObject? get() = job?.let { JsonObject(mapOf("job" to JsonPrimitive(it))) }
+
+    /** The row's blocks: its places' block, the key only when it links one (the companion PROTOCOL.md). */
+    val blocks: List<ReplyBlock>? get() = places.takeIf { it.isNotEmpty() }?.let { listOf(ReplyBlock.Places(it)) }
 }
 
 /** A turn still running when the Fermix is paired: the chat that shows "thinking…". */
@@ -112,6 +122,55 @@ private val EXPORT_CODE =
         "}",
     ).joinToString("\n")
 
+/**
+ * Three quiet coffee shops in SoHo, as the engine's place search hands them on (M72 section 8.3), each with its own
+ * page, a rating, a price, a kind, today's hours and how far it is, but the third, which gives no price. They are
+ * made up, their pages under `.example`; their hours name no weekday and no time as a clock writes it ("07:00"), as
+ * the demo's day floats (DemoAnswersTest).
+ */
+private val QUIET_COFFEE =
+    listOf(
+        Place(
+            name = "Little Quiet Coffee",
+            canonicalUrl = "https://littlequiet.example/",
+            location = PlaceLocation(40.7246, -73.9987),
+            address = "112 Mercer St, New York, NY 10012",
+            rating = PlaceRating(4.7, 5.0, 412.0),
+            priceRange = "$$",
+            categories = listOf("coffee_shop"),
+            openingHours = OpeningHours("7 am to 7 pm"),
+            distance = PlaceDistance(0.3, "km"),
+        ),
+        Place(
+            name = "The Reading Room Café",
+            canonicalUrl = "https://readingroom.example/",
+            location = PlaceLocation(40.7229, -74.0021),
+            address = "48 Sullivan St, New York, NY 10012",
+            rating = PlaceRating(4.5, 5.0, 188.0),
+            priceRange = "$",
+            categories = listOf("cafe"),
+            openingHours = OpeningHours("8 am to 6 pm"),
+            distance = PlaceDistance(0.5, "km"),
+        ),
+        Place(
+            name = "Slow Pour Tea House",
+            canonicalUrl = "https://slowpour.example/",
+            location = PlaceLocation(40.7262, -74.0008),
+            address = "205 Thompson St, New York, NY 10012",
+            rating = PlaceRating(4.8, 5.0, 96.0),
+            categories = listOf("tea_house", "cafe"),
+            openingHours = OpeningHours("9 am to 8 pm"),
+            distance = PlaceDistance(0.6, "km"),
+        ),
+    )
+
+/** The answer that links [QUIET_COFFEE] by name, a short lead and a line for each. */
+private const val QUIET_COFFEE_ANSWER =
+    "Three quiet ones near the office:\n\n" +
+        "- [Little Quiet Coffee](https://littlequiet.example/) has long tables and no music.\n" +
+        "- [The Reading Room Café](https://readingroom.example/) asks for phones on silent.\n" +
+        "- [Slow Pour Tea House](https://slowpour.example/) is the calmest, if tea will do."
+
 /** A scripted row's time, so long before the demo started, in minutes. */
 private fun ago(
     days: Long = 0,
@@ -119,7 +178,10 @@ private fun ago(
     minutes: Long = 0,
 ): Long = (days * HOURS_PER_DAY + hours) * MINUTES_PER_HOUR + minutes
 
-/** suj-mbp: the day the nightly export failed, with every kind of row the chat draws, and an approval waiting. */
+/**
+ * suj-mbp: the day the nightly export failed, with every kind of row the chat draws, the places an answer links
+ * among them, and an approval waiting.
+ */
 internal fun mainScript(): FermixScript =
     FermixScript(
         rows =
@@ -160,7 +222,9 @@ internal fun mainScript(): FermixScript =
                             DemoBlobName.PREVIEW,
                         ),
                 ),
-                you("Restart the export service so it picks up the new timeout.", ago(minutes = 10), "demo-m6"),
+                you("Find me a quiet coffee shop near the office.", ago(minutes = 30), "demo-m6"),
+                ScriptRow(AGENT, QUIET_COFFEE_ANSWER, ago(minutes = 29), places = QUIET_COFFEE),
+                you("Restart the export service so it picks up the new timeout.", ago(minutes = 10), "demo-m7"),
                 agent("Restarting a service needs your OK, so I've asked for it.", ago(minutes = 9)),
             ),
         unread = 2,

@@ -5,6 +5,7 @@ import io.tezra.fermix.noise.NoiseSession
 import io.tezra.fermix.protocol.ClientEvent
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.MatchRange
+import io.tezra.fermix.protocol.Place
 import io.tezra.fermix.protocol.SearchHit
 import io.tezra.fermix.protocol.ServerEvent
 import io.tezra.fermix.protocol.decodeServerEvent
@@ -22,9 +23,9 @@ import kotlin.random.Random
 
 // What the demo writes from the owner's words and its own rows, apart from any phone: a quote and the deltas that
 // never part a surrogate pair, a search matched as the engine's index matches and its excerpt cut at words' edges,
-// words that name no time of day, words that ask for a picture played as the image turn, and a socket that says
-// nothing, or nothing a daemon reads, closed as the engine closes it: before its handshake, and after it a frame out
-// of its seq, of another version or under another key.
+// words that name no time of day, a place card's among them, words that ask for a picture played as the image turn,
+// and a socket that says nothing, or nothing a daemon reads, closed as the engine closes it: before its handshake,
+// and after it a frame out of its seq, of another version or under another key.
 
 /** The owner's emoji, two UTF-16 units: a cut between them is a lone surrogate, which UTF-8 writes as '?'. */
 private const val GRIN = "😀"
@@ -99,7 +100,8 @@ class DemoAnswersTest {
         val scripted =
             demoFermixes(DEMO_SEED).flatMap { fermix ->
                 val script = fermix.script
-                script.rows.map { it.text } + script.longTurn?.let { it.headings + it.answer }.orEmpty() +
+                script.rows.map { it.text } + script.rows.flatMap { row -> row.places.flatMap(::placeWords) } +
+                    script.longTurn?.let { it.headings + it.answer }.orEmpty() +
                     listOfNotNull(script.approval?.text, script.approval?.approved)
             }
         val log = demoBlobs().getValue(DemoBlobName.EXPORT_LOG).bytes().decodeToString()
@@ -185,6 +187,11 @@ class DemoAnswersTest {
             assertRefusedSilently(link, noise, "$REFUSED: AEADBadTagException")
         }
 }
+
+/** The words a place's card shows and TalkBack says: its name, address, price, kinds and today's hours. */
+private fun placeWords(place: Place): List<String> =
+    listOfNotNull(place.name, place.address, place.priceRange, place.openingHours?.currentDay) +
+        place.categories.orEmpty()
 
 /** A row's time in the search tests. */
 private const val TS = "2026-09-27T09:30:00Z"

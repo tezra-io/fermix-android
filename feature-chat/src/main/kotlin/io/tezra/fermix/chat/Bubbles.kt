@@ -49,7 +49,8 @@ private const val QUEUED_ALPHA = 0.55f
 /**
  * A message of the chat (design sections 13.1 and 13.5): the owner's in a bubble of the ink at the end of the
  * column, at most 78 % wide; the agent's as its parts (segmentsOf), prose in bubbles at most 88 % wide and its
- * fences and tables as cards grouped under them; one with blobs as its images, documents and voice note
+ * fences and tables as cards grouped under them, then the places its reply links as cards in a sideways lane
+ * (PlaceCards) and its link previews; one with blobs as its images, documents and voice note
  * (MediaMessage). A long-press opens the message's menu; a tap opens a queued, pending or refused item's own, or
  * selects while the chat is selecting. A selected message's row is washed in the selection across the column, so
  * the owner's bubble, the ink itself, stays as it is and the wash shows beside it; what the row draws on its canvas
@@ -95,6 +96,7 @@ internal fun MessageItem(
                     else -> AgentMessage(item, context, gestures, selected)
                 }
             }
+            PlaceCards(message.places, context)
             LinkPreviews(message.previews, message.sender, context)
         }
         if (context.menuFor == item.key) {

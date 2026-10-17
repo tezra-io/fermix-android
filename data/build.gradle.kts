@@ -15,6 +15,12 @@ extensions.configure<LibraryExtension> {
         layout.settingsDirectory
             .dir("contracts/mobile")
             .asFile.path
+    // The migration tests make each shipped version's database from the schema it exported, read as a resource, so
+    // a schema's change is an input of the test task too.
+    sourceSets.getByName("test").resources.directories +=
+        layout.projectDirectory
+            .dir("schemas")
+            .asFile.path
 }
 
 dependencies {

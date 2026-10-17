@@ -114,14 +114,17 @@ private const val DESCRIPTION_LINES = 2
 /** A preview's thumbnail, 16:9 (the canon's `.lp .th`). */
 private const val THUMBNAIL_RATIO = 16f / 9f
 
-/** The canon's `.lp b`, 600 14/20. */
-private val PREVIEW_TITLE = FermixType.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+/** The canon's `.lp b`, 600 14/20: a preview's title and a place card's name. */
+internal val PREVIEW_TITLE = FermixType.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
 
 /** The canon's `.rx`, 400 13/22. */
 private val REACTION_STYLE = FermixType.bodyMedium.copy(fontSize = 13.sp, lineHeight = 22.sp)
 
-/** A preview's corner nearest the message it sits under (the canon's `.card.g`): the inner 6 dp. */
-private val PREVIEW_UNDER_AGENT =
+/**
+ * A preview's corner nearest the message it sits under (the canon's `.card.g`): the inner 6 dp. A place card under
+ * the agent's reply wears it too.
+ */
+internal val PREVIEW_UNDER_AGENT =
     RoundedCornerShape(topStart = 6.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)
 private val PREVIEW_UNDER_USER =
     RoundedCornerShape(topStart = 16.dp, topEnd = 6.dp, bottomEnd = 16.dp, bottomStart = 16.dp)

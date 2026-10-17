@@ -256,10 +256,12 @@ class TimelineDaoTest {
             inReplyTo,
             metadata,
             linkPreviews,
+            blocks,
             truncated,
         )
 
-    private fun ServerEvent.TextDone.asReply() = TimelineRow.Reply(serverSeq, turnId, text, truncated == true, route)
+    private fun ServerEvent.TextDone.asReply() =
+        TimelineRow.Reply(serverSeq, turnId, text, truncated == true, route, blocks = blocks)
 
     private companion object {
         const val TS = "2026-10-01T09:00:00Z"

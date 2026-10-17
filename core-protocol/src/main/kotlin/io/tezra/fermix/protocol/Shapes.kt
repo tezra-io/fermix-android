@@ -334,6 +334,81 @@ data class LinkPreviewCard(
     @SerialName("image_ref") val imageRef: String? = null,
 )
 
+/**
+ * Records a reply's text links, which the chat draws beside the text (PROTOCOL.md "Timeline shapes" and the
+ * companion PROTOCOL.md "Blocks under a reply"): the [Places] a search found that the reply recommends, under
+ * `type` "places", or a block of a type this app does not know, [Skipped]: never refused, never drawn, as the text
+ * stands alone. [ReplyBlockSerializer] tells them apart by `type` alone.
+ */
+@Serializable(with = ReplyBlockSerializer::class)
+sealed interface ReplyBlock {
+    /**
+     * The places the reply links, one to ten, in the order its text first links them. Its `type` is the
+     * serializer's.
+     */
+    @Serializable
+    data class Places(
+        @SerialName("places") val places: List<Place>,
+    ) : ReplyBlock
+
+    /**
+     * A block of a type this app does not know, kept as it came so it encodes back unchanged. [type] is its `type`
+     * when that is a string, for the Diagnostics; the caller bounds it before showing it.
+     */
+    data class Skipped(
+        val fields: JsonObject,
+    ) : ReplyBlock {
+        val type: String? get() = (fields[BLOCK_TYPE] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    }
+}
+
+/**
+ * One place as the search returned it, a subset of its record under the record's own names (the schema's `place`):
+ * its [name] and [location] always, at least one of [canonicalUrl] and [sourceUrl], HTTPS addresses as returned, and
+ * each other field only when the source gave it. [openingHours] are today's as the source wrote them.
+ */
+@Serializable
+data class Place(
+    @SerialName("name") val name: String,
+    @SerialName("canonical_url") val canonicalUrl: String? = null,
+    @SerialName("source_url") val sourceUrl: String? = null,
+    @SerialName("location") val location: PlaceLocation,
+    @SerialName("address") val address: String? = null,
+    @SerialName("rating") val rating: PlaceRating? = null,
+    @SerialName("price_range") val priceRange: String? = null,
+    @SerialName("categories") val categories: List<String>? = null,
+    @SerialName("opening_hours") val openingHours: OpeningHours? = null,
+    @SerialName("distance") val distance: PlaceDistance? = null,
+)
+
+/** A place's coordinates, never the person's. */
+@Serializable
+data class PlaceLocation(
+    @SerialName("latitude") val latitude: Double,
+    @SerialName("longitude") val longitude: Double,
+)
+
+/** A place's rating, each part only when the source gave it: its [value] out of [best], from [count] ratings. */
+@Serializable
+data class PlaceRating(
+    @SerialName("value") val value: Double? = null,
+    @SerialName("best") val best: Double? = null,
+    @SerialName("count") val count: Double? = null,
+)
+
+/** Today's hours as the source wrote them (`Thursday 07:00-19:00`); a client never works out "open now" from it. */
+@Serializable
+data class OpeningHours(
+    @SerialName("current_day") val currentDay: String,
+)
+
+/** How far the place is from where the search was made, in the source's [units]. */
+@Serializable
+data class PlaceDistance(
+    @SerialName("value") val value: Double,
+    @SerialName("units") val units: String,
+)
+
 /** A timeline row as a history page carries it (PROTOCOL.md "Timeline shapes"). */
 @Serializable
 data class HistoryMessage(
@@ -347,6 +422,7 @@ data class HistoryMessage(
     @SerialName("in_reply_to") val inReplyTo: String? = null,
     @SerialName("metadata") val metadata: JsonObject? = null,
     @SerialName("link_previews") val linkPreviews: List<LinkPreviewCard>? = null,
+    @SerialName("blocks") val blocks: List<ReplyBlock>? = null,
     @SerialName("truncated") val truncated: Boolean? = null,
 )
 

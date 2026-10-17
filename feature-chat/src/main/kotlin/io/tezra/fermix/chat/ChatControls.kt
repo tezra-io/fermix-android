@@ -1,16 +1,19 @@
 package io.tezra.fermix.chat
 
 import androidx.compose.ui.graphics.ImageBitmap
+import io.tezra.fermix.protocol.Place
 
 /**
  * What the timeline's cards do: answer an approval card ([onAnswer], its id and whether it approves), a link
- * preview's thumbnail by its `image_ref` ([thumbnail], none when it is not to be had), and a preview's tap
- * ([onLink], its URL into a Custom Tab).
+ * preview's thumbnail by its `image_ref` ([thumbnail], none when it is not to be had), a preview's tap and a place
+ * card's "Open website" ([onLink], its URL into a Custom Tab), and a place card's tap ([onPlace], the place into the
+ * Maps app).
  */
 data class CardActions(
     val onAnswer: (approvalId: String, approve: Boolean) -> Unit = { _, _ -> },
     val thumbnail: suspend (ref: String) -> ImageBitmap? = { null },
     val onLink: (url: String) -> Unit = {},
+    val onPlace: (place: Place) -> Unit = {},
 )
 
 /** What the model chip and its "Model" sheet do (design section 8.6): open it, pick a row, close it. */

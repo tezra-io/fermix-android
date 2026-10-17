@@ -1,6 +1,7 @@
 package io.tezra.fermix.chat
 
 import io.tezra.fermix.protocol.LinkPreviewCard
+import io.tezra.fermix.protocol.Place
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.session.REACTION_KEY
 import io.tezra.fermix.session.TimelineRow
@@ -50,6 +51,15 @@ internal fun routeOf(metadata: JsonObject): Route? {
 /** The link previews a message shows, under it (design section 13.5): at most two. */
 internal const val MAX_SHOWN_PREVIEWS = 2
 
-/** The previews a message shows: its first two web addresses; a preview of any other scheme is never shown. */
-internal fun shownPreviews(previews: List<LinkPreviewCard>): List<LinkPreviewCard> =
-    previews.filter { isWebLink(it.url) }.take(MAX_SHOWN_PREVIEWS)
+/**
+ * The previews a message shows: its first two web addresses whose page is none of its [places]' (M72 section 14: a
+ * place's card stands for its page, so no page shows twice, compared as the engine compares them, addressKey); a
+ * preview of any other scheme is never shown.
+ */
+internal fun shownPreviews(
+    previews: List<LinkPreviewCard>,
+    places: List<Place>,
+): List<LinkPreviewCard> {
+    val named = placeKeys(places)
+    return previews.filter { isWebLink(it.url) && addressKey(it.url) !in named }.take(MAX_SHOWN_PREVIEWS)
+}

@@ -17,7 +17,7 @@ import org.intellij.markdown.ast.findChildOfType
 private const val MAX_LINK_BYTES = 2_048
 
 /** RFC 3986's scheme: a letter, then letters, digits, "+", "-" and ".". */
-private val SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
+internal val SCHEME = Regex("[A-Za-z][A-Za-z0-9+.-]*")
 
 /** The longest scheme a log line names; a longer one is named as none. */
 private const val MAX_SCHEME_CHARS = 32

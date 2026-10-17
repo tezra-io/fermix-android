@@ -9,6 +9,11 @@ import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.ModelEntry
 import io.tezra.fermix.protocol.ModelRef
 import io.tezra.fermix.protocol.ModelState
+import io.tezra.fermix.protocol.OpeningHours
+import io.tezra.fermix.protocol.Place
+import io.tezra.fermix.protocol.PlaceDistance
+import io.tezra.fermix.protocol.PlaceLocation
+import io.tezra.fermix.protocol.PlaceRating
 import io.tezra.fermix.protocol.PushPlatform
 import io.tezra.fermix.session.TimelineRow
 import io.tezra.fermix.transport.Candidate
@@ -138,3 +143,40 @@ internal fun msg(
     clientMsgId: String,
     text: String,
 ): ClientEvent.Msg = ClientEvent.Msg(clientMsgId, PROFILE, text, emptyList())
+
+/** The design's own place (M72 section 8.3): every field the record holds. */
+internal val EXAMPLE_COFFEE =
+    Place(
+        name = "Example Coffee",
+        canonicalUrl = "https://example.coffee/",
+        sourceUrl = "https://provider.example/place/1",
+        location = PlaceLocation(40.7233, -74.003),
+        address = "12 Example St, New York",
+        rating = PlaceRating(4.6, 5.0, 321.0),
+        priceRange = "$$",
+        categories = listOf("coffee_shop"),
+        openingHours = OpeningHours("Thursday 07:00-19:00"),
+        distance = PlaceDistance(0.4, "km"),
+    )
+
+/** A place with its own page and no source's, no rating, no address and no distance. */
+internal val QUIET_CORNER =
+    Place(
+        name = "Quiet Corner Tea",
+        canonicalUrl = "https://quietcorner.example/",
+        location = PlaceLocation(40.7241, -74.0021),
+        priceRange = "$",
+        categories = listOf("tea_house"),
+        openingHours = OpeningHours("Thursday 08:00-18:00"),
+    )
+
+/** A place with its source's page alone and none of the facts a card's lines tell. */
+internal val PAPER_LANTERN =
+    Place(
+        name = "Paper Lantern Books (Café)",
+        sourceUrl = "https://provider.example/place/3",
+        location = PlaceLocation(40.7262, -74.0008),
+    )
+
+/** The places a reply links, in the order it first links them. */
+internal val PLACES = listOf(EXAMPLE_COFFEE, QUIET_CORNER, PAPER_LANTERN)

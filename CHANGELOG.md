@@ -23,7 +23,7 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   fails and says what to create, and a key described only in part fails and names what is
   missing. A release build is shrunk by R8 and is never debuggable.
 - **The engine's mobile wire contract is vendored.** `contracts/mobile/` is protocol v2 from the
-  engine's dev branch (`90608c1a`), which no engine release serves yet, pinned by checksums and provenance, and
+  engine's dev branch (`0274912e`), which no engine release serves yet, pinned by checksums and provenance, and
   `scripts/verify_protocol_contract.sh` proves it against those pins, an engine checkout, or the pinned commit on GitHub.
 - **CI.** Every pull request runs the contract, build and unit jobs and the one required check,
   `gate`.
@@ -244,6 +244,11 @@ renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (`docs/RELEASING.md`).
   never what it says. The Instance screen says "From anywhere · 41 ms" while the route carries the session, and
   Advanced lists the route after the addresses, with the relays it goes through. The app now carries iroh's library
   for 64-bit ARM phones and x86_64 emulators alone, so a phone that runs only 32-bit apps can no longer install it.
+- **Places your Fermix recommends, as cards.** Ask for a quiet coffee shop and the places its answer links stand
+  under it as cards you swipe through, in the order it names them: each with its name, its rating, price and kind,
+  and today's hours and how far it is. Tap a card to open the place in your Maps app, or as a Google Maps page when
+  no app opens it; press and hold for Open in Maps, Open website and Copy address. A link preview of a place's own
+  page no longer shows beside its card, and a chat you scroll back through draws its cards again.
 
 ### Changed
 

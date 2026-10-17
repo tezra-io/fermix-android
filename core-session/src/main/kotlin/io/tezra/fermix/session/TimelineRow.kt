@@ -2,6 +2,8 @@ package io.tezra.fermix.session
 
 import io.tezra.fermix.protocol.HistoryMessage
 import io.tezra.fermix.protocol.LinkPreviewCard
+import io.tezra.fermix.protocol.Place
+import io.tezra.fermix.protocol.ReplyBlock
 import io.tezra.fermix.protocol.Route
 import io.tezra.fermix.protocol.ServerEvent
 import kotlinx.serialization.json.JsonObject
@@ -19,9 +21,9 @@ sealed interface TimelineRow {
     }
 
     /**
-     * A reply's bubble as `text_done` seals it at its row. `text_done` carries no role or time; the
-     * history page carries the same row whole, as a [Message]. A `link_preview` that came before the row
-     * did is kept in [linkPreviews] (SessionStore.addLinkPreview).
+     * A reply's bubble as `text_done` seals it at its row, with the [blocks] its row carries. `text_done` carries no
+     * role or time; the history page carries the same row whole, as a [Message]. A `link_preview` that came before
+     * the row did is kept in [linkPreviews] (SessionStore.addLinkPreview).
      */
     data class Reply(
         override val serverSeq: ULong,
@@ -30,6 +32,7 @@ sealed interface TimelineRow {
         val truncated: Boolean,
         val route: Route?,
         val linkPreviews: List<LinkPreviewCard>? = null,
+        val blocks: List<ReplyBlock>? = null,
     ) : TimelineRow
 }
 
@@ -51,13 +54,14 @@ internal fun ServerEvent.Row.toTimelineRow(): TimelineRow =
                 inReplyTo = inReplyTo,
                 metadata = metadata,
                 linkPreviews = linkPreviews,
+                blocks = blocks,
                 truncated = truncated,
             ),
         ),
     )
 
 internal fun ServerEvent.TextDone.toTimelineRow(): TimelineRow =
-    TimelineRow.Reply(serverSeq, turnId, text, truncated == true, route)
+    TimelineRow.Reply(serverSeq, turnId, text, truncated == true, route, blocks = blocks)
 
 /** The key of the owner's row's metadata that holds the daemon's reaction (design section 7, `reaction` durability). */
 const val REACTION_KEY = "reaction"
@@ -82,6 +86,36 @@ fun linkPreviewsOf(row: TimelineRow): List<LinkPreviewCard> =
         is TimelineRow.Message -> row.message.linkPreviews.orEmpty()
         is TimelineRow.Reply -> row.linkPreviews.orEmpty()
     }
+
+/**
+ * The blocks [row] holds (the companion PROTOCOL.md "Blocks under a reply"), each as it came, a type this app does
+ * not know among them: a message's from its history or its `row`, a reply's from its `text_done`.
+ */
+fun blocksOf(row: TimelineRow): List<ReplyBlock> =
+    when (row) {
+        is TimelineRow.Message -> row.message.blocks.orEmpty()
+        is TimelineRow.Reply -> row.blocks.orEmpty()
+    }
+
+/** The places [row]'s one places block holds, in the order its text first links them; none without one. */
+fun placesOf(row: TimelineRow): List<Place> =
+    blocksOf(row)
+        .filterIsInstance<ReplyBlock.Places>()
+        .firstOrNull()
+        ?.places
+        .orEmpty()
+
+/**
+ * The Diagnostics' one line for the blocks of [blocks] whose type this app does not know, which it keeps on their
+ * rows and never draws (the companion PROTOCOL.md "Blocks under a reply"); null when there is none. Each type is
+ * the daemon's text, cut and kept to printable ASCII, and named once.
+ */
+internal fun skippedBlocksNote(blocks: List<ReplyBlock>): String? {
+    val skipped = blocks.filterIsInstance<ReplyBlock.Skipped>()
+    if (skipped.isEmpty()) return null
+    val types = skipped.map { it.type?.let(::printable) ?: "a type that is not text" }.distinct()
+    return "skipped ${skipped.size} block(s) of a type this app does not know: ${types.joinToString()}"
+}
 
 /** [row] with [card] among its link previews, after the ones it holds: once per url, and at most four. */
 fun withLinkPreview(

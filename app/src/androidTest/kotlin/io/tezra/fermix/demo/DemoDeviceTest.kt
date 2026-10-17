@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionCollection
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToKeyAction
@@ -55,6 +56,13 @@ private const val REPLY_MILLIS = 30_000L
 /** generate_image's verb on the card (feature-chat's chat_verb_making_image), and an image's description. */
 private const val MAKING_AN_IMAGE = "Making an image"
 private const val IMAGE = "Image"
+
+/**
+ * The chat's timeline: the keyed list that scrolls up and down, as a places reply's lane of cards is a keyed list too,
+ * one that scrolls sideways.
+ */
+private val TIMELINE =
+    hasScrollToKeyAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
 
 /** A distinctive line of each answer a demo reply may give (DemoReplies), one of which the seed picks. */
 private val ANSWERS =
@@ -136,7 +144,7 @@ class DemoDeviceTest {
                     .turnId
             }
         val indexOf = { key: String ->
-            rule.onNode(hasScrollToKeyAction()).fetchSemanticsNode().config[SemanticsProperties.IndexForKey](key)
+            rule.onNode(TIMELINE).fetchSemanticsNode().config[SemanticsProperties.IndexForKey](key)
         }
         // The two keys read together at each poll, as the card below the picture stands for 800 ms alone.
         var order: Pair<Int, Int>? = null

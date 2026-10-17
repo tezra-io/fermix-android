@@ -75,7 +75,29 @@ class SchemaTest {
             "mediaRef" to serializer<MediaRef>().descriptor,
             "historyMessage" to serializer<HistoryMessage>().descriptor,
             "linkPreviewCard" to serializer<LinkPreviewCard>().descriptor,
+            "replyBlock" to serializer<ReplyBlock>().descriptor,
+            "placesBlock" to serializer<ReplyBlock.Places>().descriptor,
+            "place" to serializer<Place>().descriptor,
         )
+
+    /**
+     * Each object a definition holds in place rather than by reference, by `definition.field`, and the model that
+     * carries it: a place's location, rating, hours and distance.
+     */
+    private val inline: Map<String, SerialDescriptor> =
+        mapOf(
+            "place.location" to serializer<PlaceLocation>().descriptor,
+            "place.rating" to serializer<PlaceRating>().descriptor,
+            "place.opening_hours" to serializer<OpeningHours>().descriptor,
+            "place.distance" to serializer<PlaceDistance>().descriptor,
+        )
+
+    /**
+     * The unions, each a definition with no fields of its own that its serializer reads by a tag (CandidateSerializer,
+     * ReplyBlockSerializer), and each alternative's tag, which the serializer writes, so its model has no such field.
+     */
+    private val unions = setOf("candidate", "replyBlock")
+    private val tags = mapOf("irohCandidate" to "kind", "placesBlock" to "type")
 
     /** A protocol v1 definition, its model, and the model's version-bound fields from Rules.kt. */
     private class Model(
@@ -89,9 +111,9 @@ class SchemaTest {
     private val schemaVersion = schema.getValue("x-protocol-version").jsonPrimitive.int
 
     /**
-     * Every definition of the schema with a model: the events of both directions and the nested shapes, but the
-     * candidate union, a `oneOf` of two of them with no fields of its own (CandidateSerializer). The route's
-     * `kind` is the union's tag, which the serializer writes, so its model has no such field.
+     * Every definition of the schema with a model: the events of both directions, the nested shapes and the objects
+     * a place holds in place, but the unions, which have no fields of their own; an alternative's tag is left out of
+     * its definition (unions, tags).
      */
     private fun v1Models(): List<Model> {
         val client =
@@ -107,12 +129,17 @@ class SchemaTest {
                 }
             }
         val nested =
-            (shapes - "candidate").map { (name, descriptor) ->
-                val definition = if (name == "irohCandidate") def(name).without("kind") else def(name)
+            (shapes - unions).map { (name, descriptor) ->
+                val definition = tags[name]?.let { def(name).without(it) } ?: def(name)
                 Model(name, definition, descriptor, emptyList())
             }
-        return client + server + nested
+        val held = inline.map { (name, descriptor) -> Model(name, inlineDef(name), descriptor, emptyList()) }
+        return client + server + nested + held
     }
+
+    /** The object a definition holds at `definition.field`. */
+    private fun inlineDef(name: String): JsonObject =
+        def(name.substringBefore('.')).properties().getValue(name.substringAfter('.')).jsonObject
 
     private fun JsonObject.without(field: String): JsonObject {
         val required = getValue("required").jsonArray.filterNot { it.jsonPrimitive.content == field }
@@ -257,6 +284,10 @@ class SchemaTest {
                 "object ${shapes[reference]?.serialName ?: "with no model for $reference"}"
             }
 
+            "properties" in property -> {
+                "object ${inline[name]?.serialName ?: "with no model for $name"}"
+            }
+
             else -> {
                 property.getValue("type").jsonPrimitive.content
             }
@@ -271,6 +302,7 @@ class SchemaTest {
             kind == SerialKind.ENUM -> "enum"
             kind == PrimitiveKind.STRING -> "string"
             kind == PrimitiveKind.INT || kind == PrimitiveKind.LONG -> "integer"
+            kind == PrimitiveKind.DOUBLE -> "number"
             kind == PrimitiveKind.BOOLEAN -> "boolean"
             kind == StructureKind.LIST -> "array"
             kind == StructureKind.MAP -> "object"

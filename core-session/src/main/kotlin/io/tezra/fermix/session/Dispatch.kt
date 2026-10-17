@@ -61,6 +61,7 @@ internal class Dispatch(
     }
 
     private suspend fun liveRow(row: TimelineRow) {
+        skippedBlocksNote(blocksOf(row))?.let { core.log(DiagnosticKind.UNKNOWN_BLOCK, it) }
         when (core.timeline().live(row)) {
             RowFate.APPLIED -> live.report()
             RowFate.GAP -> live.pullForward()
@@ -91,6 +92,7 @@ internal class Dispatch(
         val stray = page.messages.firstOrNull { !pull.holds(it.serverSeq) }
         if (stray != null) throw SessionProtocolError("a ${pull.kind} history_page holds row ${stray.serverSeq}")
         val rows = page.messages.map { TimelineRow.Message(keptMessage(it)) }
+        skippedBlocksNote(rows.flatMap(::blocksOf))?.let { core.log(DiagnosticKind.UNKNOWN_BLOCK, it) }
         val timeline = core.timeline()
         if (pull.kind == PullKind.OLDER) {
             core.emit(SessionEvent.OlderLoaded(timeline.older(rows), page.prevBeforeSeq))

@@ -25,6 +25,7 @@ import io.tezra.fermix.data.Instance
 import io.tezra.fermix.design.HapticFeedback
 import io.tezra.fermix.design.HapticUse
 import io.tezra.fermix.protocol.CommandDescriptor
+import io.tezra.fermix.protocol.Place
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -93,9 +94,10 @@ private fun rememberRouteActions(
 ): ChatScreenActions {
     val text = rememberTextActions()
     val openLink = rememberLinkOpener(record?.tint)
+    val openPlace = rememberPlaceOpener(record?.tint)
     val blobs = rememberMediaActions(model, outside, record?.host.orEmpty())
-    return remember(model, navigation, text, openLink, composer.attach, composer.voice, blobs) {
-        val base = actionsOf(model, navigation, text, openLink)
+    return remember(model, navigation, text, openLink, openPlace, composer.attach, composer.voice, blobs) {
+        val base = actionsOf(model, navigation, text, openLink, openPlace)
         base.copy(composer = base.composer.copy(attach = composer.attach, voice = composer.voice), media = blobs)
     }
 }
@@ -168,6 +170,7 @@ private fun actionsOf(
     navigation: ChatNavigation,
     text: TextActions,
     openLink: (String) -> Unit,
+    openPlace: (Place) -> Unit,
 ): ChatScreenActions {
     fun guarded(action: () -> Unit): () -> Unit = { if (navigation.showing()) action() }
     val composer = model.composer
@@ -198,6 +201,7 @@ private fun actionsOf(
                 onAnswer = { id, approve -> if (navigation.showing()) model.approvals.answer(id, approve) },
                 thumbnail = { ref -> model.blobs.thumbnail(ref)?.let { decodeThumbnail(it) } },
                 onLink = { url -> if (navigation.showing()) openLink(url) },
+                onPlace = { place -> if (navigation.showing()) openPlace(place) },
             ),
         models =
             ModelActions(

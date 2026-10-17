@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.assertThrows
 
-// DESIGN SECTION 7 BEYOND THE VENDORED EXPORT. The protocol v2 export is vendored now (engine dev 90608c1a,
+// DESIGN SECTION 7 BEYOND THE VENDORED EXPORT. The protocol v2 export is vendored now (engine dev 0274912e,
 // contracts/SOURCE.json), and its fixtures and schema gate what it carries (ClientFixtureTest,
 // ServerFixtureTest, SchemaTest, SchemaBoundsTest). Every test in this file gates a shape design section 7
 // adds that the export does not carry, or one the export settled, from a sample frame written here.

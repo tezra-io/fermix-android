@@ -23,6 +23,16 @@ private const val HOST = """{"host":"192.168.1.8","interface":"en0","scope":"lan
 private const val CARD =
     """{"url":"https://example.com","site":"Example","title":"Example page","description":"A page",""" +
         """"image_ref":"$SHA"}"""
+private const val LOCATION = """{"latitude":40.7233,"longitude":-74.003}"""
+private const val RATING = """{"value":4.6,"best":5,"count":321}"""
+private const val HOURS = """{"current_day":"Thursday 07:00-19:00"}"""
+private const val DISTANCE = """{"value":0.4,"units":"km"}"""
+private const val PLACE =
+    """{"name":"Example Coffee","canonical_url":"https://example.coffee/",""" +
+        """"source_url":"https://provider.example/place/1","location":$LOCATION,"address":"12 Example St",""" +
+        """"rating":$RATING,"price_range":"$$","categories":["coffee_shop"],"opening_hours":$HOURS,""" +
+        """"distance":$DISTANCE}"""
+private const val PLACES = """{"type":"places","places":[$PLACE]}"""
 
 /** A whole instance of each nested definition, every optional field present. */
 private val SAMPLES: Map<String, String> =
@@ -45,19 +55,28 @@ private val SAMPLES: Map<String, String> =
         "historyMessage" to
             """{"server_seq":13,"role":"user","content":"Hi","kind":"text","ts":"2026-09-27T09:00:00.000000Z",""" +
             """"media_refs":[],"client_msg_id":"c","in_reply_to":"r","metadata":{},"link_previews":[$CARD],""" +
-            """"truncated":true}""",
+            """"blocks":[$PLACES],"truncated":true}""",
         "linkPreviewCard" to CARD,
+        "replyBlock" to PLACES,
+        "placesBlock" to PLACES,
+        "place" to PLACE,
+        "place.location" to LOCATION,
+        "place.rating" to RATING,
+        "place.opening_hours" to HOURS,
+        "place.distance" to DISTANCE,
     )
 
 private val ENVELOPE = setOf("v", "t", "seq")
 
 /**
- * The candidate union (CandidateSerializer): a `oneOf` with no fields of its own, planted as each of its
- * alternatives; the route's `kind` is the union's tag, which a value past its `const` makes a kind this app
- * skips, never refuses (PROTOCOL.md "Server events"), so it is no bound to plant.
+ * The unions (CandidateSerializer, ReplyBlockSerializer): definitions with no fields of their own, each planted as
+ * its alternatives, the candidate's its `oneOf` and a reply block's its `allOf`'s `then`. An alternative's tag, the
+ * route's `kind` and a places block's `type`, is the union's, which a value past its `const` makes a kind or a type
+ * this app skips, never refuses (PROTOCOL.md "Server events", the companion PROTOCOL.md "Blocks under a reply"), so
+ * it is no bound to plant.
  */
-private const val UNION = "candidate"
-private val UNION_TAGS = mapOf("irohCandidate" to "kind")
+private val UNIONS = setOf("candidate", "replyBlock")
+private val UNION_TAGS = mapOf("irohCandidate" to "kind", "placesBlock" to "type")
 
 /**
  * Every bound protocol.schema.json states on a field, planted as a violation into a valid frame of its
@@ -77,7 +96,16 @@ class SchemaBoundsTest {
             .jsonPrimitive.content
             .toInt()
 
-    private fun def(name: String) = defs.getValue(name).jsonObject
+    /** A definition by name, or an object one holds in place by `definition.field` (a place's location). */
+    private fun def(name: String): JsonObject {
+        if ('.' !in name) return defs.getValue(name).jsonObject
+        val owner = def(name.substringBefore('.'))
+        return owner
+            .getValue("properties")
+            .jsonObject
+            .getValue(name.substringAfter('.'))
+            .jsonObject
+    }
 
     private fun catalogue(direction: String) =
         def(direction)
@@ -185,42 +213,46 @@ class SchemaBoundsTest {
     )
 
     /**
-     * Each place an event holds a nested definition, read from the schema, the candidate union as each of its
-     * alternatives. Three levels down (a route's relay) is as deep as the schema nests.
+     * Each place an event holds a nested definition, or an object a definition holds in place, read from the schema,
+     * each union as each of its alternatives. Four levels down (a page's message's places block's place's location)
+     * is as deep as the schema nests.
      */
     private fun nestings(): List<Nesting> {
         val direct =
             listOf(true to "clientEvent", false to "serverEvent").flatMap { (client, direction) ->
                 catalogue(direction).flatMap { t ->
-                    references(def(t), "").map { (name, path) -> Nesting(name, client, t, path) }
+                    references(t, "").map { (name, path) -> Nesting(name, client, t, path) }
                 }
             }
         var level = expand(direct)
         val all = level.toMutableList()
-        repeat(2) {
+        repeat(3) {
             level =
                 expand(
                     level.flatMap { outer ->
-                        references(def(outer.name), "${outer.path}.").map { (name, path) ->
+                        references(outer.name, "${outer.path}.").map { (name, path) ->
                             outer.copy(name = name, path = path, outer = outer)
                         }
                     },
                 )
             all += level
         }
-        check(level.all { references(def(it.name), "").isEmpty() }) { "a definition nests four deep; plant it too" }
+        check(level.all { references(it.name, "").isEmpty() }) { "a definition nests five deep; plant it too" }
         return all
     }
 
-    /** The candidate union's place as each of its alternatives, every other nesting as it is. */
+    /** A union's place as each of its alternatives, every other nesting as it is. */
     private fun expand(nestings: List<Nesting>): List<Nesting> =
         nestings.flatMap { nesting ->
-            if (nesting.name != UNION) {
-                listOf(nesting)
-            } else {
-                def(UNION).getValue("oneOf").jsonArray.map { nesting.copy(name = it.jsonObject.reference()!!) }
-            }
+            if (nesting.name !in UNIONS) listOf(nesting) else alternatives(nesting.name).map { nesting.copy(name = it) }
         }
+
+    /** A union's alternatives: the candidate's `oneOf`, a reply block's `allOf` entries' `then`. */
+    private fun alternatives(union: String): List<String> {
+        val oneOf = def(union)["oneOf"]?.jsonArray?.map { it.jsonObject }
+        val then = def(union)["allOf"]?.jsonArray?.map { it.jsonObject.getValue("then").jsonObject }
+        return checkNotNull(oneOf ?: then) { "$union is no union" }.map { checkNotNull(it.reference()) }
+    }
 
     /** [name]'s definition, without the union's tag. */
     private fun fieldsOf(name: String): JsonObject {
@@ -228,18 +260,22 @@ class SchemaBoundsTest {
         return JsonObject(def(name) + ("properties" to JsonObject(def(name).getValue("properties").jsonObject - tag)))
     }
 
-    /** The nested definitions [definition]'s fields hold, each with the path of its first instance under [prefix]. */
+    /**
+     * The nested definitions [name]'s fields hold, by reference or in place (`name.field`), each with the path of its
+     * first instance under [prefix].
+     */
     private fun references(
-        definition: JsonObject,
+        name: String,
         prefix: String,
     ): List<Pair<String, String>> =
-        definition.fields().mapNotNull { (field, value) ->
+        def(name).fields().mapNotNull { (field, value) ->
             val property = value.jsonObject
             val direct = property.reference()
             val item = property["items"]?.jsonObject?.reference()
             when {
                 direct != null -> direct to "$prefix$field"
                 item != null -> item to "$prefix$field[0]"
+                "properties" in property -> "$name.$field" to "$prefix$field"
                 else -> null
             }
         }
@@ -264,7 +300,8 @@ class SchemaBoundsTest {
     fun `each nested definition is planted wherever an event holds it, in a sample with every field it defines`() {
         val nested = defs.keys.filter { it !in catalogue("clientEvent") + catalogue("serverEvent") }
         val hosted = nestings().map { it.name }.toSet()
-        assertEquals(nested.toSet() - setOf("envelope", "clientEvent", "serverEvent", "pairingLink", UNION), hosted)
+        val defined = hosted.filterNot { '.' in it }.toSet()
+        assertEquals(nested.toSet() - setOf("envelope", "clientEvent", "serverEvent", "pairingLink") - UNIONS, defined)
         hosted.forEach { name ->
             assertEquals(def(name).fields().keys, Json.parseToJsonElement(SAMPLES.getValue(name)).jsonObject.keys, name)
         }

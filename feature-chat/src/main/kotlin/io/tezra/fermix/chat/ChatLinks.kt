@@ -2,6 +2,7 @@ package io.tezra.fermix.chat
 
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.browser.customtabs.CustomTabColorSchemeParams
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.net.toUri
 import io.tezra.fermix.design.LocalFermixColors
 import io.tezra.fermix.instance.tintColor
+import io.tezra.fermix.protocol.Place
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,8 +47,38 @@ internal const val LINK_TAG = "FermixChat"
 @Composable
 internal fun rememberLinkOpener(tint: String?): (String) -> Unit {
     val context = LocalContext.current
-    val toolbar = (tint?.let(::tintColor) ?: LocalFermixColors.current.tonal).toArgb()
+    val toolbar = toolbarOf(tint)
     return remember(context, toolbar) { { url -> openLink(context, url, toolbar) } }
+}
+
+/** A Custom Tab's toolbar colour: the instance's [tint], or the chat's tone before the record is read. */
+@Composable
+private fun toolbarOf(tint: String?): Int = (tint?.let(::tintColor) ?: LocalFermixColors.current.tonal).toArgb()
+
+/**
+ * What a place card's tap does (M72 section 14): the Maps app at the place's `geo:` address (geoAddress), started
+ * directly, with no chooser, so the phone's own map app answers it as for any `geo:` link. A phone with no app for a
+ * `geo:` address has the same place open as its Google Maps page (mapsAddress) in the Custom Tab a link preview opens
+ * in, [tint] and all, which is logged; the place's name is the wire's, and is never logged.
+ */
+@Composable
+internal fun rememberPlaceOpener(tint: String?): (Place) -> Unit {
+    val context = LocalContext.current
+    val toolbar = toolbarOf(tint)
+    return remember(context, toolbar) { { place -> openPlace(context, place, toolbar) } }
+}
+
+private fun openPlace(
+    context: Context,
+    place: Place,
+    toolbar: Int,
+) {
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, geoAddress(place).toUri()))
+    } catch (nothing: ActivityNotFoundException) {
+        Log.w(LINK_TAG, "nothing on this phone opens a geo: address; the place opens as a web page", nothing)
+        openLink(context, mapsAddress(place), toolbar)
+    }
 }
 
 private fun openLink(

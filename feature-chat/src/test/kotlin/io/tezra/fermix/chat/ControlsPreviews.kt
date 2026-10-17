@@ -35,10 +35,10 @@ import java.time.LocalDate
 
 // The chat's cards and controls at the twelve windows of @FermixPreviews, each from fixed state: an approval
 // card at 42 s and at 8 s, in the warn colour; its four receipt lines; the owner's bubble with the host's
-// reaction; a message with two link previews, one with its thumbnail; the composer with the model chip at the
-// default, with an override, and disabled offline; the "Model" sheet; the model lines; search in its list, with
-// an older page that did not come, offline under its pinned line, and in the chat with a hit pulsing, the
-// agent's and the owner's.
+// reaction; a message with two link previews, one with its thumbnail; place cards under a reply, three in a lane
+// and one alone, each over a link preview; the composer with the model chip at the default, with an override, and
+// disabled offline; the "Model" sheet; the model lines; search in its list, with an older page that did not come,
+// offline under its pinned line, and in the chat with a hit pulsing, the agent's and the owner's.
 
 /** The clock every card in these previews reads. */
 private const val CLOCK = 500_000L
@@ -219,6 +219,46 @@ fun ReactionOverPreviewsPreview() {
         listOf(
             reacted.copy(message = reacted.message.copy(reaction = "👍", previews = FIXTURE_PREVIEWS)),
             ASKED,
+            DAY,
+        )
+    FermixPreviewTheme { ChatScreen(screen(items), ACTIONS) }
+}
+
+/** A link preview under a reply whose page is no place's, so it shows under the place cards. */
+private val SOHO_GUIDE =
+    LinkPreviewCard(
+        "https://soho-guide.example/quiet-cafes",
+        "SoHo Guide",
+        "Quiet cafés in SoHo",
+        "Where to read, work or think over a cup.",
+    )
+
+/**
+ * Place cards under a reply (M72 section 14): three in the lane, the second showing past the first, one lacking its
+ * rating and one every fact, then a link preview whose page is no place's; and a reply that links one place, its
+ * card the bubble's whole width, with its link preview under it.
+ */
+@FermixPreviews
+@Composable
+fun PlaceCardsPreview() {
+    val asked = said("r2", Sender.User, "Find me a quiet coffee shop near the office.", minutes = 44)
+    val three =
+        said(
+            "r3",
+            Sender.Agent,
+            "Three quiet ones nearby: [Example Coffee](https://example.coffee/) for space to work, " +
+                "[Quiet Corner Tea](https://quietcorner.example/) if you would rather tea, and " +
+                "[Paper Lantern Books](https://provider.example/place/3) for a corner among the shelves.",
+            minutes = 44,
+        )
+    val again = said("r4", Sender.User, "Which one opens earliest?", minutes = 45)
+    val one = said("r5", Sender.Agent, "[Example Coffee](https://example.coffee/), from seven.", minutes = 45)
+    val items =
+        listOf(
+            one.copy(message = one.message.copy(places = listOf(EXAMPLE_COFFEE), previews = listOf(SOHO_GUIDE))),
+            again,
+            three.copy(message = three.message.copy(places = PLACES, previews = listOf(SOHO_GUIDE))),
+            asked,
             DAY,
         )
     FermixPreviewTheme { ChatScreen(screen(items), ACTIONS) }

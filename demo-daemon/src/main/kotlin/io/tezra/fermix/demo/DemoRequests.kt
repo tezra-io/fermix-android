@@ -143,7 +143,7 @@ internal class DemoRequests(
             state = RequestState.COMPLETED
             resultSeq = row.serverSeq
         }
-        home.broadcast(ServerEvent.TextDone(turnId, row.serverSeq, text))
+        home.broadcast(ServerEvent.TextDone(turnId, row.serverSeq, text, blocks = row.blocks))
     }
 
     /** A request the daemon took and could not run: `error` naming it by [code], after `accepted`. */
@@ -184,4 +184,5 @@ internal fun rowEvent(row: HistoryMessage): ServerEvent.Row =
         inReplyTo = row.inReplyTo,
         metadata = row.metadata,
         linkPreviews = row.linkPreviews,
+        blocks = row.blocks,
     )

@@ -65,8 +65,11 @@ held to the 4,096-byte header, the 61,440-byte tail and the 65,519-byte frame. T
 64-bit range. Every protocol v1 client and server event has a model, and the protocol v2 changes
 of design section 7 are in the same models: each field that only one version carries or requires
 is listed with its versions, ignored as unknown in the other on decode and refused there on
-encode. A server event the codec does not know comes back as `ServerEvent.Unknown`; an unknown
-field is ignored, whatever it holds, and never written; a field the model has is never null, nor is
+encode. A server event the codec does not know comes back as `ServerEvent.Unknown`; a reply's block
+of a type it does not know (`blocks` on `row`, `text_done` and a history message, the companion PROTOCOL.md
+"Blocks under a reply") is kept as it came and never refused, its `places` block read into its places and held to
+the schema's rules, one block of each type, one to ten places, each with a web address and its coordinates on the
+globe; an unknown field is ignored, whatever it holds, and never written; a field the model has is never null, nor is
 anything in a row's metadata; and a value outside a closed set is refused by field. A header is
 held to RFC 8259 where the parser is looser: a raw control character inside a string, and a bare
 value with a sign or a leading zero, are refused; a key named twice takes its last value. A header,
@@ -436,7 +439,7 @@ to settle:
   again); the binding's Kotlin is compiled against 5.15.0's API, which 5.19.1 keeps.
 - `app/proguard-rules.pro`'s `-dontwarn java.awt.**` is the tree's one suppression: JNA's desktop helpers name AWT
   classes, which Android has not, and R8 fails the release on them without it; nothing on a phone reaches them.
-- The contract is pinned at engine dev `90608c1a`, not a release (The vendored contract, below), against
+- The contract is pinned at engine dev `0274912e`, not a release (The vendored contract, below), against
   AGENTS.md's "the daemon ships first".
 - Android's context in the native library is one process-wide fact (`IrohContext`), against the house rule of no
   module state: the library aborts the process when it is installed twice, so it cannot be a rail's.
@@ -961,6 +964,10 @@ notified set, the outbox and the cursors, and its schema is exported to `data/sc
 stored as its `HistoryMessage` JSON through core-protocol's model, which is what is read back, so a wider
 row needs no migration, and its fields again as columns for queries; a `text_done` reply stands in for
 its row until the history page brings the row whole, which replaces it, and never replaces a whole row.
+A reply keeps its blocks (the places it links, and any block of a type this app does not know, as it came) in its
+`blocks` column beside its link previews, and a whole row keeps them in its JSON; that column is version 2's, and
+Room's auto-migration from version 1 adds it, which `ProfileMigrationTest` holds by opening a version 1 database,
+made from `data/schemas`' own 1.json, with cached rows, cursors and a draft, all read back whole.
 `TimelineDao.persist` is the announcer's persist before it shows or notifies, and `persistAll` keeps an
 older page in one transaction, whose rows never reach the notified set. `search` is section 13.7's
 offline search over an FTS4 index with the unicode61 tokenizer, which folds case and diacritics. The
@@ -1807,7 +1814,21 @@ two lines of description, and a 16:9 thumbnail that comes only through `Session.
 cache (`ChatThumbnails`), never from its URL, its bytes read while the cache is in use, never its file held
 past it; a tap opens the page in a Custom Tab in the instance's tint (androidx.browser), which needs no
 `<queries>` and no permission, so `policy/permissions.txt` is unchanged. A preview that lands above or below
-the row the owner reads moves nothing. The model chip in the composer's second row is seeded by
+the row the owner reads moves nothing. The places an agent's reply links (its row's `places` block, M72 section 14)
+stand under its words and cards and before its link previews as cards in a sideways lane, in the order the reply
+first links them, with no number and no map: each a link preview's card about 72 % of the bubble's greatest width,
+so the next shows past it, a card alone that whole width, every card one height, with the place's name, a line of
+rating, price and kind ("4.6 (321) · $$ · Coffee shop") and a line of today's hours as the source gives them and
+the distance, each one line, a fact the record lacks left out with its separator. A tap opens the place in the
+Maps app at a `geo:` address built from the record's coordinates and name, never from a link in the reply, started
+directly, with no chooser and no `<queries>`; a phone with no app for it opens the place's Google Maps page in the
+Custom Tab instead. A long-press opens the card's menu, Open in Maps, Open website (its own page, else its
+source's) and Copy address (when it has one), and TalkBack stops on a card once and hears it as one sentence, its
+tap "Open in Maps" and the menu's other entries its actions. A link preview whose page names a place is left out,
+compared as the engine compares them (scheme and host in any case, the default port, no fragment, no trailing
+slash), so no page shows twice. `PlaceCardsUiTest` and `PlaceDeviceTest` hold the lane, the tap and its
+fallback, the menu and TalkBack, and `PlaceCardsPreview` draws it at the twelve windows. The model chip in the
+composer's second row is seeded by
 `caps.model_state`, then by each `model_changed`: at 70 % on the config's default, tonal with the ink's
 dot on the chat's own model, and disabled with no connection, "Connect to change the model" above the
 composer. The chip, `/model` on the palette and `/model` typed alone open the "Model" sheet, and none of
@@ -2228,6 +2249,25 @@ owner to settle:
   the chat shown again draws nothing until its list is worked out anew, a frame or so, as a chat that just opened
   waits for its first page, so what came meanwhile is in its first frame and an answer that came then arrives
   unplayed.
+- Place cards follow the owner's decision of 2026-10-16 (M72 section 14): no Google Cloud account, so no Maps SDK
+  and no map, the cards alone, unnumbered as there are no pins to match, and a tap through the Maps app's `geo:`
+  address, whose own place card is the counterpart of the Mac's Apple Maps card; a phone with no app for a `geo:`
+  address opens the place's Google Maps web page in the chat's Custom Tab, which needs no key. A picture on the card
+  (Brave's thumbnail through the engine) and a phone presentation line beside the Mac's stay the owner's; the
+  leaner reply text of M72's decision 5 is the Mac's alone, so the phone's text keeps the rating and hours its
+  cards repeat. The card's sizes (72 %, the 8 dp between cards) are the app's, and so is its pin icon, drawn in the
+  canon's manner as the canon has none. "Open in Maps", "Open website", "Copy address" and what TalkBack says of a
+  card are the app's words. A `geo:` label is cut to 256 characters, the app's bound, as the wire bounds no name.
+  The demo's places give their hours with no weekday and no time as a clock writes it ("7 am to 7 pm"), where a
+  source gives "Thursday 07:00-19:00", and the owner's ask names no part of the day ("for the afternoon"), as the
+  demo's day floats with its start (DemoAnswersTest).
+  Two calls are open for the owner. On a block of a type the app does not know the export disagrees with itself:
+  PROTOCOL.md, the companion's and the schema's own description have a client skip it, while the schema's
+  `replyBlock` needs a `type`, knows `places` alone and holds `blocks` to one; the app follows the words, keeping
+  such a block as it came, one with no `type` or two of one unknown type among them, and holds only the places
+  block to one of its kind. And a card's two lines of facts stay one line each at every type size, so at the
+  largest the hours line can lose its distance to the "…"; letting them wrap to two at large type, the card's
+  height still fixed from its data, would keep it.
 
 The app wires it all. `FermixApplication` makes `AppServices` once (the records and their databases,
 the settings, the network watcher, the device keys, the connector) and tells `SessionSupervisor` when the
@@ -2571,7 +2611,7 @@ and the Chats list has a row for each one paired:
 
 | Fermix | Home | What it holds |
 |---|---|---|
-| suj-mbp | fermix | the day a nightly export failed (drawn from feature-chat's previews' story): two photos, a code card, a table, a log as a document, a job's report, a quote and a link with its preview; an approval waiting; 2 unread |
+| suj-mbp | fermix | the day a nightly export failed (drawn from feature-chat's previews' story): two photos, a code card, a table, a log as a document, a job's report, a quote and a link with its preview, three quiet coffee shops near the office as place cards; an approval waiting; 2 unread |
 | suj-mbp | fermix-dev | a test run still going for two minutes from its pairing: the row that shows "thinking…"; its title is the first one's, so pairing it reaches **Name** |
 | studio | fermix | a reminder delivered as a job's row; 1 unread |
 | nas | fermix | 80 days of the photo backups' reports, more than a chat's first page, so scrolling up loads an older page; 3 unread |
@@ -2633,8 +2673,10 @@ tailnet answers in tens of milliseconds (any other dial, a reconnect's or Test c
 Test connection reports a few milliseconds and a phone back from the background reconnects with no
 "Connecting…"); an attachment's bound is 8 MiB where a daemon's default is 20 MiB; a search's excerpt is cut
 by characters around its first match where the engine's snippet takes sixteen words around its best; a
-`pair_request` of another version is closed `1002` with no typed refusal; and the replies are canned, so a
-question about the backups may be answered about the export.
+`pair_request` of another version is closed `1002` with no typed refusal; the coffee shops' places block is
+scripted on its row with no `place_search` behind it, the places made up, their hours with no weekday and no time as
+a clock writes it where a source gives "Thursday 07:00-19:00"; and the replies are canned, so a question about the
+backups may be answered about the export.
 
 **Deterministic.** A seed, `DEMO_SEED` (51), decides every key, pin, secret and choice: each Fermix's
 keys are derived from it, and each Fermix has a `Random` of its own, so two runs given the same messages
@@ -3287,17 +3329,19 @@ compares against are fixed in the script, never read from `SOURCE.json`. CI also
 commit, then compares every file with that commit in the public engine repository. Never edit a
 vendored file by hand.
 
-It is vendored from engine `dev` at `90608c1a`, protocol v2 (window 2 to 2), with the remote reach of M62: the
-`iroh` candidate, the link's `iroh`, `relays` and `relays_rev`, `hello.relay_list_rev` and PROTOCOL.md's "Remote
-reach", which no engine release carries yet (v0.15.0, `b268d8e1`, is the newest; `1dcab065` and `a2e0dd52` after
-it changed the export). `SOURCE.json` names no `upstream.release`, so `scripts/release_preflight.sh` (check 5)
-and `scripts/check_evidence.py` refuse every app release until the engine releases a build of a commit whose export
-is this one and the contract is pinned again at it; until then the test of `docs/RELEASING.md`'s example evidence
-checks that refusal and holds the example to its own engine. Three files are new in this export: `relays.json`, the
-engine's list of Fermix's relays, which the phone never reads, as its relays come from the route it is given, and
-`attestation_roots.json` and `android_signers.json`, the daemon's own trust lists. That departs from "the daemon ships first", below, for M62's phone side to be built and
-tested before the engine's release; the owner settles it. The vendored copy was taken from the engine checkout's
-git objects at that commit, never its working tree.
+It is vendored from engine `dev` at `0274912e`, protocol v2 (window 2 to 2), with the remote reach of M62: the `iroh`
+candidate, the link's `iroh`, `relays` and `relays_rev`, `hello.relay_list_rev` and PROTOCOL.md's "Remote reach", and
+M72's blocks under a reply (`blocks` on `row`, `text_done` and a history message, its one type so far `places`, from
+`ed0b8b2a`), which no engine release carries yet (v0.15.0, `b268d8e1`, is the newest; `1dcab065`, `a2e0dd52` and
+`ed0b8b2a` after it changed the export). `SOURCE.json` names no `upstream.release`, so `scripts/release_preflight.sh`
+(check 5) and `scripts/check_evidence.py` refuse every app release until the engine releases a build of a commit
+whose export is this one and the contract is pinned again at it; until then the test of `docs/RELEASING.md`'s example
+evidence checks that refusal and holds the example to its own engine. Three files are new in this export:
+`relays.json`, the engine's list of Fermix's relays, which the phone never reads, as its relays come from the route
+it is given, and `attestation_roots.json` and `android_signers.json`, the daemon's own trust lists. That departs from
+"the daemon ships first", below, for M62's phone side to be built and tested before the engine's release; the owner
+settles it. The vendored copy was taken from the git objects at that commit of a clone of the public repository,
+never a working tree.
 
 To re-vendor from an engine commit `<sha>` that origin carries:
 

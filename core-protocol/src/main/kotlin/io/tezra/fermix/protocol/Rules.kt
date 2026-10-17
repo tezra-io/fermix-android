@@ -50,6 +50,10 @@ private const val MAX_TITLE_BYTES = 300
 private const val MAX_DESCRIPTION_BYTES = 600
 private const val MAX_PENDING_APPROVALS = 4
 private const val MAX_STATUS_PAGE = 32
+private const val MAX_PLACES = 10
+private const val MAX_CATEGORIES = 5
+private const val MAX_LATITUDE = 90.0
+private const val MAX_LONGITUDE = 180.0
 
 /** The relays an iroh route names at most (the schema's `irohCandidate.relays`). */
 internal const val MAX_ROUTE_RELAYS = 8
@@ -188,6 +192,42 @@ private val linkCardRules: FieldCheck.(String, LinkPreviewCard) -> Unit = { path
     nonEmpty("${path}image_ref", card.imageRef)
 }
 
+/**
+ * A place's bounds (the schema's `place`): a name, at least one web address, its coordinates on the globe, and
+ * each text the source gave non-empty, at most five categories.
+ */
+private val placeRules: FieldCheck.(String, Place) -> Unit = { path, place ->
+    listOf("name" to place.name, "canonical_url" to place.canonicalUrl, "source_url" to place.sourceUrl)
+        .forEach { (name, value) -> nonEmpty("$path.$name", value) }
+    require(path, place.canonicalUrl != null || place.sourceUrl != null, "has neither canonical_url nor source_url")
+    val (latitude, longitude) = place.location
+    require("$path.location.latitude", latitude in -MAX_LATITUDE..MAX_LATITUDE, "is $latitude, off the globe")
+    require("$path.location.longitude", longitude in -MAX_LONGITUDE..MAX_LONGITUDE, "is $longitude, off the globe")
+    nonEmpty("$path.address", place.address)
+    nonEmpty("$path.price_range", place.priceRange)
+    size("$path.categories", place.categories, 1..MAX_CATEGORIES)
+    each("$path.categories", place.categories) { category, value -> nonEmpty(category, value) }
+    nonEmpty("$path.opening_hours.current_day", place.openingHours?.currentDay)
+    nonEmpty("$path.distance.units", place.distance?.units)
+}
+
+/**
+ * A reply's blocks (the companion PROTOCOL.md "Blocks under a reply"): at least one when the key is there, one block
+ * of each type, a places block of one to ten places. A block of a type this app does not know is skipped whatever it
+ * holds, as an unknown candidate is, so only the places block is held to a rule.
+ */
+private val blockRules: FieldCheck.(String, List<ReplyBlock>?) -> Unit = { path, blocks ->
+    require(path, blocks == null || blocks.isNotEmpty(), "is empty; a reply with no block has no key")
+    val places = blocks.orEmpty().count { it is ReplyBlock.Places }
+    require(path, places <= 1, "holds $places places blocks; a reply has one block of each type")
+    each(path, blocks) { block, value ->
+        if (value is ReplyBlock.Places) {
+            size("$block.places", value.places, 1..MAX_PLACES)
+            each("$block.places", value.places, placeRules)
+        }
+    }
+}
+
 /** The fields a `row` shares with a history message (PROTOCOL.md "Timeline shapes"). */
 private val timelineRules: FieldCheck.(String, HistoryMessage) -> Unit = { path, row ->
     positive("${path}server_seq", row.serverSeq)
@@ -198,6 +238,7 @@ private val timelineRules: FieldCheck.(String, HistoryMessage) -> Unit = { path,
     nonEmpty("${path}in_reply_to", row.inReplyTo)
     size("${path}link_previews", row.linkPreviews, 1..MAX_LINK_PREVIEWS)
     each("${path}link_previews", row.linkPreviews) { card, value -> linkCardRules("$card.", value) }
+    blockRules("${path}blocks", row.blocks)
     require("${path}truncated", row.truncated != false, "is false; it is present only as true")
 }
 
@@ -490,9 +531,12 @@ private val TURN_RULES: List<EventRule<ServerEvent.Known>> =
             maxBytes("detail", it.detail, MAX_TOOL_DETAIL_BYTES)
             nonEmpty("status", it.status)
         },
-        server<ServerEvent.TextDone>(versioned = listOf(VersionedField("route", ONLY_V2))) {
+        server<ServerEvent.TextDone>(
+            versioned = listOf(VersionedField("blocks", ONLY_V2), VersionedField("route", ONLY_V2)),
+        ) {
             nonEmpty("turn_id", it.turnId)
             positive("server_seq", it.serverSeq)
+            blockRules("blocks", it.blocks)
             require("truncated", it.truncated != false, "is false; it is present only as true")
             nonEmpty("route.provider", it.route?.provider)
             nonEmpty("route.model", it.route?.model)
@@ -518,7 +562,9 @@ private val TURN_RULES: List<EventRule<ServerEvent.Known>> =
 
 private val TIMELINE_RULES: List<EventRule<ServerEvent.Known>> =
     listOf(
-        server<ServerEvent.Row> {
+        // A history page's message carries `blocks` in protocol 2's export alone; a page is read at either version, so
+        // the version table, which names an event's own fields, holds the row's and text_done's.
+        server<ServerEvent.Row>(versioned = listOf(VersionedField("blocks", ONLY_V2))) {
             nonEmpty("profile_id", it.profileId)
             val message =
                 HistoryMessage(
@@ -532,6 +578,7 @@ private val TIMELINE_RULES: List<EventRule<ServerEvent.Known>> =
                     it.inReplyTo,
                     it.metadata,
                     it.linkPreviews,
+                    it.blocks,
                     it.truncated,
                 )
             timelineRules("", message)

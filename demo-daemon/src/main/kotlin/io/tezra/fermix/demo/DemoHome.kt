@@ -116,7 +116,10 @@ internal class DemoHome(
     /** The demo's start, less [minutesAgo]: a scripted row's time, in RFC 3339 UTC. */
     fun timeOf(minutesAgo: Long): String = stamp(startedAtMs - minutesAgo * MILLIS_PER_MINUTE)
 
-    /** A row written now, at the next seq; it goes to the phones as the caller sends it. */
+    /**
+     * A row written now, at the next seq, with a scripted row's media, link preview and places' block; it goes to the
+     * phones as the caller sends it.
+     */
     fun write(
         role: String,
         text: String,
@@ -138,6 +141,7 @@ internal class DemoHome(
                 clientMsgId = clientMsgId,
                 metadata = script?.metadata,
                 linkPreviews = previews,
+                blocks = script?.blocks,
             )
         kept += row
         head = seq

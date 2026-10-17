@@ -232,7 +232,7 @@ private class TurnPlay(
             state = RequestState.COMPLETED
             resultSeq = row.serverSeq
         }
-        home.broadcast(ServerEvent.TextDone(turn.turnId, row.serverSeq, text, route = turn.route))
+        home.broadcast(ServerEvent.TextDone(turn.turnId, row.serverSeq, text, blocks = row.blocks, route = turn.route))
         if (GUIDE_URL in text) preview(home, row.serverSeq, parts.blobs.getValue(DemoBlobName.PREVIEW))
         home.broadcast(ServerEvent.TurnDone(turn.turnId))
     }

@@ -105,8 +105,8 @@ sealed interface ServerEvent {
     ) : Known
 
     /**
-     * Seals a bubble with its canonical text. Protocol v2's [route] names what produced it (design
-     * section 7, the `text_done.route` row).
+     * Seals a bubble with its canonical text, and the [blocks] its row carries (PROTOCOL.md, the `text_done` row).
+     * Protocol v2's [route] names what produced it (design section 7, the `text_done.route` row).
      */
     @Serializable
     @SerialName("text_done")
@@ -114,6 +114,7 @@ sealed interface ServerEvent {
         @SerialName("turn_id") val turnId: String,
         @SerialName("server_seq") val serverSeq: ULong,
         @SerialName("text") val text: String,
+        @SerialName("blocks") val blocks: List<ReplyBlock>? = null,
         @SerialName("truncated") val truncated: Boolean? = null,
         @SerialName("route") val route: Route? = null,
     ) : Known
@@ -172,6 +173,7 @@ sealed interface ServerEvent {
         @SerialName("in_reply_to") val inReplyTo: String? = null,
         @SerialName("metadata") val metadata: JsonObject? = null,
         @SerialName("link_previews") val linkPreviews: List<LinkPreviewCard>? = null,
+        @SerialName("blocks") val blocks: List<ReplyBlock>? = null,
         @SerialName("truncated") val truncated: Boolean? = null,
     ) : Known
 

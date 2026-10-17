@@ -29,6 +29,9 @@ private val PRIMITIVES: Map<SerialKind, Pair<String, (JsonPrimitive) -> Boolean>
         ),
         PrimitiveKind.LONG to
             ("a 64-bit integer" to { value -> !value.isString && value.content.toLongOrNull() != null }),
+        // A place's coordinates, rating and distance (the schema's "number"): finite, as 1e400 reads as infinity.
+        PrimitiveKind.DOUBLE to
+            ("a number" to { value -> !value.isString && value.content.toDoubleOrNull()?.isFinite() == true }),
     )
 
 /**
@@ -76,6 +79,11 @@ private fun checkValue(
         descriptor.serialName == CANDIDATE_SERIAL_NAME -> {
             val fields = objectAt(t, path, value)
             candidateModel(fields)?.let { checkObject(t, path, fields, it, depth + 1) }
+        }
+
+        descriptor.serialName == REPLY_BLOCK_SERIAL_NAME -> {
+            val fields = objectAt(t, path, value)
+            blockModel(fields)?.let { checkObject(t, path, fields, it, depth + 1) }
         }
 
         descriptor.isInline -> {

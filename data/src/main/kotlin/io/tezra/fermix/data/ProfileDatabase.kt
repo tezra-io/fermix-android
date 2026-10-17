@@ -1,5 +1,6 @@
 package io.tezra.fermix.data
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.FtsOptions
 import androidx.room.RoomDatabase
@@ -15,7 +16,8 @@ import kotlinx.coroutines.flow.map
  * One (instance, profile)'s Room database (design section 9.1): the timeline cache with its full-text index,
  * the notified set, the outbox, the cursors and the chat's own state. Feature modules read [timeline],
  * [notified], [chat], [pending] and [readFrontier]; core-session's store is [RoomSessionStore] over the same
- * database, and the outbox's one writer.
+ * database, and the outbox's one writer. Version 2 adds a sealed reply's `blocks` column (M72), a nullable column
+ * Room's auto-migration adds in place, so a version 1 database keeps every row (ProfileMigrationTest).
  */
 @Database(
     entities = [
@@ -26,8 +28,9 @@ import kotlinx.coroutines.flow.map
         OutboxEntity::class,
         ChatStateEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class ProfileDatabase : RoomDatabase() {
     abstract fun timeline(): TimelineDao

@@ -3,10 +3,10 @@
   "description": "Provenance of the vendored Fermix mobile wire contract. The canonical files live in the fermix repository under apps/fermix_core/priv/mobile/; this tree is a byte-identical copy pinned by CHECKSUMS.txt. scripts/verify_protocol_contract.sh asserts the two agree, --source <fermix-checkout> byte-compares against an engine checkout, and --pinned byte-compares against the pinned commit fetched from the public engine repository.",
   "upstream": {
     "repository": "tezra-io/fermix",
-    "commit": "90608c1a0e620bdc197dc710786e59ef4e50ab6f",
+    "commit": "0274912e94756aea470318773fcdfac76b4b4de8",
     "branch": "dev",
     "working_tree": "clean",
-    "retrieved_at": "2026-10-15"
+    "retrieved_at": "2026-10-16"
   },
   "contracts": [
     {
@@ -20,12 +20,12 @@
         "maximum": 2
       },
       "committed_upstream": true,
-      "provenance_note": "Taken on 2026-10-15 from the fermix repository at 90608c1a on dev, through git alone (git cat-file of each blob at the commit, nothing of a working tree), so working_tree is clean and committed_upstream is true. No engine release carries this export yet: it is the v0.15.0 release's export (b268d8e1) plus the M62 rail (1dcab065, a2e0dd52): the iroh candidate in hello_ack and pair_approved, hello.relay_list_rev, the pairing link's iroh, relays and relays_rev, and relays.json. The pin is from dev, not a release, so upstream names no release and release_preflight.sh's check 5 refuses a release tag until a re-vendor from the engine release that publishes the rail (M62 stage 7 releases the engine before the Android app). Protocol 2 on the 2 to 2 window, read from the schema's x-protocol-version and x-supported-version-range. relays.json is vendored with the directory and never read: the phone takes its relays from the route it is given (PROTOCOL.md, Remote reach). attestation_roots.json and android_signers.json, new since v0.12.1, are the daemon's and not read by the app either.",
+      "provenance_note": "Taken on 2026-10-16 from the fermix repository at 0274912e on dev, through git alone (git cat-file of each blob at the commit, from a clone of the public repository, nothing of a working tree), so working_tree is clean and committed_upstream is true. No engine release carries this export yet: it is the v0.15.0 release's export (b268d8e1) plus the M62 rail (1dcab065, a2e0dd52): the iroh candidate in hello_ack and pair_approved, hello.relay_list_rev, the pairing link's iroh, relays and relays_rev, and relays.json; and plus M72's reply blocks (ed0b8b2a): blocks[] on text_done, on row and on a history page's messages, with the replyBlock, placesBlock and place definitions, whose rules are the companion PROTOCOL.md's 'Blocks under a reply'. The pin is from dev, not a release, so upstream names no release and release_preflight.sh's check 5 refuses a release tag until a re-vendor from an engine release that publishes both the rail and the blocks (M62 stage 7 releases the engine before the Android app). Protocol 2 on the 2 to 2 window, read from the schema's x-protocol-version and x-supported-version-range. relays.json is vendored with the directory and never read: the phone takes its relays from the route it is given (PROTOCOL.md, Remote reach). attestation_roots.json and android_signers.json, new since v0.12.1, are the daemon's and not read by the app either.",
       "files": [
         {
           "path": "mobile/PROTOCOL.md",
           "source_path": "apps/fermix_core/priv/mobile/PROTOCOL.md",
-          "sha256": "e3c0681a87b285590a16628321510ca2ef16171ca869cbfb2c9c0020a2078858"
+          "sha256": "0c73bb51d215e32ac3340cc2a2a75ea4c1abcba0deebc889f8588b60be7b3a53"
         },
         {
           "path": "mobile/android_signers.json",
@@ -70,7 +70,7 @@
         {
           "path": "mobile/protocol.schema.json",
           "source_path": "apps/fermix_core/priv/mobile/protocol.schema.json",
-          "sha256": "a723a012d07595ae7cba22f2be7485f7698e3cd389a25a339b5eac58609b97cb"
+          "sha256": "17ff1015ce71a0afdfdaf81af1a79f9a109669017d88fe190af20de59c133598"
         },
         {
           "path": "mobile/push_vectors.json",

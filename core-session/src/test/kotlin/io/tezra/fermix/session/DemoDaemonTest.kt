@@ -27,9 +27,10 @@ import java.util.Base64
 // ceremony to a stored record, a window past its life, each Fermix's script replayed and an older page, a reply as
 // it plays on a route that streams and on one that does not, a picture asked for and its image a row of the turn, a
 // reconnect that pulls what was written while the phone was away, a restarted demo keeping the phone's cursors and
-// beginning again only what had not finished, a row's media downloaded whole, an approval granted and one denied
-// as the engine answers them, a stop, the diagnostics line, and a seed that plays two runs alike. A change to
-// protocol or to core-session's surface that the demo no longer answers turns one of these red.
+// beginning again only what had not finished, a row's media downloaded whole, an answer's places carried with it
+// in its words' order, an approval granted and one denied as the engine answers them, a stop, the diagnostics line,
+// and a seed that plays two runs alike. A change to protocol or to core-session's surface that the demo no longer
+// answers turns one of these red.
 
 /** DemoTimes' defaults, as the debug app plays them. */
 private const val REACH_MS = 900L
@@ -43,6 +44,9 @@ private const val WINDOW_MS = 120_000L
 
 /** The rows of a fresh profile's first page (core-session's BACKWARD_PAGE_LIMIT). */
 private const val NEWEST_PAGE = 50
+
+/** A markdown link in an answer's words: its words, then its address. */
+private val LINK = Regex("""\[([^\]]+)]\(([^)\s]+)\)""")
 
 /** The engine's words for a granted and a denied sandbox card's command (sandbox.ex). */
 private const val GRANTED = "Sandbox updated. Access granted — resuming your request."
@@ -365,6 +369,25 @@ class DemoDaemonTest {
         assertEquals(image, sha256Hex(file.readBytes()))
         demo.session.close()
     }
+
+    @Test
+    fun `the answer that links places carries their block through the wire, in the order its words link them`() =
+        runTest {
+            val demo = DemoHarness(this)
+            demo.open()
+            demo.caughtUp()
+            val placed = demo.announcer.rows.filter { placesOf(it).isNotEmpty() }
+            val row = assertInstanceOf<TimelineRow.Message>(placed.single()).message
+            val places = placesOf(placed.single())
+            val names = listOf("Little Quiet Coffee", "The Reading Room Café", "Slow Pour Tea House")
+            assertEquals(names, places.map { it.name })
+            val linked = LINK.findAll(row.content).map { it.groupValues[1] to it.groupValues[2] }.toList()
+            assertEquals(linked, places.map { it.name to it.canonicalUrl })
+            val facts = places.associate { it.name to listOf(it.rating, it.priceRange, it.openingHours, it.distance) }
+            val lacking = facts.filterValues { null in it }.keys.toList()
+            assertEquals(listOf("Slow Pour Tea House"), lacking, "one place lacks a fact")
+            demo.session.close()
+        }
 
     @Test
     fun `a restarted demo runs the long turn a phone saw answered no more`() =

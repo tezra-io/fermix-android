@@ -55,7 +55,8 @@ internal fun updatedCandidates(
     hosts.ifEmpty { current.filterIsInstance<Candidate.Host>() } +
         listOfNotNull(route ?: current.filterIsInstance<Candidate.Route>().lastOrNull())
 
-private fun printable(kind: String): String =
+/** A word of the daemon's, a candidate's kind or a block's type, as the Diagnostics show it: quoted, cut, ASCII. */
+internal fun printable(kind: String): String =
     "'" + kind.take(MAX_KIND_CHARS).map { if (it.code in ' '.code..'~'.code) it else '?' }.joinToString("") + "'"
 
 private fun kindOf(host: String): Candidate.Kind =

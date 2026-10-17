@@ -115,6 +115,28 @@
     <string name="chat_reaction">Reacted %1$s</string>
     <string name="chat_open_link">Open %1$s</string>
 
+    <!-- Place cards under a reply (M72 section 14): a card's menu, the lines it draws and what TalkBack says of it. -->
+    <string name="chat_place_open_in_maps">Open in Maps</string>
+    <string name="chat_place_open_website">Open website</string>
+    <string name="chat_place_copy_address">Copy address</string>
+    <!-- Two facts of a card's line, one after the other: "4.6 (321) · $$", "Thursday 07:00-19:00 · 0.4 km". -->
+    <string name="chat_place_facts">%1$s · %2$s</string>
+    <!-- A rating and how many rated: "4.6 (321)". -->
+    <string name="chat_place_rating_count">%1$s (%2$s)</string>
+    <!-- A distance in the units the source gives; a no-break space keeps the number with its unit. -->
+    <string name="chat_place_distance">%1$s\u00A0%2$s</string>
+    <!-- Two parts of what TalkBack says of a card, one after the other: "Example Coffee, 4.6 of 5". -->
+    <string name="chat_place_spoken">%1$s, %2$s</string>
+    <!-- A rating out of the best the source gives, as TalkBack says it: "4.6 of 5". -->
+    <string name="chat_place_rating_of">%1$s of %2$s</string>
+    <!-- A rating the source gives no best for, as TalkBack says it after the place's name: "rated 8.2". -->
+    <string name="chat_place_rated">rated %1$s</string>
+    <!-- A rating, then how many rated, as TalkBack says it: "4.6 of 5 from 321 ratings". -->
+    <plurals name="chat_place_ratings">
+        <item quantity="one">%1$s from %2$s rating</item>
+        <item quantity="other">%1$s from %2$s ratings</item>
+    </plurals>
+
     <!-- The model chip and the "Model" sheet (sections 8.6, 13.6 and 13.9, and the visual canon's sheet). -->
     <string name="chat_model_title">Model</string>
     <string name="chat_model_subtitle">Applies to this chat on %1$s. Your config\'s default is unchanged.</string>

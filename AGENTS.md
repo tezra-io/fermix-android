@@ -110,9 +110,9 @@ scripts/              verify_protocol_contract.sh, check_release_policy.sh (the 
   `README.md` says, with `CHECKSUMS.txt` and `SOURCE.json` in the same change.
 - The daemon ships first. A wire change lands in the engine, the engine releases it, and then it is
   re-vendored here. The app never pins a protocol that no released daemon serves. One pin stands against this, for
-  M62's phone side to be built before the engine releases it: engine `dev` at `90608c1a` (README, "The vendored
+  M62's phone side to be built before the engine releases it: engine `dev` at `0274912e` (README, "The vendored
   contract"), under which `release_preflight.sh` refuses every app release; the re-vendor from the engine release
-  that ships the rail (M62 stage 7) ends it.
+  that ships the rail (M62 stage 7) and M72's reply blocks ends it.
 - Read an engine checkout through git alone, at the commit you pin: `git -C <engine> ls-tree`, `cat-file`,
   `show` or `archive`. Never run anything in it, never check a commit out there, and never read its working
   tree, which may hold another session's work that no commit carries.
